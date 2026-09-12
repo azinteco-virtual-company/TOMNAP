@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <title>Kanada-Bakü Sipariş ve Lojistik Yönetimi</title>
+    <meta name="description" content="Instagram ve WhatsApp mesajlarını Gemini AI ile yapılandırılmış siparişlere dönüştüren, finans ve lojistik durumlarını takip eden yönetim platformu." />
+    
+    <!-- PWA & Mobile Web App Meta Tags -->
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="KanadaBaku" />
+    <meta name="application-name" content="KanadaBaku" />
+    <meta name="msapplication-TileColor" content="#0f172a" />
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <meta property="og:title" content="Kanada-Bakü Sipariş ve Lojistik Yönetimi" />
+    <meta property="og:description" content="Instagram ve WhatsApp mesajlarını Gemini AI ile yapılandırılmış siparişlere dönüştüren, finans ve lojistik durumlarını takip eden yönetim platformu." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // Defensive shim: Ensure window.fetch has both getter and setter in iframe sandboxes
+      (function () {
+        try {
+          var win = typeof window !== 'undefined' ? window : globalThis;
+          var currentFetch = typeof win.fetch === 'function' ? win.fetch.bind(win) : null;
+          var desc = Object.getOwnPropertyDescriptor(win, 'fetch');
+          if (!desc || !desc.set) {
+            Object.defineProperty(win, 'fetch', {
+              get: function () {
+                return currentFetch;
+              },
+              set: function (fn) {
+                currentFetch = fn;
+              },
+              configurable: true,
+              enumerable: true,
+            });
+          }
+        } catch (e) {
+          // Ignore environment restrictions if descriptor is sealed
+        }
+      })();
+
+      // Suppress benign Vite WebSocket errors in iframe sandbox environment
+      (function () {
+        try {
+          var origError = console.error;
+          console.error = function () {
+            var first = arguments[0] ? String(arguments[0]) : '';
+            if (first.indexOf('[vite]') !== -1) {
+              return;
+            }
+            return origError.apply(console, arguments);
+          };
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

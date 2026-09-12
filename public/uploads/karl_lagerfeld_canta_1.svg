@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </radialGradient>
+    <linearGradient id="leatherGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#262626"/>
+      <stop offset="50%" stop-color="#171717"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </linearGradient>
+    <linearGradient id="silverGrad" x1="0%" y1="0%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#cbd5e1"/>
+      <stop offset="60%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#a16207"/>
+    </linearGradient>
+    <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#0f172a" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Arka Plan -->
+  <rect width="500" height="500" fill="url(#bgGrad)"/>
+  
+  <!-- Zemin Gölgesi -->
+  <ellipse cx="250" cy="425" rx="160" ry="18" fill="#94a3b8" opacity="0.4" filter="blur(8px)"/>
+  
+  <g filter="url(#dropShadow)">
+    <!-- Çanta Askısı (Crossbody Strap) -->
+    <path d="M 170 210 C 170 90, 330 90, 330 210" fill="none" stroke="#262626" stroke-width="14" stroke-linecap="round"/>
+    <path d="M 170 210 C 170 90, 330 90, 330 210" fill="none" stroke="#404040" stroke-width="2" stroke-dasharray="6,4"/>
+
+    <!-- Çanta Gövdesi -->
+    <rect x="130" y="190" width="240" height="190" rx="28" fill="url(#leatherGrad)"/>
+    
+    <!-- Çanta Kapağı (Flap) -->
+    <path d="M 130 190 L 370 190 L 370 285 C 370 305, 350 320, 250 320 C 150 320, 130 305, 130 285 Z" fill="#1f1f1f"/>
+    <path d="M 136 195 L 364 195 L 364 280 C 364 298, 346 312, 250 312 C 154 312, 136 298, 136 280 Z" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="5,4"/>
+
+    <!-- Karl Lagerfeld İkonik Toka Donanımı -->
+    <rect x="225" y="295" width="50" height="36" rx="6" fill="url(#silverGrad)"/>
+    <rect x="233" y="303" width="34" height="20" rx="3" fill="#171717"/>
+    
+    <!-- Karl Logo Silüeti / Baş harfleri -->
+    <text x="250" y="317" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="11" fill="url(#silverGrad)" text-anchor="middle" letter-spacing="1">KL</text>
+  </g>
+
+  <!-- Marka İmzası -->
+  <g transform="translate(250, 460)">
+    <text text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="800" fill="#1e293b" letter-spacing="3">KARL LAGERFELD</text>
+    <text y="14" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="9" font-weight="600" fill="#64748b" letter-spacing="1">PARIS • 125 AZN</text>
+  </g>
+</svg>

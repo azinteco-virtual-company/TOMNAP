@@ -1,0 +1,35 @@
+[
+  {
+    "id": "kanada_shopper_baku",
+    "ad": "Kanada Shopper Bakı",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Əsas canlı butik və beynəlxalq logistika iş sahəsi"
+  },
+  {
+    "id": "ayla_boutique",
+    "ad": "Ayla Boutique",
+    "sehir": "Gəncə",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 18,
+    "aciklama": "Gəncə və qərb rayonları üzrə tərəfdaş butik"
+  },
+  {
+    "id": "luxury_brand_baku",
+    "ad": "Luxury Brands VIP",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 20,
+    "aciklama": "Lüks çanta və geyim sifarişləri (VIP müştərilər)"
+  },
+  {
+    "id": "demo_sandbox",
+    "ad": "Demo & Təlim İş Sahəsi",
+    "sehir": "Bakı / Toronto",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Yeni müştərilərə və işçilərə təqdimat mühiti",
+    "isDemo": true
+  }
+]
