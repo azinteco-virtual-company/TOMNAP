@@ -134,8 +134,8 @@ export interface Sozluk {
 
 const SOZLUKLER: Record<DilKodu, Sozluk> = {
   az: {
-    platformAdi: 'KNB Lojistik & Ticarət',
-    platformAltBaslik: 'Kanada ➔ Bakı Ticarət & Lojistika Masası',
+    platformAdi: 'TOMNAP — Qlobal Trans-Sərhəd Ticarət və Karqo',
+    platformAltBaslik: 'Kanada (YYZ) ➔ Bakı (GYD) & Qlobal Parsel Masası',
     torontoSaat: 'Toronto: EST',
     bakuSaat: 'Bakı: AZT (+4)',
     onayBekleyenler: 'Təsdiq Gözləyənlər',
@@ -253,8 +253,8 @@ const SOZLUKLER: Record<DilKodu, Sozluk> = {
   },
 
   en: {
-    platformAdi: 'KNB Logistics & Commerce',
-    platformAltBaslik: 'Canada ➔ Baku Cross-Border Operations Hub',
+    platformAdi: 'TOMNAP — Global Cross-Border Commerce & Parcel Logistics Platform',
+    platformAltBaslik: 'Toronto (YYZ) ➔ Baku (GYD) & Worldwide Parcel Operations Hub',
     torontoSaat: 'Toronto: EST',
     bakuSaat: 'Baku: AZT (+4)',
     onayBekleyenler: 'Pending Approvals',
@@ -372,8 +372,8 @@ const SOZLUKLER: Record<DilKodu, Sozluk> = {
   },
 
   ru: {
-    platformAdi: 'KNB Логистика и Торговля',
-    platformAltBaslik: 'Канада ➔ Баку: Торговый и Логистический Центр',
+    platformAdi: 'TOMNAP — Глобальная Платформа Трансграничной Торговли и Логистики',
+    platformAltBaslik: 'Торонто (YYZ) ➔ Баку (GYD) & Глобальный Логистический Хаб',
     torontoSaat: 'Торонто: EST',
     bakuSaat: 'Баку: AZT (+4)',
     onayBekleyenler: 'Ожидают подтверждения',
@@ -498,26 +498,26 @@ interface DilKontekstiTipi {
 }
 
 const DilKonteksti = createContext<DilKontekstiTipi>({
-  dil: 'az',
+  dil: 'en',
   setDil: () => {},
-  t: SOZLUKLER.az
+  t: SOZLUKLER.en
 });
 
 export const DilSaglayici: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [dil, setDilState] = useState<DilKodu>(() => {
     try {
-      const kayitli = localStorage.getItem('knb_dil') as DilKodu;
+      const kayitli = (localStorage.getItem('tomnap_dil') || localStorage.getItem('knb_dil')) as DilKodu;
       if (kayitli === 'az' || kayitli === 'en' || kayitli === 'ru') {
         return kayitli;
       }
     } catch {}
-    return 'az';
+    return 'en'; // Default is English!
   });
 
   const setDil = (yeniDil: DilKodu) => {
     setDilState(yeniDil);
     try {
-      localStorage.setItem('knb_dil', yeniDil);
+      localStorage.setItem('tomnap_dil', yeniDil);
     } catch {}
   };
 

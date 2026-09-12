@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Building2, User, Phone, Mail, Globe, CheckCircle2, ShieldCheck, ArrowRight, Loader2 } from 'lucide-react';
+import { useDil } from '../../context/DilKonteksti';
 
 interface ButikQeydiyyatModalProps {
   acik: boolean;
@@ -14,11 +15,15 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
   onBasariliKayit,
   onDemoAc,
 }) => {
+  const { dil } = useDil();
+  const isEn = dil === 'en';
+  const isRu = dil === 'ru';
+
   const [butikAdi, setButikAdi] = useState('');
   const [sahipAdi, setSahipAdi] = useState('');
   const [sahipTelefon, setSahipTelefon] = useState('+994 ');
   const [sahipEmail, setSahipEmail] = useState('');
-  const [sehir, setSehir] = useState('Bakı');
+  const [sehir, setSehir] = useState(isEn ? 'Baku' : 'Bakı');
   const [menseiUlke, setMenseiUlke] = useState('CA');
   const [paket, setPaket] = useState<'BASLANGIC' | 'PRO' | 'ENTERPRISE'>('PRO');
   const [yukleniyor, setYukleniyor] = useState(false);
@@ -33,7 +38,13 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
     setHata(null);
 
     if (!butikAdi.trim() || !sahipAdi.trim() || !sahipTelefon.trim() || sahipTelefon.length < 9) {
-      setHata('Zəhmət olmasa Butik Adı, Sahib Adı və Əlaqə Nömrəsini tam daxil edin.');
+      setHata(
+        isEn
+          ? 'Please enter Store Name, Owner Name, and Contact Number.'
+          : isRu
+          ? 'Пожалуйста, укажите название бутика, имя владельца и телефон.'
+          : 'Zəhmət olmasa Butik Adı, Sahib Adı və Əlaqə Nömrəsini tam daxil edin.'
+      );
       return;
     }
 
@@ -44,7 +55,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ad: butikAdi.trim(),
-          sehir: sehir.trim() || 'Bakı',
+          sehir: sehir.trim() || 'Baku',
           sahipAdi: sahipAdi.trim(),
           sahipEmail: sahipEmail.trim(),
           sahipTelefon: sahipTelefon.trim(),
@@ -55,7 +66,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
 
       const data = await res.json();
       if (!res.ok || !data.basarili) {
-        throw new Error(data.hata || 'Qeydiyyat zamanı xəta baş verdi.');
+        throw new Error(data.hata || (isEn ? 'Registration failed.' : 'Qeydiyyat zamanı xəta baş verdi.'));
       }
 
       setKayitliButik(data.firma);
@@ -64,7 +75,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
         onBasariliKayit(data.firma);
       }
     } catch (err: any) {
-      setHata(err.message || 'Serverlə əlaqə qurularkən xəta baş verdi.');
+      setHata(err.message || (isEn ? 'Connection error to server.' : 'Serverlə əlaqə qurularkən xəta baş verdi.'));
     } finally {
       setYukleniyor(false);
     }
@@ -84,12 +95,22 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-bold text-white tracking-tight">
-                {tamamlandi ? 'Müraciətiniz Qeydə Alındı!' : 'TOMNAP Butik Qeydiyyatı'}
+                {tamamlandi 
+                  ? isEn ? 'Application Submitted!' : isRu ? 'Заявка Принята!' : 'Müraciətiniz Qeydə Alındı!'
+                  : isEn ? 'Register Your Boutique on TOMNAP' : isRu ? 'Регистрация Бутика в TOMNAP' : 'TOMNAP Butik Qeydiyyatı'}
               </h3>
               <p className="text-xs text-slate-400">
                 {tamamlandi
-                  ? 'Super Admin təsdiqindən sonra hesabınız tam aktivləşəcək'
-                  : 'Platformaya qoşulun, sifariş və kargo idarəetməsini avtomatlaşdırın'}
+                  ? isEn 
+                    ? 'Your workspace will be activated following Super Admin verification' 
+                    : isRu 
+                    ? 'Рабочее пространство активируется после проверки администратором' 
+                    : 'Super Admin təsdiqindən sonra hesabınız tam aktivləşəcək'
+                  : isEn 
+                    ? 'Automate cross-border order ingestion and parcel logistics' 
+                    : isRu 
+                    ? 'Автоматизируйте выкуп, авиакарго и доставку курьерами' 
+                    : 'Platformaya qoşulun, sifariş və kargo idarəetməsini avtomatlaşdırın'}
               </p>
             </div>
           </div>
@@ -111,27 +132,36 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
               </div>
               <div className="space-y-2 max-w-md mx-auto">
                 <h4 className="text-xl font-bold text-white">
-                  Təbriklər, "{kayitliButik?.ad}" müraciəti uğurla göndərildi!
+                  {isEn 
+                    ? `Congratulations, application for "${kayitliButik?.ad}" received!` 
+                    : isRu 
+                    ? `Поздравляем, заявка для «${kayitliButik?.ad}» отправлена!` 
+                    : `Təbriklər, "${kayitliButik?.ad}" müraciəti uğurla göndərildi!`}
                 </h4>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Təhlükəsizlik və məlumat təcridi standartlarımız səbəbindən yeni butiklər **Super Admin təsdiqi** ilə açılır.
-                  Əlaqə nömrənizə ({kayitliButik?.sahipTelefon}) aktivləşmə bildirişi göndəriləcək.
+                  {isEn
+                    ? `Due to our tenant isolation security standards, new boutique workspaces are enabled following Super Admin review. Activation notification will be dispatched to ${kayitliButik?.sahipTelefon}.`
+                    : isRu
+                    ? `В соответствии со стандартами изоляции данных активация бутика подтверждается Super Admin. Уведомление придет на ${kayitliButik?.sahipTelefon}.`
+                    : `Təhlükəsizlik və məlumat təcridi standartlarımız səbəbindən yeni butiklər Super Admin təsdiqi ilə açılır. Əlaqə nömrənizə (${kayitliButik?.sahipTelefon}) aktivləşmə bildirişi göndəriləcək.`}
                 </p>
               </div>
 
               {/* Seçilmiş Paket Xülasəsi */}
               <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 text-left space-y-2.5 max-w-md mx-auto text-xs">
                 <div className="flex justify-between items-center text-slate-300">
-                  <span className="font-semibold text-white">Seçilmiş Abunəlik:</span>
+                  <span className="font-semibold text-white">
+                    {isEn ? 'Selected Plan:' : isRu ? 'Выбранный тариф:' : 'Seçilmiş Abunəlik:'}
+                  </span>
                   <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
-                    {kayitliButik?.paket === 'PRO' ? 'Pro Şəbəkə (99 AZN)' : kayitliButik?.paket === 'BASLANGIC' ? 'Başlanğıc Butik (49 AZN)' : 'Enterprise Qlobal'}
+                    {kayitliButik?.paket === 'PRO' ? (isEn ? 'Pro Network ($99/mo)' : 'Pro Şəbəkə (99 AZN)') : kayitliButik?.paket === 'BASLANGIC' ? (isEn ? 'Starter Boutique ($49/mo)' : 'Başlanğıc Butik (49 AZN)') : 'Enterprise'}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 pt-2 border-t border-slate-700/50">
-                  <div>• 1 Patron İdarəçi</div>
-                  <div>• {kayitliButik?.rolLimitleri?.KANADA_SATINALMA || 2} Kanada Kargo İstifadəçisi</div>
-                  <div>• {kayitliButik?.rolLimitleri?.SATIS_SORUMLUSU || 4} Satış / AI Masası</div>
-                  <div>• {kayitliButik?.rolLimitleri?.BAKU_KURYE || 10} Sahə Kuryesi Limiti</div>
+                  <div>• 1 {isEn ? 'Owner' : 'Patron'}</div>
+                  <div>• {kayitliButik?.rolLimitleri?.KANADA_SATINALMA || 2} {isEn ? 'Purchasing Agents' : 'Kanada Kargo'}</div>
+                  <div>• {kayitliButik?.rolLimitleri?.SATIS_SORUMLUSU || 2} {isEn ? 'Sales Reps' : 'Satış / AI Masası'}</div>
+                  <div>• {kayitliButik?.rolLimitleri?.BAKU_KURYE || 5} {isEn ? 'Field Couriers' : 'Sahə Kuryesi'}</div>
                 </div>
               </div>
 
@@ -146,7 +176,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                     }}
                     className="w-full px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
                   >
-                    <span>İndi Canlı Demo Sınaq Sürüşü</span>
+                    <span>{isEn ? 'Launch Live Demo Now' : isRu ? 'Открыть Демо-Среду' : 'İndi Canlı Demo Sınaq Sürüşü'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 )}
@@ -155,7 +185,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                   onClick={onKapat}
                   className="w-full px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer transition-all"
                 >
-                  Bağla
+                  {isEn ? 'Close' : isRu ? 'Закрыть' : 'Bağla'}
                 </button>
               </div>
             </div>
@@ -172,14 +202,14 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Butik / Mağaza Adı *
+                    {isEn ? 'Boutique / Brand Name *' : isRu ? 'Название бутика / Бренда *' : 'Butik / Mağaza Adı *'}
                   </label>
                   <div className="relative">
                     <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
                       required
-                      placeholder="Məs: Ayla Fashion Baku"
+                      placeholder={isEn ? 'e.g. Canadian Brand Boutique' : 'Məs: Ayla Fashion Baku'}
                       value={butikAdi}
                       onChange={(e) => setButikAdi(e.target.value)}
                       className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -189,14 +219,14 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Sahibin Adı və Soyadı *
+                    {isEn ? "Owner's Full Name *" : isRu ? 'ФИО Владельца *' : 'Sahibin Adı və Soyadı *'}
                   </label>
                   <div className="relative">
                     <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
                       required
-                      placeholder="Məs: Aysel Məmmədova"
+                      placeholder={isEn ? 'e.g. Sarah Jenkins' : 'Məs: Aysel Məmmədova'}
                       value={sahipAdi}
                       onChange={(e) => setSahipAdi(e.target.value)}
                       className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -209,7 +239,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    WhatsApp / Əlaqə Nömrəsi *
+                    {isEn ? 'WhatsApp / Phone Number *' : isRu ? 'WhatsApp / Телефон *' : 'WhatsApp / Əlaqə Nömrəsi *'}
                   </label>
                   <div className="relative">
                     <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -226,13 +256,13 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    E-poçt Ünvanı
+                    {isEn ? 'Email Address' : isRu ? 'Email адрес' : 'E-poçt Ünvanı'}
                   </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="email"
-                      placeholder="butik@example.com"
+                      placeholder="boutique@example.com"
                       value={sahipEmail}
                       onChange={(e) => setSahipEmail(e.target.value)}
                       className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -245,31 +275,31 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Əsas Alış / Çıxış Ölkəsi
+                    {isEn ? 'Primary Origin Country' : isRu ? 'Основная Страна Закупок' : 'Əsas Alış / Çıxış Ölkəsi'}
                   </label>
                   <select
                     value={menseiUlke}
                     onChange={(e) => setMenseiUlke(e.target.value)}
                     className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-indigo-500"
                   >
-                    <option value="CA">🇨🇦 Kanada (Toronto Pearson YYZ)</option>
-                    <option value="US">🇺🇸 ABŞ (Amerika JFK/ORD)</option>
-                    <option value="TR">🇹🇷 Türkiyə (İstanbul IST)</option>
-                    <option value="JP">🇯🇵 Yaponiya (Tokyo NRT)</option>
-                    <option value="GB">🇬🇧 Böyük Britaniya (London LHR)</option>
-                    <option value="DE">🇩🇪 Almaniya (Frankfurt FRA)</option>
+                    <option value="CA">🇨🇦 {isEn ? 'Canada (Toronto Pearson YYZ)' : 'Kanada (Toronto Pearson YYZ)'}</option>
+                    <option value="US">🇺🇸 {isEn ? 'United States (JFK/ORD)' : 'ABŞ (Amerika JFK/ORD)'}</option>
+                    <option value="TR">🇹🇷 {isEn ? 'Turkey (Istanbul IST)' : 'Türkiyə (İstanbul IST)'}</option>
+                    <option value="JP">🇯🇵 {isEn ? 'Japan (Tokyo NRT)' : 'Yaponiya (Tokyo NRT)'}</option>
+                    <option value="GB">🇬🇧 {isEn ? 'United Kingdom (London LHR)' : 'Böyük Britaniya (London LHR)'}</option>
+                    <option value="DE">🇩🇪 {isEn ? 'Germany (Frankfurt FRA)' : 'Almaniya (Frankfurt FRA)'}</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Təhvil Şəhəri
+                    {isEn ? 'Destination Delivery City' : isRu ? 'Город Доставки' : 'Təhvil Şəhəri'}
                   </label>
                   <input
                     type="text"
                     value={sehir}
                     onChange={(e) => setSehir(e.target.value)}
-                    placeholder="Bakı"
+                    placeholder={isEn ? 'Baku' : 'Bakı'}
                     className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-indigo-500"
                   />
                 </div>
@@ -278,7 +308,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
               {/* Paket Seçimi və Rol Limitləri */}
               <div className="space-y-2 pt-2">
                 <label className="block text-xs font-semibold text-slate-300">
-                  Abunəlik Paketi Seçin
+                  {isEn ? 'Select Subscription Tier' : isRu ? 'Выберите Тариф' : 'Abunəlik Paketi Seçin'}
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   {/* Başlanğıc Butik */}
@@ -291,15 +321,17 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                     }`}
                   >
                     <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-bold text-white">Başlanğıc</span>
-                      <span className="text-[10px] text-blue-300 font-black">$49 / ay</span>
+                      <span className="text-xs font-bold text-white">
+                        {isEn ? 'Starter' : isRu ? 'Старт' : 'Başlanğıc'}
+                      </span>
+                      <span className="text-[10px] text-blue-300 font-black">$49 / {isEn ? 'mo' : 'ay'}</span>
                     </div>
                     <ul className="text-[10px] text-slate-400 space-y-0.5">
-                      <li>• 1 Patron</li>
-                      <li>• 1 Kanada Kargo</li>
-                      <li>• 1 Satış Girişi</li>
-                      <li>• 1 Bakı Kassa</li>
-                      <li>• 1 Sahə Kuryesi</li>
+                      <li>• 1 {isEn ? 'Owner' : 'Patron'}</li>
+                      <li>• 1 {isEn ? 'Canada Cargo' : 'Kanada Kargo'}</li>
+                      <li>• 1 {isEn ? 'Sales Rep' : 'Satış Girişi'}</li>
+                      <li>• 1 {isEn ? 'Finance Desk' : 'Bakı Kassa'}</li>
+                      <li>• 1 {isEn ? 'Field Courier' : 'Sahə Kuryesi'}</li>
                     </ul>
                   </div>
 
@@ -313,19 +345,21 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                     }`}
                   >
                     <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-indigo-500 text-[8px] font-black text-white uppercase tracking-wider">
-                      Tövsiyə
+                      {isEn ? 'Recommended' : isRu ? 'Рекомендуем' : 'Tövsiyə'}
                     </span>
                     <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-bold text-white">Pro Şəbəkə</span>
-                      <span className="text-[10px] text-indigo-300 font-black">$99 / ay</span>
+                      <span className="text-xs font-bold text-white">
+                        {isEn ? 'Pro Network' : isRu ? 'Сеть Pro' : 'Pro Şəbəkə'}
+                      </span>
+                      <span className="text-[10px] text-indigo-300 font-black">$99 / {isEn ? 'mo' : 'ay'}</span>
                     </div>
                     <ul className="text-[10px] text-slate-300 space-y-0.5 font-medium">
-                      <li>• 1 Patron</li>
-                      <li>• 2 Kanada Kargo</li>
-                      <li>• 2 Satış Girişi</li>
-                      <li>• 2 Bakı Kassa</li>
-                      <li>• 5 Sahə Kuryesi</li>
-                      <li className="text-emerald-400 font-bold">• Aramex API + Limitsiz AI</li>
+                      <li>• 1 {isEn ? 'Owner' : 'Patron'}</li>
+                      <li>• 2 {isEn ? 'Canada Cargo' : 'Kanada Kargo'}</li>
+                      <li>• 2 {isEn ? 'Sales Reps' : 'Satış Girişi'}</li>
+                      <li>• 2 {isEn ? 'Finance Desk' : 'Bakı Kassa'}</li>
+                      <li>• 5 {isEn ? 'Field Couriers' : 'Sahə Kuryesi'}</li>
+                      <li className="text-emerald-400 font-bold">• {isEn ? 'Aramex API + Unlimited AI' : 'Aramex API + Limitsiz AI'}</li>
                     </ul>
                   </div>
 
@@ -340,14 +374,14 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                   >
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-xs font-bold text-white">Enterprise</span>
-                      <span className="text-[10px] text-purple-300 font-black">Fərdi</span>
+                      <span className="text-[10px] text-purple-300 font-black">{isEn ? 'Custom' : 'Fərdi'}</span>
                     </div>
                     <ul className="text-[10px] text-slate-400 space-y-0.5">
-                      <li>• 2 Patron İdarəçi</li>
-                      <li>• 5 Kanada / Xarici Kargo</li>
-                      <li>• 10 Satış Məsuliyyətli</li>
-                      <li>• 25 Sahə Kuryesi</li>
-                      <li>• Xüsusi Domain CNAME</li>
+                      <li>• 2 {isEn ? 'Admins' : 'Patron İdarəçi'}</li>
+                      <li>• 5 {isEn ? 'Global Cargo' : 'Kanada / Xarici Kargo'}</li>
+                      <li>• 10 {isEn ? 'Sales Reps' : 'Satış Məsuliyyətli'}</li>
+                      <li>• 25 {isEn ? 'Couriers' : 'Sahə Kuryesi'}</li>
+                      <li>• {isEn ? 'Custom Domain CNAME' : 'Xüsusi Domain CNAME'}</li>
                     </ul>
                   </div>
                 </div>
@@ -363,11 +397,11 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                   {yukleniyor ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Qeydiyyat Göndərilir...</span>
+                      <span>{isEn ? 'Submitting Registration...' : isRu ? 'Отправка заявки...' : 'Qeydiyyat Göndərilir...'}</span>
                     </>
                   ) : (
                     <>
-                      <span>Qeydiyyat Müraciətini Təsdiqlə</span>
+                      <span>{isEn ? 'Submit Boutique Registration' : isRu ? 'Подтвердить Заявку' : 'Qeydiyyat Müraciətini Təsdiqlə'}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
@@ -376,7 +410,13 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
 
               <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 text-center pt-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Məlumatlarınız PostgreSQL təcrid zəmanəti ilə qorunur.</span>
+                <span>
+                  {isEn
+                    ? 'Your records are safeguarded by PostgreSQL multi-tenant isolation.'
+                    : isRu
+                    ? 'Ваши данные защищены изоляцией PostgreSQL.'
+                    : 'Məlumatlarınız PostgreSQL təcrid zəmanəti ilə qorunur.'}
+                </span>
               </div>
             </form>
           )}

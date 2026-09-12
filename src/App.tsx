@@ -26,6 +26,8 @@ import { VeritabaniYonetimModal } from './components/VeritabaniYonetimModal';
 import { IzolasyonDogrulamaModal } from './components/IzolasyonDogrulamaModal';
 import { KargoEntegrasyonModal } from './components/KargoEntegrasyonModal';
 import { LandingPage } from './components/landing/LandingPage';
+import { ButikQeydiyyatModal } from './components/landing/ButikQeydiyyatModal';
+import { AccessGateModal } from './components/AccessGateModal';
 import { DavetQebulSayfasi } from './components/DavetQebulSayfasi';
 import { DavetOlusturModal } from './components/DavetOlusturModal';
 import { TenantOnayMerkeziModal } from './components/TenantOnayMerkeziModal';
@@ -113,6 +115,18 @@ export default function App() {
   const [inboxAcik, setInboxAcik] = useState(false);
   const [davetModalAcik, setDavetModalAcik] = useState(false);
   const [tenantOnayModalAcik, setTenantOnayModalAcik] = useState(false);
+  const [accessGateAcik, setAccessGateAcik] = useState(false);
+  const [gateHedef, setGateHedef] = useState<'panel' | 'demo'>('panel');
+  const [butikQeydiyyatAcik, setButikQeydiyyatAcik] = useState(false);
+
+  // Giriş icazəsi: sessionStorage və ya localStorage
+  const [hasAccess, setHasAccess] = useState<boolean>(() => {
+    try {
+      if (sessionStorage.getItem('tomnap_access_granted') === 'true') return true;
+      if (localStorage.getItem('tomnap_access_granted') === 'true') return true;
+    } catch {}
+    return false;
+  });
 
   const bekleyenTenantSayisi = useMemo(() => {
     return firmalar.filter((f) => f.onayDurumu === 'BEKLEMEDE').length;
@@ -152,24 +166,124 @@ export default function App() {
     setTimeout(() => setBildirim(null), 3500);
   };
 
+  // URL query parameter token kontrolü: ?key=tomnap2026 və ya ?token=tomnap2026
+  useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlKey = (searchParams.get('key') || searchParams.get('token') || searchParams.get('access_code') || '').trim().toLowerCase();
+      const envCode = (import.meta.env.VITE_ACCESS_CODE || '').trim().toLowerCase();
+      const validCodes = new Set(['tomnap2026', 'admin2026', 'tomnap']);
+      if (envCode) validCodes.add(envCode);
+
+      if (urlKey && validCodes.has(urlKey)) {
+        sessionStorage.setItem('tomnap_access_granted', 'true');
+        localStorage.setItem('tomnap_access_granted', 'true');
+        setHasAccess(true);
+        // Parametri URL-dən təmizlə
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+        bildirimGoster('Səlahiyyətli giriş təsdiqləndi! Xoş gəlmisiniz.');
+      }
+    } catch {}
+  }, []);
+
+  const handlePanelGirisIsteyi = () => {
+    if (hasAccess) {
+      navigate('/app');
+    } else {
+      setGateHedef('panel');
+      setAccessGateAcik(true);
+    }
+  };
+
+  const handleDemoGirisIsteyi = () => {
+    if (hasAccess) {
+      setSeciliFirmaId('demo_sandbox');
+      bildirimGoster('Canlı Sandbox Demo Mühitinə keçid edildi! 109 nümunəvi sifariş aktivdir.');
+      navigate('/app');
+    } else {
+      setGateHedef('demo');
+      setAccessGateAcik(true);
+    }
+  };
+
+  const handleBasariliGiris = (hedef: 'panel' | 'demo') => {
+    setHasAccess(true);
+    setAccessGateAcik(false);
+    if (hedef === 'demo') {
+      setSeciliFirmaId('demo_sandbox');
+      bildirimGoster('Canlı Sandbox Demo Mühitinə keçid edildi! 109 nümunəvi sifariş aktivdir.');
+    } else {
+      bildirimGoster('İş masasına giriş təsdiqləndi.');
+    }
+    navigate('/app');
+  };
+
+  const handleKilidle = () => {
+    try {
+      sessionStorage.removeItem('tomnap_access_granted');
+      localStorage.removeItem('tomnap_access_granted');
+    } catch {}
+    setHasAccess(false);
+    bildirimGoster('İş masası kilidləndi.');
+    navigate('/');
+  };
+
   // 1. İctimai Landing Page (Vitrin) — tomnap.com ana səhifəsi
   if (location.pathname === '/' || location.pathname === '/landing') {
     return (
-      <LandingPage
-        onPanelAc={() => navigate('/app')}
-        onDemoAc={() => {
-          setSeciliFirmaId('demo_sandbox');
-          bildirimGoster('Canlı Sandbox Demo Mühitinə keçid edildi! 109 nümunəvi sifariş aktivdir.');
-          navigate('/app');
-        }}
-        toplamSiparis={siparisler.length}
-      />
+      <>
+        <LandingPage
+          onPanelAc={handlePanelGirisIsteyi}
+          onDemoAc={handleDemoGirisIsteyi}
+          toplamSiparis={siparisler.length}
+        />
+        <AccessGateModal
+          acik={accessGateAcik}
+          hedef={gateHedef}
+          onBasariliGiris={handleBasariliGiris}
+          onKapat={() => setAccessGateAcik(false)}
+          onQeydiyyatAc={() => setButikQeydiyyatAcik(true)}
+        />
+        <ButikQeydiyyatModal
+          acik={butikQeydiyyatAcik}
+          onKapat={() => setButikQeydiyyatAcik(false)}
+          onDemoAc={handleDemoGirisIsteyi}
+          onBasariliKayit={() => {}}
+        />
+      </>
     );
   }
 
   // 2. Komanda Dəvət Qəbul Səhifəsi (/davet və ya /davet/:token)
   if (location.pathname === '/davet' || location.pathname.startsWith('/davet')) {
     return <DavetQebulSayfasi />;
+  }
+
+  // 3. Qorunan Sahə: Əgər daxili yola (/app, /kurye və s.) icazəsiz daxil olmaq istəyirsə
+  if (!hasAccess) {
+    return (
+      <>
+        <LandingPage
+          onPanelAc={handlePanelGirisIsteyi}
+          onDemoAc={handleDemoGirisIsteyi}
+          toplamSiparis={siparisler.length}
+        />
+        <AccessGateModal
+          acik={true}
+          hedef="panel"
+          onBasariliGiris={handleBasariliGiris}
+          onKapat={() => navigate('/')}
+          onQeydiyyatAc={() => setButikQeydiyyatAcik(true)}
+        />
+        <ButikQeydiyyatModal
+          acik={butikQeydiyyatAcik}
+          onKapat={() => setButikQeydiyyatAcik(false)}
+          onDemoAc={handleDemoGirisIsteyi}
+          onBasariliKayit={() => {}}
+        />
+      </>
+    );
   }
 
   // Yeni sipariş eklendiğinde
@@ -318,6 +432,7 @@ export default function App() {
           onDavetModalAc={() => setDavetModalAcik(true)}
           onTenantOnayModalAc={() => setTenantOnayModalAcik(true)}
           bekleyenTenantSayisi={bekleyenTenantSayisi}
+          onKilidle={handleKilidle}
         />
 
         {/* Canlı Demo Sandbox Xəbərdarlıq və Sıfırlama Paneli */}

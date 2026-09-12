@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Inbox, PanelLeftClose, PanelLeftOpen, Database, Plane, Globe, UserPlus, Building2 } from 'lucide-react';
+import { Menu, Inbox, PanelLeftClose, PanelLeftOpen, Database, Plane, Globe, UserPlus, Building2, Lock } from 'lucide-react';
 import { KullaniciRolu, FirmaTenant } from '../types';
 import { RolSecici } from './RolSecici';
 import { DilSecici } from './DilSecici';
@@ -33,6 +33,7 @@ interface UstBaslikProps {
   onDavetModalAc?: () => void;
   onTenantOnayModalAc?: () => void;
   bekleyenTenantSayisi?: number;
+  onKilidle?: () => void;
 }
 
 export const UstBaslik: React.FC<UstBaslikProps> = ({
@@ -61,6 +62,7 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
   onDavetModalAc,
   onTenantOnayModalAc,
   bekleyenTenantSayisi = 0,
+  onKilidle,
 }) => {
   const { t } = useDil();
 
@@ -273,6 +275,20 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
             {dbKaynak === 'supabase' ? 'Supabase' : 'Lokal'}
           </span>
         </button>
+
+        {/* İş Masasını Kilidlə (Lock) */}
+        {onKilidle && (
+          <button
+            type="button"
+            id="btn-header-kilidle"
+            onClick={onKilidle}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 dark:bg-slate-800/80 dark:hover:bg-rose-950/40 dark:text-slate-300 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-800 transition-all cursor-pointer shadow-2xs"
+            title="Lock Workspace / İş masasını kilidlə"
+          >
+            <Lock className="w-3.5 h-3.5 text-slate-500 hover:text-rose-600" />
+            <span className="font-bold text-[11px] hidden xl:inline">Kilidlə</span>
+          </button>
+        )}
       </div>
     </header>
   );
