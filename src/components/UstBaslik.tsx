@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Inbox, PanelLeftClose, PanelLeftOpen, Database, Plane } from 'lucide-react';
+import { Menu, Inbox, PanelLeftClose, PanelLeftOpen, Database, Plane, Globe, UserPlus, Building2 } from 'lucide-react';
 import { KullaniciRolu, FirmaTenant } from '../types';
 import { RolSecici } from './RolSecici';
 import { DilSecici } from './DilSecici';
@@ -8,8 +8,8 @@ import { PWAInstallButton } from './PWAInstallButton';
 import { useDil } from '../context/DilKonteksti';
 
 interface UstBaslikProps {
-  aktifSekme: 'panel' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
-  setAktifSekme: (sekme: 'panel' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi') => void;
+  aktifSekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'kargo-merkezi' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
+  setAktifSekme: (sekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'kargo-merkezi' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi') => void;
   toplamSiparis: number;
   onMobilMenuAc?: () => void;
   menuDar?: boolean;
@@ -29,6 +29,10 @@ interface UstBaslikProps {
   firmaSiparisSayilari?: Record<string, number>;
   onIzolasyonModalAc?: () => void;
   onKargoModalAc?: () => void;
+  onVitrinAc?: () => void;
+  onDavetModalAc?: () => void;
+  onTenantOnayModalAc?: () => void;
+  bekleyenTenantSayisi?: number;
 }
 
 export const UstBaslik: React.FC<UstBaslikProps> = ({
@@ -53,6 +57,10 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
   firmaSiparisSayilari = {},
   onIzolasyonModalAc,
   onKargoModalAc,
+  onVitrinAc,
+  onDavetModalAc,
+  onTenantOnayModalAc,
+  bekleyenTenantSayisi = 0,
 }) => {
   const { t } = useDil();
 
@@ -66,6 +74,8 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
         return t.musteriVeritabani;
       case 'kargo-manifest':
         return t.kargoManifestosuCeki;
+      case 'kargo-merkezi':
+        return 'Kargo & Aramex Lojistika Mərkəzi';
       case 'baku-tahsilat':
         return t.bakuTahsilatQaliq;
       case 'kurye-masasi':
@@ -180,17 +190,72 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
         {/* Dil Değiştirici: AZ / EN / RU */}
         <DilSecici />
 
-        {/* Kargo / Aramex API Parametrləri Butonu */}
-        {onKargoModalAc && (aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'KANADA_SATINALMA') && (
+        {/* İctimai Vitrin (Landing Page - tomnap.com) */}
+        {onVitrinAc && (
           <button
             type="button"
-            id="btn-header-kargo-api"
-            onClick={onKargoModalAc}
-            className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 px-2.5 py-1.5 rounded-xl text-xs text-blue-900 dark:text-blue-200 shadow-2xs transition-all cursor-pointer"
-            title="Aramex / Kargo API və Rota Tənzimləmələri"
+            id="btn-header-vitrin"
+            onClick={onVitrinAc}
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1.5 rounded-xl text-xs text-slate-200 shadow-2xs transition-all cursor-pointer"
+            title="tomnap.com İctimai Vitrin (Landing Page) Aç"
           >
-            <Plane className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span className="font-bold text-[11px] hidden md:inline">Kargo API</span>
+            <Globe className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="font-bold text-[11px] hidden lg:inline">Vitrin</span>
+          </button>
+        )}
+
+        {/* Super Admin Butik Təsdiq Mərkəzi */}
+        {onTenantOnayModalAc && aktifRol === 'SUPER_ADMIN' && (
+          <button
+            type="button"
+            id="btn-header-tenant-onay"
+            onClick={onTenantOnayModalAc}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${
+              bekleyenTenantSayisi > 0
+                ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold animate-pulse'
+                : 'bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300'
+            }`}
+            title="Yeni Butik Müraciətlərini Təsdiqlə"
+          >
+            <Building2 className="w-3.5 h-3.5 text-amber-400" />
+            <span className="font-bold text-[11px] hidden md:inline">Butiklər</span>
+            {bekleyenTenantSayisi > 0 && (
+              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] flex items-center justify-center">
+                {bekleyenTenantSayisi}
+              </span>
+            )}
+          </button>
+        )}
+
+        {/* Komanda Dəvət Linki Butonu */}
+        {onDavetModalAc && (aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON') && (
+          <button
+            type="button"
+            id="btn-header-davet"
+            onClick={onDavetModalAc}
+            className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 px-2.5 py-1.5 rounded-xl text-xs text-indigo-900 dark:text-indigo-200 shadow-2xs transition-all cursor-pointer"
+            title="Komanda Üzvləri (Kurye, Satış) üçün Dəvət Linki Al"
+          >
+            <UserPlus className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span className="font-bold text-[11px] hidden md:inline">Dəvət Linki</span>
+          </button>
+        )}
+
+        {/* Kargo / Aramex Lojistika Mərkəzi Butonu */}
+        {(aktifRol !== 'BAKU_KURYE') && (
+          <button
+            type="button"
+            id="btn-header-kargo-merkezi"
+            onClick={() => setAktifSekme('kargo-merkezi')}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs shadow-2xs transition-all cursor-pointer ${
+              aktifSekme === 'kargo-merkezi'
+                ? 'bg-blue-600 text-white font-bold ring-2 ring-blue-400/40 shadow-sm'
+                : 'bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200'
+            }`}
+            title="Kargo & Aramex Lojistika Mərkəzi (Canlı İzləmə və Tənzimləmələr)"
+          >
+            <Plane className={`w-3.5 h-3.5 ${aktifSekme === 'kargo-merkezi' ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`} />
+            <span className="font-bold text-[11px] hidden md:inline">Kargo Mərkəzi</span>
           </button>
         )}
 

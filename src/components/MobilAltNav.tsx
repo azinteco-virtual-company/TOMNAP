@@ -10,8 +10,8 @@ import {
 import { useDil } from '../context/DilKonteksti';
 
 interface MobilAltNavProps {
-  aktifSekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
-  setAktifSekme: (sekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi') => void;
+  aktifSekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'kargo-merkezi' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
+  setAktifSekme: (sekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'kargo-merkezi' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi') => void;
   onMobilMenuAc: () => void;
   inboxSayisi?: number;
 }

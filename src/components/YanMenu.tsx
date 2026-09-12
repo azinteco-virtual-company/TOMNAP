@@ -19,15 +19,18 @@ import {
   Plane,
   Truck,
   Crown,
-  Briefcase
+  Briefcase,
+  Globe,
+  UserPlus,
+  Building2
 } from 'lucide-react';
 import { KullaniciRolu } from '../types';
 import { useDil } from '../context/DilKonteksti';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface YanMenuProps {
-  aktifSekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
-  setAktifSekme: (sekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi') => void;
+  aktifSekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'kargo-merkezi' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
+  setAktifSekme: (sekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'kargo-merkezi' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi') => void;
   seciliKodSekmesi: string;
   setSeciliKodSekmesi: (sekme: any) => void;
   toplamSiparis: number;
@@ -41,6 +44,10 @@ interface YanMenuProps {
   inboxSayisi?: number;
   aktifRol?: KullaniciRolu;
   onVeritabaniModalAc?: () => void;
+  onVitrinAc?: () => void;
+  onDavetModalAc?: () => void;
+  onTenantOnayModalAc?: () => void;
+  bekleyenTenantSayisi?: number;
 }
 
 export const YanMenu: React.FC<YanMenuProps> = ({
@@ -59,6 +66,10 @@ export const YanMenu: React.FC<YanMenuProps> = ({
   inboxSayisi = 2,
   aktifRol = 'SUPER_ADMIN',
   onVeritabaniModalAc,
+  onVitrinAc,
+  onDavetModalAc,
+  onTenantOnayModalAc,
+  bekleyenTenantSayisi = 0,
 }) => {
   const { t } = useDil();
 
@@ -79,6 +90,11 @@ export const YanMenu: React.FC<YanMenuProps> = ({
 
   const kargoManifestGit = () => {
     setAktifSekme('kargo-manifest');
+    setMobilAcik(false);
+  };
+
+  const kargoMerkeziGit = () => {
+    setAktifSekme('kargo-merkezi');
     setMobilAcik(false);
   };
 
@@ -114,6 +130,7 @@ export const YanMenu: React.FC<YanMenuProps> = ({
   const canSeeGorselGiris = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'SATIS_SORUMLUSU' || aktifRol === 'KANADA_SATINALMA';
   const canSeeMusteriler = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'BAKU_FINANS' || aktifRol === 'SATIS_SORUMLUSU';
   const canSeeKargoManifest = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'KANADA_SATINALMA';
+  const canSeeKargoMerkezi = aktifRol !== 'BAKU_KURYE';
   const canSeeBakuTahsilat = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'BAKU_FINANS';
   const canSeeInbox = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'SATIS_SORUMLUSU';
   const canSeeKuryeMasasi = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'BAKU_KURYE';
@@ -161,6 +178,16 @@ export const YanMenu: React.FC<YanMenuProps> = ({
                 <p className="text-[10px] text-slate-400 font-medium tracking-tight truncate mt-0.5">
                   Global Parcel &amp; Commerce
                 </p>
+                {onVitrinAc && (
+                  <button
+                    type="button"
+                    onClick={onVitrinAc}
+                    className="flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold mt-1 transition-colors cursor-pointer"
+                  >
+                    <Globe className="w-3 h-3" />
+                    <span>tomnap.com vitrini →</span>
+                  </button>
+                )}
               </div>
             </div>
           ) : (
@@ -475,6 +502,49 @@ export const YanMenu: React.FC<YanMenuProps> = ({
           </div>
           )}
 
+          {/* 4.1 Kargo & Aramex Mərkəzi (Yeni - Tam Səhifə) */}
+          {canSeeKargoMerkezi && (
+          <div className="relative group flex justify-center w-full">
+            <button
+              id="nav-btn-kargo-merkezi-tab"
+              onClick={kargoMerkeziGit}
+              className={`flex items-center rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                dar
+                  ? `w-11 h-11 justify-center relative ${
+                      aktifSekme === 'kargo-merkezi'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-blue-950/40 hover:bg-blue-900/50 border border-blue-700/50 text-blue-300'
+                    }`
+                  : `w-full justify-between px-3 py-2.5 mt-1 ${
+                      aktifSekme === 'kargo-merkezi'
+                        ? 'bg-blue-600 text-white font-bold shadow-sm ring-1 ring-blue-400/40'
+                        : 'bg-blue-950/30 hover:bg-blue-900/40 border border-blue-800/40 text-blue-300'
+                    }`
+              }`}
+            >
+              <div className="flex items-center min-w-0">
+                <Globe className={`w-4 h-4 shrink-0 ${!dar ? 'mr-3' : ''} text-blue-400`} />
+                {!dar && <span className="truncate">Kargo & Aramex Mərkəzi</span>}
+              </div>
+              {!dar ? (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/30 text-blue-200 border border-blue-400/40 font-black tracking-wider uppercase">
+                  Aramex API
+                </span>
+              ) : (
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-blue-500 text-white font-bold text-[8px] flex items-center justify-center shadow-xs">
+                  🌐
+                </span>
+              )}
+            </button>
+            {dar && (
+              <div className="absolute left-full ml-3 px-3 py-1.5 bg-slate-950 text-white text-xs font-semibold rounded-lg whitespace-nowrap shadow-xl border border-slate-700 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 flex items-center gap-2">
+                <span>Kargo & Aramex Mərkəzi</span>
+                <span className="px-1 py-0.5 rounded bg-blue-500/40 text-blue-200 text-[9px]">API</span>
+              </div>
+            )}
+          </div>
+          )}
+
           {/* 5. Bakı Qalıq Borc & Təhsilat Masası (Tam Sayfa) */}
           {canSeeBakuTahsilat && (
           <div className="relative group flex justify-center w-full">
@@ -562,6 +632,90 @@ export const YanMenu: React.FC<YanMenuProps> = ({
             {dar && (
               <div className="absolute left-full ml-3 px-3 py-1.5 bg-slate-950 text-white text-xs font-semibold rounded-lg whitespace-nowrap shadow-xl border border-slate-700 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 flex items-center gap-2">
                 <span>{t.inboxGelen} ({inboxSayisi})</span>
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* 7. Komanda Dəvət Linki (Super Admin və Patron) */}
+          {onDavetModalAc && (aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON') && (
+          <div className="relative group flex justify-center w-full">
+            <button
+              id="nav-btn-davet-modal"
+              onClick={onDavetModalAc}
+              className={`flex items-center rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                dar
+                  ? 'w-11 h-11 justify-center relative bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-800/40 text-indigo-300'
+                  : 'w-full justify-between px-3 py-2.5 mt-1 bg-indigo-950/30 hover:bg-indigo-900/40 border border-indigo-800/40 text-indigo-300'
+              }`}
+            >
+              <div className="flex items-center min-w-0">
+                <UserPlus className={`w-4 h-4 shrink-0 ${!dar ? 'mr-3' : ''} text-indigo-400`} />
+                {!dar && <span className="truncate">Komanda Dəvəti</span>}
+              </div>
+              {!dar ? (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold">
+                  Dəvət
+                </span>
+              ) : (
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-indigo-500 text-white font-bold text-[8px] flex items-center justify-center">
+                  +
+                </span>
+              )}
+            </button>
+            {dar && (
+              <div className="absolute left-full ml-3 px-3 py-1.5 bg-slate-950 text-white text-xs font-semibold rounded-lg whitespace-nowrap shadow-xl border border-slate-700 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 flex items-center gap-2">
+                <span>Komanda Dəvət Linki</span>
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* 8. Super Admin Butik Təsdiq Mərkəzi */}
+          {onTenantOnayModalAc && aktifRol === 'SUPER_ADMIN' && (
+          <div className="relative group flex justify-center w-full">
+            <button
+              id="nav-btn-tenant-onay-modal"
+              onClick={onTenantOnayModalAc}
+              className={`flex items-center rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                dar
+                  ? `w-11 h-11 justify-center relative ${
+                      bekleyenTenantSayisi > 0
+                        ? 'bg-amber-500/20 border border-amber-500/50 text-amber-300 animate-pulse'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    }`
+                  : `w-full justify-between px-3 py-2.5 mt-1 ${
+                      bekleyenTenantSayisi > 0
+                        ? 'bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/50 text-amber-200'
+                        : 'hover:bg-slate-800 text-slate-300'
+                    }`
+              }`}
+            >
+              <div className="flex items-center min-w-0">
+                <Building2 className={`w-4 h-4 shrink-0 ${!dar ? 'mr-3' : ''} text-amber-400`} />
+                {!dar && <span className="truncate">Butik Təsdiqi</span>}
+              </div>
+              {!dar ? (
+                bekleyenTenantSayisi > 0 ? (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black animate-pulse">
+                    {bekleyenTenantSayisi} Gözləyir
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-bold">
+                    SaaS
+                  </span>
+                )
+              ) : (
+                bekleyenTenantSayisi > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-amber-500 text-slate-950 font-black text-[9px] flex items-center justify-center">
+                    {bekleyenTenantSayisi}
+                  </span>
+                )
+              )}
+            </button>
+            {dar && (
+              <div className="absolute left-full ml-3 px-3 py-1.5 bg-slate-950 text-white text-xs font-semibold rounded-lg whitespace-nowrap shadow-xl border border-slate-700 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 flex items-center gap-2">
+                <span>Butik Təsdiq Mərkəzi {bekleyenTenantSayisi > 0 ? `(${bekleyenTenantSayisi})` : ''}</span>
               </div>
             )}
           </div>

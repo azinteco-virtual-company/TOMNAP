@@ -1,0 +1,387 @@
+import React, { useState } from 'react';
+import { X, Sparkles, Building2, User, Phone, Mail, Globe, CheckCircle2, ShieldCheck, ArrowRight, Loader2 } from 'lucide-react';
+
+interface ButikQeydiyyatModalProps {
+  acik: boolean;
+  onKapat: () => void;
+  onBasariliKayit?: (yeniFirma: any) => void;
+  onDemoAc?: () => void;
+}
+
+export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
+  acik,
+  onKapat,
+  onBasariliKayit,
+  onDemoAc,
+}) => {
+  const [butikAdi, setButikAdi] = useState('');
+  const [sahipAdi, setSahipAdi] = useState('');
+  const [sahipTelefon, setSahipTelefon] = useState('+994 ');
+  const [sahipEmail, setSahipEmail] = useState('');
+  const [sehir, setSehir] = useState('Bakı');
+  const [menseiUlke, setMenseiUlke] = useState('CA');
+  const [paket, setPaket] = useState<'BASLANGIC' | 'PRO' | 'ENTERPRISE'>('PRO');
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const [hata, setHata] = useState<string | null>(null);
+  const [tamamlandi, setTamamlandi] = useState(false);
+  const [kayitliButik, setKayitliButik] = useState<any>(null);
+
+  if (!acik) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setHata(null);
+
+    if (!butikAdi.trim() || !sahipAdi.trim() || !sahipTelefon.trim() || sahipTelefon.length < 9) {
+      setHata('Zəhmət olmasa Butik Adı, Sahib Adı və Əlaqə Nömrəsini tam daxil edin.');
+      return;
+    }
+
+    setYukleniyor(true);
+    try {
+      const res = await fetch('/api/firmalar/kayit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ad: butikAdi.trim(),
+          sehir: sehir.trim() || 'Bakı',
+          sahipAdi: sahipAdi.trim(),
+          sahipEmail: sahipEmail.trim(),
+          sahipTelefon: sahipTelefon.trim(),
+          paket,
+          menseiUlke,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.basarili) {
+        throw new Error(data.hata || 'Qeydiyyat zamanı xəta baş verdi.');
+      }
+
+      setKayitliButik(data.firma);
+      setTamamlandi(true);
+      if (onBasariliKayit) {
+        onBasariliKayit(data.firma);
+      }
+    } catch (err: any) {
+      setHata(err.message || 'Serverlə əlaqə qurularkən xəta baş verdi.');
+    } finally {
+      setYukleniyor(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[90vh]">
+        {/* Üst Dekorativ Gradient */}
+        <div className="h-2 bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400 shrink-0" />
+
+        {/* Modal Başlığı */}
+        <div className="p-6 border-b border-slate-800 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-blue-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white tracking-tight">
+                {tamamlandi ? 'Müraciətiniz Qeydə Alındı!' : 'TOMNAP Butik Qeydiyyatı'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {tamamlandi
+                  ? 'Super Admin təsdiqindən sonra hesabınız tam aktivləşəcək'
+                  : 'Platformaya qoşulun, sifariş və kargo idarəetməsini avtomatlaşdırın'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onKapat}
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Gövdəsi */}
+        <div className="p-6 overflow-y-auto flex-1 space-y-5">
+          {tamamlandi ? (
+            <div className="py-6 text-center space-y-5">
+              <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto text-2xl animate-bounce">
+                ✓
+              </div>
+              <div className="space-y-2 max-w-md mx-auto">
+                <h4 className="text-xl font-bold text-white">
+                  Təbriklər, "{kayitliButik?.ad}" müraciəti uğurla göndərildi!
+                </h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Təhlükəsizlik və məlumat təcridi standartlarımız səbəbindən yeni butiklər **Super Admin təsdiqi** ilə açılır.
+                  Əlaqə nömrənizə ({kayitliButik?.sahipTelefon}) aktivləşmə bildirişi göndəriləcək.
+                </p>
+              </div>
+
+              {/* Seçilmiş Paket Xülasəsi */}
+              <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 text-left space-y-2.5 max-w-md mx-auto text-xs">
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="font-semibold text-white">Seçilmiş Abunəlik:</span>
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
+                    {kayitliButik?.paket === 'PRO' ? 'Pro Şəbəkə (99 AZN)' : kayitliButik?.paket === 'BASLANGIC' ? 'Başlanğıc Butik (49 AZN)' : 'Enterprise Qlobal'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 pt-2 border-t border-slate-700/50">
+                  <div>• 1 Patron İdarəçi</div>
+                  <div>• {kayitliButik?.rolLimitleri?.KANADA_SATINALMA || 2} Kanada Kargo İstifadəçisi</div>
+                  <div>• {kayitliButik?.rolLimitleri?.SATIS_SORUMLUSU || 4} Satış / AI Masası</div>
+                  <div>• {kayitliButik?.rolLimitleri?.BAKU_KURYE || 10} Sahə Kuryesi Limiti</div>
+                </div>
+              </div>
+
+              {/* Dərhal Test Düyməsi */}
+              <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center max-w-md mx-auto">
+                {onDemoAc && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onKapat();
+                      onDemoAc();
+                    }}
+                    className="w-full px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    <span>İndi Canlı Demo Sınaq Sürüşü</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onKapat}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium cursor-pointer transition-all"
+                >
+                  Bağla
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {hata && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+                  <span className="shrink-0 font-bold">⚠️</span>
+                  <span>{hata}</span>
+                </div>
+              )}
+
+              {/* Butik və Sahib Məlumatları */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Butik / Mağaza Adı *
+                  </label>
+                  <div className="relative">
+                    <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Məs: Ayla Fashion Baku"
+                      value={butikAdi}
+                      onChange={(e) => setButikAdi(e.target.value)}
+                      className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Sahibin Adı və Soyadı *
+                  </label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Məs: Aysel Məmmədova"
+                      value={sahipAdi}
+                      onChange={(e) => setSahipAdi(e.target.value)}
+                      className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Əlaqə: Telefon və Email */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    WhatsApp / Əlaqə Nömrəsi *
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="+994 50 123 45 67"
+                      value={sahipTelefon}
+                      onChange={(e) => setSahipTelefon(e.target.value)}
+                      className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    E-poçt Ünvanı
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="email"
+                      placeholder="butik@example.com"
+                      value={sahipEmail}
+                      onChange={(e) => setSahipEmail(e.target.value)}
+                      className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Çıxış Ölkəsi və Şəhər */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Əsas Alış / Çıxış Ölkəsi
+                  </label>
+                  <select
+                    value={menseiUlke}
+                    onChange={(e) => setMenseiUlke(e.target.value)}
+                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-indigo-500"
+                  >
+                    <option value="CA">🇨🇦 Kanada (Toronto Pearson YYZ)</option>
+                    <option value="US">🇺🇸 ABŞ (Amerika JFK/ORD)</option>
+                    <option value="TR">🇹🇷 Türkiyə (İstanbul IST)</option>
+                    <option value="JP">🇯🇵 Yaponiya (Tokyo NRT)</option>
+                    <option value="GB">🇬🇧 Böyük Britaniya (London LHR)</option>
+                    <option value="DE">🇩🇪 Almaniya (Frankfurt FRA)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Təhvil Şəhəri
+                  </label>
+                  <input
+                    type="text"
+                    value={sehir}
+                    onChange={(e) => setSehir(e.target.value)}
+                    placeholder="Bakı"
+                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Paket Seçimi və Rol Limitləri */}
+              <div className="space-y-2 pt-2">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Abunəlik Paketi Seçin
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* Başlanğıc Butik */}
+                  <div
+                    onClick={() => setPaket('BASLANGIC')}
+                    className={`p-3 rounded-2xl border cursor-pointer transition-all ${
+                      paket === 'BASLANGIC'
+                        ? 'bg-blue-900/30 border-blue-500 ring-1 ring-blue-500'
+                        : 'bg-slate-800/40 border-slate-700/60 hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs font-bold text-white">Başlanğıc</span>
+                      <span className="text-[10px] text-blue-300 font-black">$49 / ay</span>
+                    </div>
+                    <ul className="text-[10px] text-slate-400 space-y-0.5">
+                      <li>• 1 Patron</li>
+                      <li>• 1 Kanada Kargo</li>
+                      <li>• 1 Satış Girişi</li>
+                      <li>• 1 Bakı Kassa</li>
+                      <li>• 1 Sahə Kuryesi</li>
+                    </ul>
+                  </div>
+
+                  {/* Pro Şəbəkə */}
+                  <div
+                    onClick={() => setPaket('PRO')}
+                    className={`p-3 rounded-2xl border cursor-pointer transition-all relative ${
+                      paket === 'PRO'
+                        ? 'bg-indigo-900/40 border-indigo-500 ring-2 ring-indigo-500/50 shadow-lg shadow-indigo-500/20'
+                        : 'bg-slate-800/40 border-slate-700/60 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-indigo-500 text-[8px] font-black text-white uppercase tracking-wider">
+                      Tövsiyə
+                    </span>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs font-bold text-white">Pro Şəbəkə</span>
+                      <span className="text-[10px] text-indigo-300 font-black">$99 / ay</span>
+                    </div>
+                    <ul className="text-[10px] text-slate-300 space-y-0.5 font-medium">
+                      <li>• 1 Patron</li>
+                      <li>• 2 Kanada Kargo</li>
+                      <li>• 2 Satış Girişi</li>
+                      <li>• 2 Bakı Kassa</li>
+                      <li>• 5 Sahə Kuryesi</li>
+                      <li className="text-emerald-400 font-bold">• Aramex API + Limitsiz AI</li>
+                    </ul>
+                  </div>
+
+                  {/* Enterprise Qlobal */}
+                  <div
+                    onClick={() => setPaket('ENTERPRISE')}
+                    className={`p-3 rounded-2xl border cursor-pointer transition-all ${
+                      paket === 'ENTERPRISE'
+                        ? 'bg-purple-900/30 border-purple-500 ring-1 ring-purple-500'
+                        : 'bg-slate-800/40 border-slate-700/60 hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs font-bold text-white">Enterprise</span>
+                      <span className="text-[10px] text-purple-300 font-black">Fərdi</span>
+                    </div>
+                    <ul className="text-[10px] text-slate-400 space-y-0.5">
+                      <li>• 2 Patron İdarəçi</li>
+                      <li>• 5 Kanada / Xarici Kargo</li>
+                      <li>• 10 Satış Məsuliyyətli</li>
+                      <li>• 25 Sahə Kuryesi</li>
+                      <li>• Xüsusi Domain CNAME</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Təsdiq Düyməsi */}
+              <div className="pt-3">
+                <button
+                  type="submit"
+                  disabled={yukleniyor}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {yukleniyor ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Qeydiyyat Göndərilir...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Qeydiyyat Müraciətini Təsdiqlə</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 text-center pt-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Məlumatlarınız PostgreSQL təcrid zəmanəti ilə qorunur.</span>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

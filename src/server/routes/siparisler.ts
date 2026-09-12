@@ -11,14 +11,33 @@ import {
   uretKanadaTakipKodu,
   uretUluslararasiKargoKodu,
 } from '../services/siparisFormatlama';
-import { siparislerVeritabani, setSiparislerVeritabani, musterilerVeritabani } from '../services/state';
+import {
+  siparislerVeritabani,
+  setSiparislerVeritabani,
+  musterilerVeritabani,
+  demoSiparislerVeritabani,
+  setDemoSiparislerVeritabani,
+  sifirlaDemoVeritabani,
+} from '../services/state';
 import { MusteriKaydi } from '../types';
 
 const router = Router();
 
-// 1. GET /api/siparisler — Tüm Siparişleri Getir (Tenant İzolasyonlu)
+// 1. GET /api/siparisler — Tüm Siparişleri Getir (Tenant İzolasyonlu & Demo Sandbox Korumalı)
 router.get('/siparisler', async (req, res) => {
   const seciliTenant = req.query.tenant_id as string | undefined;
+
+  // Əgər sorğu DEMO SANDBOX üçün gəlirsə — təcrid olunmuş 109 sifarişi dərhal qaytar
+  if (seciliTenant === 'demo_sandbox') {
+    const formatli = demoSiparislerVeritabani.map((s) => formatlaSiparis(s));
+    return res.json({
+      basarili: true,
+      kaynak: 'demo_sandbox',
+      toplam: formatli.length,
+      siparisler: formatli,
+      isDemo: true,
+    });
+  }
 
   if (supabase) {
     try {
@@ -490,6 +509,20 @@ router.post('/siparisler', async (req, res) => {
       gorsel_urlleri: Array.isArray(yeniVeri.gorsel_urlleri) ? yeniVeri.gorsel_urlleri : [],
     };
 
+    // DEMO SANDBOX MÜHİTİ — Əsas bazaya yazılmır, təcrid olunmuş demo hovuzuna əlavə olunur
+    if (dbPayload.tenant_id === 'demo_sandbox' || req.query.tenant_id === 'demo_sandbox') {
+      const demoSiparis: any = formatlaSiparis({
+        id: 'sip-demo-' + Date.now().toString(36),
+        olusturma_tarihi: new Date().toISOString(),
+        ...dbPayload,
+        tenant_id: 'demo_sandbox',
+        is_demo: true,
+        kalan_tutar: kalan,
+      });
+      demoSiparislerVeritabani.unshift(demoSiparis);
+      return res.json({ basarili: true, kaynak: 'demo_sandbox', siparis: demoSiparis });
+    }
+
     if (supabase) {
       try {
         const sbPayload = hazirlaSupabasePayload(dbPayload);
@@ -529,9 +562,30 @@ router.post('/siparisler', async (req, res) => {
   }
 });
 
-// 4. PATCH /api/siparisler/:id — Sipariş Güncelle
+// 4. PATCH /api/siparisler/:id — Sipariş Güncelle (Demo Sandbox Korumalı)
 router.patch('/siparisler/:id', async (req, res) => {
   const { id } = req.params;
+
+  // Əgər sifariş DEMO SANDBOX hovuzundadırsa — canlı Supabase bazasına toxunma!
+  const demoIndex = demoSiparislerVeritabani.findIndex((s) => s.id === id);
+  if (demoIndex !== -1 || req.body.tenant_id === 'demo_sandbox') {
+    const targetIndex = demoIndex !== -1 ? demoIndex : 0;
+    const guncel = {
+      ...demoSiparislerVeritabani[targetIndex],
+      ...req.body,
+      guncellenme_tarihi: new Date().toISOString(),
+    };
+    if (guncel.toplam_tutar !== undefined && guncel.alinan_tutar !== undefined) {
+      guncel.kalan_tutar = Math.max(0, Number(guncel.toplam_tutar) - Number(guncel.alinan_tutar));
+      if (guncel.alinan_tutar >= guncel.toplam_tutar && guncel.toplam_tutar > 0) {
+        guncel.finans_durumu = 'ODENDI';
+      } else if (guncel.alinan_tutar > 0) {
+        guncel.finans_durumu = 'KISMI_ODEME';
+      }
+    }
+    demoSiparislerVeritabani[targetIndex] = formatlaSiparis(guncel);
+    return res.json({ basarili: true, kaynak: 'demo_sandbox', siparis: demoSiparislerVeritabani[targetIndex] });
+  }
 
   if (supabase) {
     try {
@@ -633,9 +687,20 @@ router.patch('/siparisler/:id', async (req, res) => {
   res.json({ basarili: true, kaynak: 'bellek', siparis: siparislerVeritabani[index] });
 });
 
-// 5. DELETE /api/siparisler/:id — Sipariş Sil
+// 5. DELETE /api/siparisler/:id — Sipariş Sil (Demo Sandbox Korumalı)
 router.delete('/siparisler/:id', async (req, res) => {
   const { id } = req.params;
+
+  // Əgər silinən sifariş DEMO SANDBOX hovuzundadırsa — Supabase-ə toxunma!
+  const demoIndex = demoSiparislerVeritabani.findIndex((s) => s.id === id);
+  if (demoIndex !== -1 || req.query.tenant_id === 'demo_sandbox') {
+    setDemoSiparislerVeritabani(demoSiparislerVeritabani.filter((s) => s.id !== id));
+    return res.json({
+      basarili: true,
+      kaynak: 'demo_sandbox',
+      mesaj: 'Sifariş sınaq mühitindən silindi (Əsas canlı baza zirehli qorunur).',
+    });
+  }
 
   if (supabase) {
     try {
@@ -652,6 +717,17 @@ router.delete('/siparisler/:id', async (req, res) => {
 
   setSiparislerVeritabani(siparislerVeritabani.filter(s => s.id !== id));
   res.json({ basarili: true, kaynak: 'bellek', mesaj: 'Sipariş başarıyla silindi.' });
+});
+
+// 5.1. POST /api/demo/sifirla — Demo Sandbox Mühitini 109 Orijinal Sifarişə Sıfırla
+router.post('/demo/sifirla', (_req, res) => {
+  const sayi = sifirlaDemoVeritabani();
+  res.json({
+    basarili: true,
+    kaynak: 'demo_sandbox',
+    mesaj: `Canlı demo mühiti uğurla sıfırlandı! ${sayi} ədəd orijinal qızıl sifariş ilkin vəziyyətinə bərpa olundu.`,
+    toplam: sayi,
+  });
 });
 
 // 6. POST /api/siparisler/tumunu-uluslararasi-kargo-yap

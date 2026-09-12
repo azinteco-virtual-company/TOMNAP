@@ -71,6 +71,39 @@ export interface FirmaTenantItem {
   varsayilanKomisyonYuzdesi: number;
   aciklama: string;
   isDemo?: boolean;
+  onayDurumu?: 'AKTIF' | 'BEKLEMEDE' | 'REDDEDILDI';
+  paket?: 'BASLANGIC' | 'PRO' | 'ENTERPRISE';
+  sahipAdi?: string;
+  sahipEmail?: string;
+  sahipTelefon?: string;
+  kayitTarihi?: string;
+  menseiUlke?: string;
+  rolLimitleri?: {
+    PATRON: number;
+    KANADA_SATINALMA: number;
+    SATIS_SORUMLUSU: number;
+    BAKU_FINANS: number;
+    BAKU_KURYE: number;
+  };
+  aktifKullaniciSayilari?: {
+    PATRON: number;
+    KANADA_SATINALMA: number;
+    SATIS_SORUMLUSU: number;
+    BAKU_FINANS: number;
+    BAKU_KURYE: number;
+  };
+}
+
+export interface DavetKaydi {
+  token: string;
+  tenantId: string;
+  tenantAd: string;
+  rol: string;
+  olusturanKisi: string;
+  olusturmaTarihi: string;
+  gecerlilikTarihi: string;
+  kullanildiMi: boolean;
+  kullananKisi?: string;
 }
 
 export interface OnayBekleyenKaydi {

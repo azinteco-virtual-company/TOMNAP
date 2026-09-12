@@ -11,6 +11,25 @@ export function setSiparislerVeritabani(yeniListe: any[]) {
   siparislerVeritabani = yeniListe;
 }
 
+// DƏYİŞMƏZ QIZIL DEMO BAZASI (Golden Demo Dataset - 109 İlkin Sifariş)
+export const GOLDEN_DEMO_SIPARISLER = JSON.parse(JSON.stringify(BASLANGIC_SIPARISLER)).map((s: any) => ({
+  ...s,
+  tenant_id: 'demo_sandbox',
+  is_demo: true,
+}));
+
+// Təcrid olunmuş Canlı Demo Sandbox Hovuzu (Ziyarətçilər əsas bazanı zədələyə bilməz)
+export let demoSiparislerVeritabani: any[] = JSON.parse(JSON.stringify(GOLDEN_DEMO_SIPARISLER));
+
+export function setDemoSiparislerVeritabani(yeniListe: any[]) {
+  demoSiparislerVeritabani = yeniListe;
+}
+
+export function sifirlaDemoVeritabani(): number {
+  demoSiparislerVeritabani = JSON.parse(JSON.stringify(GOLDEN_DEMO_SIPARISLER));
+  return demoSiparislerVeritabani.length;
+}
+
 // In-memory müşteri veritabanı (CRM)
 export let musterilerVeritabani: MusteriKaydi[] = [
   {

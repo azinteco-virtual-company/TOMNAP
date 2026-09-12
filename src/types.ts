@@ -173,6 +173,14 @@ export interface OnayBekleyenMesaj {
   durum: 'BEKLEMEDE' | 'ONAYLANDI' | 'REDDEDILDI';
 }
 
+export interface RolLimitleri {
+  PATRON: number;
+  KANADA_SATINALMA: number;
+  SATIS_SORUMLUSU: number;
+  BAKU_FINANS: number;
+  BAKU_KURYE: number;
+}
+
 export interface FirmaTenant {
   id: string; // örn: 'kanada_shopper_baku', 'ayla_boutique', 'luxury_brand_baku', 'demo_sandbox'
   ad: string;
@@ -181,6 +189,27 @@ export interface FirmaTenant {
   varsayilanKomisyonYuzdesi: number;
   aciklama: string;
   isDemo?: boolean;
+  onayDurumu?: 'AKTIF' | 'BEKLEMEDE' | 'REDDEDILDI';
+  paket?: 'BASLANGIC' | 'PRO' | 'ENTERPRISE';
+  sahipAdi?: string;
+  sahipEmail?: string;
+  sahipTelefon?: string;
+  kayitTarihi?: string;
+  menseiUlke?: string;
+  rolLimitleri?: RolLimitleri;
+  aktifKullaniciSayilari?: Partial<RolLimitleri>;
+}
+
+export interface DavetLinkiItem {
+  token: string;
+  tenantId: string;
+  tenantAd: string;
+  rol: KullaniciRolu;
+  olusturanKisi: string;
+  olusturmaTarihi: string;
+  gecerlilikTarihi: string;
+  kullanildiMi: boolean;
+  kullananKisi?: string;
 }
 
 

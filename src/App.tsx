@@ -10,6 +10,7 @@ import { SiparisDetayModal } from './components/SiparisDetayModal';
 import { WhatsAppBildirimModal } from './components/WhatsAppBildirimModal';
 import { KargoManifestoModal } from './components/KargoManifestoModal';
 import { KargoManifestoSayfasi } from './components/KargoManifestoSayfasi';
+import { KargoMerkeziSayfasi } from './components/KargoMerkeziSayfasi';
 import { BakuTahsilatModal } from './components/BakuTahsilatModal';
 import { BakuTahsilatSayfasi } from './components/BakuTahsilatSayfasi';
 import { OnayBekleyenlerModal } from './components/OnayBekleyenlerModal';
@@ -24,16 +25,22 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { VeritabaniYonetimModal } from './components/VeritabaniYonetimModal';
 import { IzolasyonDogrulamaModal } from './components/IzolasyonDogrulamaModal';
 import { KargoEntegrasyonModal } from './components/KargoEntegrasyonModal';
-import { CheckCircle2, Trash2, X, Loader2 } from 'lucide-react';
+import { LandingPage } from './components/landing/LandingPage';
+import { DavetQebulSayfasi } from './components/DavetQebulSayfasi';
+import { DavetOlusturModal } from './components/DavetOlusturModal';
+import { TenantOnayMerkeziModal } from './components/TenantOnayMerkeziModal';
+import { CheckCircle2, Trash2, X, Loader2, RotateCcw } from 'lucide-react';
 
-type SekmeTipi = 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
+type SekmeTipi = 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'kargo-merkezi' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
 
 const pathMap: Record<string, SekmeTipi> = {
   '/': 'panel',
+  '/app': 'panel',
   '/kanban': 'kanban',
   '/gorsel-giris': 'gorsel-giris',
   '/musteriler': 'musteriler',
   '/kargo-manifest': 'kargo-manifest',
+  '/kargo-merkezi': 'kargo-merkezi',
   '/baku-tahsilat': 'baku-tahsilat',
   '/inbox': 'inbox',
   '/kurye-masasi': 'kurye-masasi',
@@ -41,11 +48,12 @@ const pathMap: Record<string, SekmeTipi> = {
 };
 
 const sekmeToPath: Record<SekmeTipi, string> = {
-  'panel': '/',
+  'panel': '/app',
   'kanban': '/kanban',
   'gorsel-giris': '/gorsel-giris',
   'musteriler': '/musteriler',
   'kargo-manifest': '/kargo-manifest',
+  'kargo-merkezi': '/kargo-merkezi',
   'baku-tahsilat': '/baku-tahsilat',
   'inbox': '/inbox',
   'kurye-masasi': '/kurye-masasi',
@@ -103,6 +111,12 @@ export default function App() {
   const [kargoModalAcik, setKargoModalAcik] = useState(false);
   const [bakuTahsilatAcik, setBakuTahsilatAcik] = useState(false);
   const [inboxAcik, setInboxAcik] = useState(false);
+  const [davetModalAcik, setDavetModalAcik] = useState(false);
+  const [tenantOnayModalAcik, setTenantOnayModalAcik] = useState(false);
+
+  const bekleyenTenantSayisi = useMemo(() => {
+    return firmalar.filter((f) => f.onayDurumu === 'BEKLEMEDE').length;
+  }, [firmalar]);
 
   const handleMenuDarDegistir = (yeniDurum?: boolean) => {
     setMenuDar((onceki) => (typeof yeniDurum === 'boolean' ? yeniDurum : !onceki));
@@ -137,6 +151,26 @@ export default function App() {
     setBildirim(mesaj);
     setTimeout(() => setBildirim(null), 3500);
   };
+
+  // 1. İctimai Landing Page (Vitrin) — tomnap.com ana səhifəsi
+  if (location.pathname === '/' || location.pathname === '/landing') {
+    return (
+      <LandingPage
+        onPanelAc={() => navigate('/app')}
+        onDemoAc={() => {
+          setSeciliFirmaId('demo_sandbox');
+          bildirimGoster('Canlı Sandbox Demo Mühitinə keçid edildi! 109 nümunəvi sifariş aktivdir.');
+          navigate('/app');
+        }}
+        toplamSiparis={siparisler.length}
+      />
+    );
+  }
+
+  // 2. Komanda Dəvət Qəbul Səhifəsi (/davet və ya /davet/:token)
+  if (location.pathname === '/davet' || location.pathname.startsWith('/davet')) {
+    return <DavetQebulSayfasi />;
+  }
 
   // Yeni sipariş eklendiğinde
   const handleSiparisEklendi = (yeniSiparis: Siparis) => {
@@ -197,6 +231,24 @@ export default function App() {
     }
   };
 
+  // Demo Sandbox sıfırlama
+  const [demoSifirlanir, setDemoSifirlanir] = useState(false);
+  const handleDemoSifirla = async () => {
+    setDemoSifirlanir(true);
+    try {
+      const res = await fetch('/api/demo/sifirla', { method: 'POST' });
+      const data = await res.json();
+      if (data.basarili) {
+        bildirimGoster(data.mesaj);
+        siparisleriYukle('demo_sandbox');
+      }
+    } catch (e) {
+      bildirimGoster('Demo mühiti sıfırlanarkən xəta baş verdi.');
+    } finally {
+      setDemoSifirlanir(false);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
       {/* Sol Sidebar (Yan Menü) */}
@@ -216,6 +268,10 @@ export default function App() {
         inboxSayisi={inboxSayisi}
         aktifRol={aktifRol}
         onVeritabaniModalAc={() => setVeritabaniModalAcik(true)}
+        onVitrinAc={() => navigate('/')}
+        onDavetModalAc={() => setDavetModalAcik(true)}
+        onTenantOnayModalAc={() => setTenantOnayModalAcik(true)}
+        bekleyenTenantSayisi={bekleyenTenantSayisi}
       />
 
       {/* Ana Çalışma Alanı */}
@@ -258,7 +314,36 @@ export default function App() {
           firmaSiparisSayilari={firmaSiparisSayilari}
           onIzolasyonModalAc={() => setIzolasyonModalAcik(true)}
           onKargoModalAc={() => setKargoModalAcik(true)}
+          onVitrinAc={() => navigate('/')}
+          onDavetModalAc={() => setDavetModalAcik(true)}
+          onTenantOnayModalAc={() => setTenantOnayModalAcik(true)}
+          bekleyenTenantSayisi={bekleyenTenantSayisi}
         />
+
+        {/* Canlı Demo Sandbox Xəbərdarlıq və Sıfırlama Paneli */}
+        {seciliFirmaId === 'demo_sandbox' && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between text-xs text-amber-900 shrink-0 shadow-2xs">
+            <div className="flex items-center space-x-2.5">
+              <span className="flex h-2.5 w-2.5 relative shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+              </span>
+              <span>
+                <strong className="font-semibold text-amber-950">🧪 Sınaq Sandbox Mühiti (Canlı Demo):</strong> Bu rejimdə istədiyiniz sifarişi əlavə edə, redaktə edə və ya silə bilərsiniz. Canlı verilənlər bazası 100% zirehli qorunur.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleDemoSifirla}
+              disabled={demoSifirlanir}
+              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 disabled:opacity-50 text-white font-medium rounded-lg shadow-xs flex items-center space-x-1.5 transition-colors cursor-pointer shrink-0 ml-3"
+              title="Orijinal 96 qızıl sifariş məlumatını ilkin vəziyyətinə qaytar"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${demoSifirlanir ? 'animate-spin' : ''}`} />
+              <span>{demoSifirlanir ? 'Sıfırlanır...' : 'Demo Məlumatlarını Sıfırla'}</span>
+            </button>
+          </div>
+        )}
 
         {/* Başarı / Bilgi Bildirim Toast */}
         {bildirim && (
@@ -293,6 +378,35 @@ export default function App() {
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shrink-0 cursor-pointer flex items-center gap-2"
                 >
                   <span>Görsel Masasını Aç</span>
+                  <span>→</span>
+                </button>
+              </div>
+
+              {/* Kargo & Aramex Lojistika Mərkəzi Çağrı Bannerı */}
+              <div className="bg-gradient-to-r from-blue-900/90 via-slate-900 to-indigo-950 p-4 sm:p-5 rounded-2xl border border-blue-700/40 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+                    <span className="text-lg">✈️</span>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-white">Kargo & Aramex Lojistika Mərkəzi</h4>
+                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-blue-500/30 text-blue-200 border border-blue-400/40 uppercase">
+                        Canlı Aramex API
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      Toronto ➔ Bakı kargo uçuşları, AWB barkod izləməsi, gündəlik ixracat cədvəlləri və daşıyıcı tənzimləmələri.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  id="btn-banner-kargo-merkezi"
+                  onClick={() => handleSekmeDegistir('kargo-merkezi')}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shrink-0 cursor-pointer flex items-center gap-2"
+                >
+                  <span>Kargo Mərkəzini Aç</span>
                   <span>→</span>
                 </button>
               </div>
@@ -341,6 +455,12 @@ export default function App() {
             <KargoManifestoSayfasi
               siparisler={goruntulenenSiparisler}
               onSiparislereDon={() => handleSekmeDegistir('panel')}
+              onSiparisDetayAc={(siparis) => setSeciliSiparis(siparis)}
+            />
+          ) : aktifSekme === 'kargo-merkezi' ? (
+            /* 4.1 Kargo & Aramex Lojistika Mərkəzi */
+            <KargoMerkeziSayfasi
+              siparisler={goruntulenenSiparisler}
               onSiparisDetayAc={(siparis) => setSeciliSiparis(siparis)}
             />
           ) : aktifSekme === 'baku-tahsilat' ? (
@@ -568,6 +688,21 @@ export default function App() {
         onAyarlarGuncellendi={() => {
           siparisleriYukle(seciliFirmaId);
         }}
+      />
+
+      {/* 7. Komanda Dəvət Linki Modalı (Patron & Super Admin) */}
+      <DavetOlusturModal
+        acik={davetModalAcik}
+        onKapat={() => setDavetModalAcik(false)}
+        seciliFirma={firmalar.find((f) => f.id === seciliFirmaId) || firmalar[0] || null}
+      />
+
+      {/* 8. Super Admin Butik Təsdiq Mərkəzi Modalı */}
+      <TenantOnayMerkeziModal
+        acik={tenantOnayModalAcik}
+        onKapat={() => setTenantOnayModalAcik(false)}
+        firmalar={firmalar}
+        onFirmalariYenile={firmalariYukle}
       />
 
       {/* İnternet ve Oflayn Durum Bildiricisi */}

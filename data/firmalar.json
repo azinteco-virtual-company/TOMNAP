@@ -31,5 +31,215 @@
     "varsayilanKomisyonYuzdesi": 15,
     "aciklama": "Yeni müştərilərə və işçilərə təqdimat mühiti",
     "isDemo": true
+  },
+  {
+    "id": "test_moda_evi_k6pd",
+    "ad": "Test Moda Evi",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Zəhra Qasımova tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "AKTIF",
+    "paket": "PRO",
+    "sahipAdi": "Zəhra Qasımova",
+    "sahipEmail": "zehra@testmoda.az",
+    "sahipTelefon": "+994 50 777 88 99",
+    "kayitTarihi": "2026-09-12T10:22:06.577Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 4,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 10
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 1
+    }
+  },
+  {
+    "id": "test_moda_evi_khf3",
+    "ad": "Test Moda Evi",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Zəhra Qasımova tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "AKTIF",
+    "paket": "PRO",
+    "sahipAdi": "Zəhra Qasımova",
+    "sahipEmail": "zehra@testmoda.az",
+    "sahipTelefon": "+994 50 777 88 99",
+    "kayitTarihi": "2026-09-12T10:22:20.463Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 4,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 10
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 1
+    }
+  },
+  {
+    "id": "test_moda_evi_mu9h",
+    "ad": "Test Moda Evi",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Zəhra Qasımova tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "AKTIF",
+    "paket": "PRO",
+    "sahipAdi": "Zəhra Qasımova",
+    "sahipEmail": "zehra@testmoda.az",
+    "sahipTelefon": "+994 50 777 88 99",
+    "kayitTarihi": "2026-09-12T10:24:10.421Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 4,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 10
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 1
+    }
+  },
+  {
+    "id": "test_moda_evi_ls9c",
+    "ad": "Test Moda Evi",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Zəhra Qasımova tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "AKTIF",
+    "paket": "PRO",
+    "sahipAdi": "Zəhra Qasımova",
+    "sahipEmail": "zehra@testmoda.az",
+    "sahipTelefon": "+994 50 777 88 99",
+    "kayitTarihi": "2026-09-12T11:19:20.400Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 4,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 10
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 1
+    }
+  },
+  {
+    "id": "test_moda_evi_kp70",
+    "ad": "Test Moda Evi",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Zəhra Qasımova tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "AKTIF",
+    "paket": "PRO",
+    "sahipAdi": "Zəhra Qasımova",
+    "sahipEmail": "zehra@testmoda.az",
+    "sahipTelefon": "+994 50 777 88 99",
+    "kayitTarihi": "2026-09-12T11:46:29.388Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 4,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 10
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 1
+    }
+  },
+  {
+    "id": "test_moda_evi_7nck",
+    "ad": "Test Moda Evi",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Zəhra Qasımova tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "AKTIF",
+    "paket": "PRO",
+    "sahipAdi": "Zəhra Qasımova",
+    "sahipEmail": "zehra@testmoda.az",
+    "sahipTelefon": "+994 50 777 88 99",
+    "kayitTarihi": "2026-09-12T12:04:20.084Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 4,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 10
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 1
+    }
+  },
+  {
+    "id": "test_moda_evi_knnj",
+    "ad": "Test Moda Evi",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Zəhra Qasımova tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "AKTIF",
+    "paket": "PRO",
+    "sahipAdi": "Zəhra Qasımova",
+    "sahipEmail": "zehra@testmoda.az",
+    "sahipTelefon": "+994 50 777 88 99",
+    "kayitTarihi": "2026-09-12T12:14:27.007Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 2,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 5
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 1
+    }
   }
 ]
