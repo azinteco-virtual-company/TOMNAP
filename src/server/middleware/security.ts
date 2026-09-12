@@ -25,14 +25,17 @@ export function sanitizeDosyaAdi(dosyaAdi: string): string {
     return `dosya_${Date.now()}`;
   }
 
-  // path.basename ile dizin bileşenlerini kaldır (../ saldırısı)
-  let temiz = path.basename(dosyaAdi);
+  // Windows backslash'lerini Unix forward slash'e normalize et (cross-platform uyumluluk)
+  const normalized = dosyaAdi.replace(/\\/g, '/');
+
+  // path.posix.basename ile dizin bileşenlerini kaldır (../ ve ..\ saldırısı)
+  let temiz = path.posix.basename(normalized);
 
   // Null byte'ları kaldır (null byte injection)
   temiz = temiz.replace(/\0/g, '');
 
   // Yalnızca güvenli karakterlere izin ver: harfler, rakamlar, alt çizgi, tire, nokta
-  temiz = temiz.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  temiz = temiz.replace(/[^a-zA-Z0-9_.-]/g, '_');
 
   // Ardışık noktaları kaldır (..php, ...exe gibi uzantı gizleme)
   temiz = temiz.replace(/\.{2,}/g, '.');
@@ -57,9 +60,21 @@ export function sanitizeDosyaAdi(dosyaAdi: string): string {
  * @returns Yolun güvenli olup olmadığı
  */
 export function yolGuvenlimi(dosyaYolu: string, izinliDizin: string): boolean {
-  const normalizedPath = path.resolve(dosyaYolu);
-  const normalizedDir = path.resolve(izinliDizin);
-  return normalizedPath.startsWith(normalizedDir + path.sep) || normalizedPath === normalizedDir;
+  if (!dosyaYolu || !izinliDizin || typeof dosyaYolu !== 'string' || typeof izinliDizin !== 'string') {
+    return false;
+  }
+
+  // Windows ve Unix yollarını cross-platform uyumluluk için normalize et
+  const pNorm = dosyaYolu.replace(/\\/g, '/');
+  const dNorm = izinliDizin.replace(/\\/g, '/');
+
+  const normalizedPath = path.resolve(pNorm);
+  const normalizedDir = path.resolve(dNorm);
+
+  const sep = path.sep;
+  const dirPrefix = normalizedDir.endsWith(sep) ? normalizedDir : normalizedDir + sep;
+
+  return normalizedPath === normalizedDir || normalizedPath.startsWith(dirPrefix);
 }
 
 // ==============================

@@ -24,16 +24,33 @@ describe('Security Utilities', () => {
   });
 
   describe('yolGuvenlimi', () => {
-    const anaDizin = 'D:\\Projects\\TOMNAP\\public\\uploads';
+    const anaDizinWin = 'D:\\Projects\\TOMNAP\\public\\uploads';
+    const anaDizinPosix = '/var/app/public/uploads';
 
     it('ana dizin altındaki yolları onaylamalı', () => {
-      expect(yolGuvenlimi('D:\\Projects\\TOMNAP\\public\\uploads\\resim.jpg', anaDizin)).toBe(true);
-      expect(yolGuvenlimi('D:\\Projects\\TOMNAP\\public\\uploads\\sub\\resim.jpg', anaDizin)).toBe(true);
+      // Windows stili yollar
+      expect(yolGuvenlimi('D:\\Projects\\TOMNAP\\public\\uploads\\resim.jpg', anaDizinWin)).toBe(true);
+      expect(yolGuvenlimi('D:\\Projects\\TOMNAP\\public\\uploads\\sub\\resim.jpg', anaDizinWin)).toBe(true);
+      // POSIX stili yollar
+      expect(yolGuvenlimi('/var/app/public/uploads/resim.jpg', anaDizinPosix)).toBe(true);
+      expect(yolGuvenlimi('/var/app/public/uploads/sub/resim.jpg', anaDizinPosix)).toBe(true);
+      // Dizin kendisi
+      expect(yolGuvenlimi(anaDizinWin, anaDizinWin)).toBe(true);
+      expect(yolGuvenlimi(anaDizinPosix, anaDizinPosix)).toBe(true);
     });
 
     it('ana dizin dışına taşan yolları engellemeli', () => {
-      expect(yolGuvenlimi('D:\\Projects\\TOMNAP\\server.ts', anaDizin)).toBe(false);
-      expect(yolGuvenlimi('C:\\Windows\\System32', anaDizin)).toBe(false);
+      // Windows stili geçersiz yollar
+      expect(yolGuvenlimi('D:\\Projects\\TOMNAP\\server.ts', anaDizinWin)).toBe(false);
+      expect(yolGuvenlimi('C:\\Windows\\System32', anaDizinWin)).toBe(false);
+      expect(yolGuvenlimi('D:\\Projects\\TOMNAP\\public\\uploads\\..\\server.ts', anaDizinWin)).toBe(false);
+      // POSIX stili geçersiz yollar
+      expect(yolGuvenlimi('/var/app/server.ts', anaDizinPosix)).toBe(false);
+      expect(yolGuvenlimi('/etc/passwd', anaDizinPosix)).toBe(false);
+      expect(yolGuvenlimi('/var/app/public/uploads/../../etc/passwd', anaDizinPosix)).toBe(false);
+      // Boş veya geçersiz girdi
+      expect(yolGuvenlimi('', anaDizinWin)).toBe(false);
+      expect(yolGuvenlimi(null as any, anaDizinWin)).toBe(false);
     });
   });
 

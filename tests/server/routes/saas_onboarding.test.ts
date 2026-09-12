@@ -1,12 +1,27 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import request from 'supertest';
+import fs from 'fs';
 import { createApp } from '../../../src/server/index';
+import { FIRMALAR_DOSYA_YOLU } from '../../../src/server/config';
 
 const app = createApp();
 
 describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', () => {
   let createdTenantId = '';
   let inviteToken = '';
+
+  afterAll(() => {
+    if (createdTenantId && fs.existsSync(FIRMALAR_DOSYA_YOLU)) {
+      try {
+        const raw = fs.readFileSync(FIRMALAR_DOSYA_YOLU, 'utf-8');
+        const list = JSON.parse(raw);
+        const filtered = list.filter((f: any) => f.id !== createdTenantId);
+        fs.writeFileSync(FIRMALAR_DOSYA_YOLU, JSON.stringify(filtered, null, 2), 'utf-8');
+      } catch {
+        // cleanup yoksay
+      }
+    }
+  });
 
   it('POST /api/firmalar/kayit — yeni butik qeydiyyatını BEKLEMEDE statusu ilə qəbul etməli', async () => {
     const res = await request(app)
