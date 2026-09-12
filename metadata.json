@@ -1,6 +1,6 @@
 {
-  "name": "Kanada-Bakü Sipariş ve Lojistik Yönetimi",
-  "description": "Instagram ve WhatsApp mesajlarını Gemini AI ile yapılandırılmış siparişlere dönüştüren, finans ve lojistik durumlarını takip eden yönetim platformu.",
+  "name": "TOMNAP — Global Cross-Border Commerce & Parcel Logistics Platform",
+  "description": "Global Cross-Border Commerce & Parcel Logistics Platform (Track, Order, Manage, Navigate, Automate, Parcel).",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

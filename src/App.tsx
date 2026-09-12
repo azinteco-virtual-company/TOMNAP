@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Siparis, KullaniciRolu, FirmaTenant } from './types';
-import { BASLANGIC_SIPARISLER } from './data/ornek-siparisler';
-import { BAKU_KURYELER } from './data/kuryeler';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Siparis } from './types';
+import { useAppStore } from './store/appStore';
 import { YanMenu } from './components/YanMenu';
 import { UstBaslik } from './components/UstBaslik';
 import { FinansLojistikOzet } from './components/FinansLojistikOzet';
-import { MesajGirisAlani } from './components/MesajGirisAlani';
 import { SiparisTablosu } from './components/SiparisTablosu';
 import { SiparisDetayModal } from './components/SiparisDetayModal';
 import { WhatsAppBildirimModal } from './components/WhatsAppBildirimModal';
@@ -24,18 +23,75 @@ import { MobilAltNav } from './components/MobilAltNav';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { VeritabaniYonetimModal } from './components/VeritabaniYonetimModal';
 import { IzolasyonDogrulamaModal } from './components/IzolasyonDogrulamaModal';
-import { CheckCircle2, Trash2, AlertTriangle, X, Loader2 } from 'lucide-react';
-import { fetchWithRetry } from './lib/apiClient';
+import { CheckCircle2, Trash2, X, Loader2 } from 'lucide-react';
+
+type SekmeTipi = 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
+
+const pathMap: Record<string, SekmeTipi> = {
+  '/': 'panel',
+  '/kanban': 'kanban',
+  '/gorsel-giris': 'gorsel-giris',
+  '/musteriler': 'musteriler',
+  '/kargo-manifest': 'kargo-manifest',
+  '/baku-tahsilat': 'baku-tahsilat',
+  '/inbox': 'inbox',
+  '/kurye-masasi': 'kurye-masasi',
+  '/kodlar': 'kodlar',
+};
+
+const sekmeToPath: Record<SekmeTipi, string> = {
+  'panel': '/',
+  'kanban': '/kanban',
+  'gorsel-giris': '/gorsel-giris',
+  'musteriler': '/musteriler',
+  'kargo-manifest': '/kargo-manifest',
+  'baku-tahsilat': '/baku-tahsilat',
+  'inbox': '/inbox',
+  'kurye-masasi': '/kurye-masasi',
+  'kodlar': '/kodlar',
+};
 
 export default function App() {
-  const [siparisler, setSiparisler] = useState<Siparis[]>(BASLANGIC_SIPARISLER);
-  const [firmalar, setFirmalar] = useState<FirmaTenant[]>([]);
-  const [seciliFirmaId, setSeciliFirmaId] = useState<string>('all');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Zustand Global Store
+  const {
+    siparisler,
+    firmalar,
+    seciliFirmaId,
+    aktifRol,
+    inboxSayisi,
+    bildirim,
+    dbKaynak,
+    menuDar,
+    seciliKuryeId,
+    firmaSiparisSayilariServer,
+    setFirmalar,
+    setSeciliFirmaId,
+    setAktifRol,
+    setBildirim,
+    setMenuDar,
+    setSeciliKuryeId,
+    siparisEkle,
+    siparisGuncelle,
+    siparisSil,
+    siparisleriYukle,
+    firmalariYukle,
+    inboxSayisiGuncelle,
+  } = useAppStore();
+
+  // URL tabanlı aktif sekme senkronizasyonu
+  const aktifSekme: SekmeTipi = pathMap[location.pathname] || 'panel';
+
+  const handleSekmeDegistir = (yeniSekme: SekmeTipi) => {
+    const hedefYol = sekmeToPath[yeniSekme] || '/';
+    navigate(hedefYol);
+  };
+
+  // Local UI State (Modallar ve Geçici Seçimler)
   const [veritabaniModalAcik, setVeritabaniModalAcik] = useState(false);
   const [izolasyonModalAcik, setIzolasyonModalAcik] = useState(false);
-  const [aktifRol, setAktifRol] = useState<KullaniciRolu>('SUPER_ADMIN');
-  const [seciliKuryeId, setSeciliKuryeId] = useState<string>('kurye-elvin');
-  const [aktifSekme, setAktifSekme] = useState<'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi'>('panel');
   const [seciliKodSekmesi, setSeciliKodSekmesi] = useState<string>('kurulum');
   const [mobilMenuAcik, setMobilMenuAcik] = useState(false);
   const [seciliSiparis, setSeciliSiparis] = useState<Siparis | null>(null);
@@ -45,85 +101,9 @@ export default function App() {
   const [kargoManifestAcik, setKargoManifestAcik] = useState(false);
   const [bakuTahsilatAcik, setBakuTahsilatAcik] = useState(false);
   const [inboxAcik, setInboxAcik] = useState(false);
-  const [inboxSayisi, setInboxSayisi] = useState(2);
-  const [yukleniyor, setYukleniyor] = useState(false);
-  const [bildirim, setBildirim] = useState<string | null>(null);
-  const [dbKaynak, setDbKaynak] = useState<'supabase' | 'bellek'>('supabase');
-  const [menuDar, setMenuDar] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('knb_menu_dar') === 'true';
-    } catch {
-      return false;
-    }
-  });
 
   const handleMenuDarDegistir = (yeniDurum?: boolean) => {
-    setMenuDar((onceki) => {
-      const hedef = typeof yeniDurum === 'boolean' ? yeniDurum : !onceki;
-      try {
-        localStorage.setItem('knb_menu_dar', String(hedef));
-      } catch {}
-      return hedef;
-    });
-  };
-
-  const [firmaSiparisSayilariServer, setFirmaSiparisSayilariServer] = useState<Record<string, number>>({});
-
-  // Firmaları yükle (Multi-Tenant SaaS)
-  const firmalariYukle = async () => {
-    try {
-      const res = await fetchWithRetry('/api/firmalar', { timeoutMs: 8000, retries: 2 });
-      const data = await res.json();
-      if (data.basarili && Array.isArray(data.firmalar)) {
-        setFirmalar(data.firmalar);
-        if (data.siparis_sayilari) {
-          setFirmaSiparisSayilariServer(data.siparis_sayilari);
-        }
-      }
-    } catch (e) {
-      console.warn('Firmalar alınamadı:', e);
-    }
-  };
-
-  // Inbox sayısını çek (Tenant İzolasyonlu Filtre)
-  const inboxSayisiGuncelle = async (hedefFirmaId?: string) => {
-    const fId = hedefFirmaId !== undefined ? hedefFirmaId : seciliFirmaId;
-    try {
-      const url = fId && fId !== 'all'
-        ? `/api/inbox?tenant_id=${encodeURIComponent(fId)}`
-        : '/api/inbox';
-      const res = await fetchWithRetry(url, { timeoutMs: 8000, retries: 2 });
-      const data = await res.json();
-      if (data.basarili && typeof data.toplam === 'number') {
-        setInboxSayisi(data.toplam);
-      }
-    } catch (e) {
-      console.warn('Inbox sayısı alınamadı:', e);
-    }
-  };
-
-  // Siparişleri sunucudan yükle (Tenant İzolasyonlu Supabase & Bellek Filtresi)
-  const siparisleriYukle = async (hedefFirmaId?: string) => {
-    const fId = hedefFirmaId !== undefined ? hedefFirmaId : seciliFirmaId;
-    try {
-      setYukleniyor(true);
-      const url = fId && fId !== 'all'
-        ? `/api/siparisler?tenant_id=${encodeURIComponent(fId)}`
-        : '/api/siparisler';
-      const res = await fetchWithRetry(url, { timeoutMs: 9000, retries: 2 });
-      const data = await res.json();
-      if (data.basarili && Array.isArray(data.siparisler)) {
-        setSiparisler(data.siparisler);
-        if (data.kaynak) {
-          setDbKaynak(data.kaynak);
-        }
-      }
-      inboxSayisiGuncelle(fId);
-    } catch (err) {
-      console.error('Siparişler sunucudan alınamadı, yerel veriler kullanılıyor:', err);
-    } finally {
-      setYukleniyor(false);
-    }
+    setMenuDar((onceki) => (typeof yeniDurum === 'boolean' ? yeniDurum : !onceki));
   };
 
   useEffect(() => {
@@ -158,16 +138,14 @@ export default function App() {
 
   // Yeni sipariş eklendiğinde
   const handleSiparisEklendi = (yeniSiparis: Siparis) => {
-    setSiparisler((onceki) => [yeniSiparis, ...onceki.filter((s) => s.id !== yeniSiparis.id)]);
+    siparisEkle(yeniSiparis);
     bildirimGoster(`"${yeniSiparis.musteri_adi}" adlı müşterinin siparişi başarıyla işlendi.`);
   };
 
   // Durum veya alan güncelleme
   const handleDurumGuncelle = async (id: string, guncellemeler: Partial<Siparis>) => {
     // 1. İyimser yerel güncelleme
-    setSiparisler((onceki) =>
-      onceki.map((s) => (s.id === id ? { ...s, ...guncellemeler } : s))
-    );
+    siparisGuncelle(id, guncellemeler);
 
     if (seciliSiparis && seciliSiparis.id === id) {
       setSeciliSiparis((onceki) => (onceki ? { ...onceki, ...guncellemeler } : null));
@@ -186,7 +164,7 @@ export default function App() {
     }
   };
 
-  // Sipariş silme onayı başlat (iframe uyumlu)
+  // Sipariş silme onayı başlat
   const handleSiparisSil = (id: string) => {
     const s = siparisler.find((item) => item.id === id);
     if (s) {
@@ -202,18 +180,14 @@ export default function App() {
     setSilmeIslemiSuruyor(true);
 
     try {
-      const res = await fetch(`/api/siparisler/${silinecekId}`, { method: 'DELETE' });
-      const data = await res.json().catch(() => ({}));
-      
-      // Yerel listeden kaldır
-      setSiparisler((onceki) => onceki.filter((s) => s.id !== silinecekId));
+      await fetch(`/api/siparisler/${silinecekId}`, { method: 'DELETE' });
+      siparisSil(silinecekId);
       if (seciliSiparis?.id === silinecekId) setSeciliSiparis(null);
       setSilinecekSiparis(null);
       bildirimGoster(`"${musteriAdi}" adlı müşterinin siparişi başarıyla silindi.`);
     } catch (err) {
       console.error('Silme hatası:', err);
-      // Yerel listeden yine de sil
-      setSiparisler((onceki) => onceki.filter((s) => s.id !== silinecekId));
+      siparisSil(silinecekId);
       setSilinecekSiparis(null);
       bildirimGoster('Sipariş yerel listeden kaldırıldı.');
     } finally {
@@ -226,7 +200,7 @@ export default function App() {
       {/* Sol Sidebar (Yan Menü) */}
       <YanMenu
         aktifSekme={aktifSekme}
-        setAktifSekme={setAktifSekme}
+        setAktifSekme={handleSekmeDegistir}
         seciliKodSekmesi={seciliKodSekmesi}
         setSeciliKodSekmesi={setSeciliKodSekmesi}
         toplamSiparis={goruntulenenSiparisler.length}
@@ -234,9 +208,9 @@ export default function App() {
         setMobilAcik={setMobilMenuAcik}
         dar={menuDar}
         onDarDegistir={handleMenuDarDegistir}
-        onKargoManifestAc={() => setAktifSekme('kargo-manifest')}
-        onBakuTahsilatAc={() => setAktifSekme('baku-tahsilat')}
-        onInboxAc={() => setAktifSekme('inbox')}
+        onKargoManifestAc={() => handleSekmeDegistir('kargo-manifest')}
+        onBakuTahsilatAc={() => handleSekmeDegistir('baku-tahsilat')}
+        onInboxAc={() => handleSekmeDegistir('inbox')}
         inboxSayisi={inboxSayisi}
         aktifRol={aktifRol}
         onVeritabaniModalAc={() => setVeritabaniModalAcik(true)}
@@ -247,21 +221,21 @@ export default function App() {
         {/* Üst Başlık Barı */}
         <UstBaslik
           aktifSekme={aktifSekme}
-          setAktifSekme={setAktifSekme}
+          setAktifSekme={handleSekmeDegistir}
           toplamSiparis={goruntulenenSiparisler.length}
           onMobilMenuAc={() => setMobilMenuAcik(true)}
           menuDar={menuDar}
           onMenuDarDegistir={() => handleMenuDarDegistir()}
           dbKaynak={dbKaynak}
-          onInboxAc={() => setAktifSekme('inbox')}
+          onInboxAc={() => handleSekmeDegistir('inbox')}
           inboxSayisi={inboxSayisi}
           aktifRol={aktifRol}
           onRolDegistir={(yeniRol) => {
             setAktifRol(yeniRol);
             if (yeniRol === 'BAKU_KURYE') {
-              setAktifSekme('kurye-masasi');
+              handleSekmeDegistir('kurye-masasi');
             } else if (yeniRol === 'PATRON' && aktifSekme === 'kodlar') {
-              setAktifSekme('panel');
+              handleSekmeDegistir('panel');
             }
             bildirimGoster(`Rol dəyişdirildi: ${yeniRol}`);
           }}
@@ -312,7 +286,7 @@ export default function App() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setAktifSekme('gorsel-giris')}
+                  onClick={() => handleSekmeDegistir('gorsel-giris')}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shrink-0 cursor-pointer flex items-center gap-2"
                 >
                   <span>Görsel Masasını Aç</span>
@@ -320,16 +294,16 @@ export default function App() {
                 </button>
               </div>
 
-              {/* 2. Ana Sipariş Tablosu (Tam Genişlik - Ferah ve Temiz) */}
+              {/* 2. Ana Sipariş Tablosu */}
               <SiparisTablosu
                 siparisler={goruntulenenSiparisler}
                 onDurumGuncelle={handleDurumGuncelle}
                 onSiparisSil={handleSiparisSil}
                 onSiparisSec={(siparis) => setSeciliSiparis(siparis)}
                 onWhatsAppSec={(siparis) => setWhatsappSiparis(siparis)}
-                onKargoManifestAc={() => setAktifSekme('kargo-manifest')}
-                onBakuTahsilatAc={() => setAktifSekme('baku-tahsilat')}
-                onInboxAc={() => setAktifSekme('inbox')}
+                onKargoManifestAc={() => handleSekmeDegistir('kargo-manifest')}
+                onBakuTahsilatAc={() => handleSekmeDegistir('baku-tahsilat')}
+                onInboxAc={() => handleSekmeDegistir('inbox')}
                 inboxSayisi={inboxSayisi}
               />
             </>
@@ -347,42 +321,42 @@ export default function App() {
             /* 2. Özel Görsel & WhatsApp AI Giriş Masası */
             <GorselVeAiSiparisMasasi
               onSiparisEklendi={handleSiparisEklendi}
-              onSiparislereDon={() => setAktifSekme('panel')}
+              onSiparislereDon={() => handleSekmeDegistir('panel')}
               seciliFirmaId={seciliFirmaId}
               seciliFirmaAd={firmalar.find(f => f.id === seciliFirmaId)?.ad}
             />
           ) : aktifSekme === 'musteriler' ? (
             /* 3. Müşteri Veritabanı & CRM Rehberi */
             <MusteriRehberi
-              onSiparislereGit={() => setAktifSekme('panel')}
+              onSiparislereGit={() => handleSekmeDegistir('panel')}
               onSiparisDetayAc={(siparis) => setSeciliSiparis(siparis)}
               seciliFirmaId={seciliFirmaId}
               seciliFirmaAd={firmalar.find(f => f.id === seciliFirmaId)?.ad}
             />
           ) : aktifSekme === 'kargo-manifest' ? (
-            /* 4. Kanada ➔ Bakü Kargo Manifestosu & Çeki Listesi (Tam Sayfa) */
+            /* 4. Kanada ➔ Bakü Kargo Manifestosu & Çeki Listesi */
             <KargoManifestoSayfasi
               siparisler={goruntulenenSiparisler}
-              onSiparislereDon={() => setAktifSekme('panel')}
+              onSiparislereDon={() => handleSekmeDegistir('panel')}
               onSiparisDetayAc={(siparis) => setSeciliSiparis(siparis)}
             />
           ) : aktifSekme === 'baku-tahsilat' ? (
-            /* 5. Bakı Qalıq Borc & Təhsilat Masası (Tam Sayfa) */
+            /* 5. Bakı Qalıq Borc & Təhsilat Masası */
             <BakuTahsilatSayfasi
               siparisler={goruntulenenSiparisler}
               onDurumGuncelle={handleDurumGuncelle}
-              onSiparislereDon={() => setAktifSekme('panel')}
+              onSiparislereDon={() => handleSekmeDegistir('panel')}
               onSiparisDetayAc={(siparis) => setSeciliSiparis(siparis)}
             />
           ) : aktifSekme === 'inbox' ? (
-            /* 6. Gələn Qutusu: Təsdiq Gözləyən Sifarişlər (Tam Sayfa) */
+            /* 6. Gələn Qutusu: Təsdiq Gözləyən Sifarişlər */
             <OnayBekleyenlerSayfasi
               onSiparisOnaylandi={(yeniSiparis) => {
                 handleSiparisEklendi(yeniSiparis);
                 inboxSayisiGuncelle();
                 bildirimGoster(`✅ "${yeniSiparis.musteri_adi}" sifarişi təsdiqləndi və əsas bazaya əlavə edildi!`);
               }}
-              onSiparislereDon={() => setAktifSekme('panel')}
+              onSiparislereDon={() => handleSekmeDegistir('panel')}
               onYenile={inboxSayisiGuncelle}
               seciliFirmaId={seciliFirmaId}
               seciliFirmaAd={firmalar.find(f => f.id === seciliFirmaId)?.ad}
@@ -407,7 +381,7 @@ export default function App() {
               onSiparisleriYukle={siparisleriYukle}
             />
           ) : (
-            /* 8. Sistem Mimarisi & Kod Üreticisi (Supabase / Next.js / Gemini) - SADECE SUPER ADMIN */
+            /* 8. Sistem Mimarisi & Kod Üreticisi */
             <MimariVeKodPaneli
               seciliAltSekme={seciliKodSekmesi}
               onAltSekmeDegistir={setSeciliKodSekmesi}
@@ -421,7 +395,7 @@ export default function App() {
                 Kanada ➔ Bakü Instagram E-Ticaret & Lojistik Yönetim Platformu
               </div>
               <div className="flex items-center gap-3">
-                <span>Next.js App Router</span>
+                <span>Express Modüler Mimari</span>
                 <span>•</span>
                 <span>Supabase PostgreSQL</span>
                 <span>•</span>
@@ -558,7 +532,7 @@ export default function App() {
       {/* Mobil Cihazlar İçin Alt Hızlı Navigasyon Barı */}
       <MobilAltNav
         aktifSekme={aktifSekme}
-        setAktifSekme={setAktifSekme}
+        setAktifSekme={handleSekmeDegistir}
         onMobilMenuAc={() => setMobilMenuAcik(true)}
         inboxSayisi={inboxSayisi}
       />

@@ -4,6 +4,7 @@ import { KullaniciRolu, FirmaTenant } from '../types';
 import { RolSecici } from './RolSecici';
 import { DilSecici } from './DilSecici';
 import { FirmaSecici } from './FirmaSecici';
+import { PWAInstallButton } from './PWAInstallButton';
 import { useDil } from '../context/DilKonteksti';
 
 interface UstBaslikProps {
@@ -116,13 +117,13 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
 
         {/* Ekmek Kırıntısı (Breadcrumb) */}
         <div className="flex items-center space-x-2 text-xs sm:text-sm truncate">
-          <span className="text-slate-400 hidden md:inline">KNB</span>
+          <span className="text-indigo-600 font-extrabold tracking-wider hidden md:inline">TOMNAP</span>
           <span className="text-slate-300 hidden md:inline">/</span>
           <span className="font-semibold text-slate-800 truncate">
             {getSekmeBasligi()}
           </span>
           {aktifSekme === 'panel' && (
-            <span className="hidden sm:inline-block text-[11px] bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded-full ml-2 shrink-0">
+            <span className="hidden sm:inline-block text-[11px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full ml-2 shrink-0 border border-slate-200/60">
               {toplamSiparis}
             </span>
           )}
@@ -170,6 +171,9 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
             onKuryeSec={onKuryeSec}
           />
         )}
+
+        {/* PWA Masaüstü / Mobil Kurulum Butonu */}
+        <PWAInstallButton variant="header" />
 
         {/* Dil Değiştirici: AZ / EN / RU */}
         <DilSecici />

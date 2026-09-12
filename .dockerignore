@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.github
+.env
+.env.local
+.env.*.local
+tests
+brain
+coverage
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db

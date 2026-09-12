@@ -218,49 +218,6 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
             <span>Tümü Uluslararası Kargo</span>
           </button>
 
-          {/* Bakü Tahsilat Raporu Butonu */}
-          {onBakuTahsilatAc && (
-            <button
-              type="button"
-              id="btn-baku-tahsilat-toolbar"
-              onClick={onBakuTahsilatAc}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            >
-              <DollarSign className="w-3.5 h-3.5 text-amber-700" />
-              <span>Bakı Qalıq Borc</span>
-            </button>
-          )}
-
-          {/* Kargo Manifestosu Butonu */}
-          {onKargoManifestAc && (
-            <button
-              type="button"
-              id="btn-kargo-manifest-toolbar"
-              onClick={onKargoManifestAc}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            >
-              <Truck className="w-3.5 h-3.5 text-blue-700" />
-              <span>Kargo Manifestosu</span>
-            </button>
-          )}
-
-          {/* Onay Bekleyenler Butonu */}
-          {onInboxAc && (
-            <button
-              type="button"
-              id="btn-inbox-toolbar"
-              onClick={onInboxAc}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Onay Bekleyenler</span>
-              {inboxSayisi > 0 && (
-                <span className="w-4 h-4 rounded-full bg-white text-amber-800 text-[10px] font-bold flex items-center justify-center">
-                  {inboxSayisi}
-                </span>
-              )}
-            </button>
-          )}
         </div>
       </div>
 
@@ -754,16 +711,16 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
 
                     {/* 5. Tutar */}
                     <td className="p-3 whitespace-nowrap">
-                      <div className="font-bold text-slate-900">
-                        {siparis.toplam_tutar.toFixed(2)} {siparis.para_birimi}
+                      <div className="font-bold text-slate-900 font-mono tracking-tight text-xs">
+                        {siparis.toplam_tutar.toFixed(2)} <span className="text-[11px] font-sans font-semibold text-slate-500">{siparis.para_birimi}</span>
                       </div>
                       <div className="text-[11px] mt-0.5">
                         {siparis.kalan_tutar > 0 ? (
-                          <span className="text-amber-700 font-semibold">
-                            Kalan: {siparis.kalan_tutar.toFixed(2)} {siparis.para_birimi}
+                          <span className="text-amber-700 font-semibold font-mono tracking-tight">
+                            Qalıq: {siparis.kalan_tutar.toFixed(2)} {siparis.para_birimi}
                           </span>
                         ) : (
-                          <span className="text-emerald-700 font-semibold">Tamamı Ödendi</span>
+                          <span className="text-emerald-700 font-semibold text-[11px]">Tam Ödənildi</span>
                         )}
                       </div>
                     </td>

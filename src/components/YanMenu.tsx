@@ -146,15 +146,20 @@ export const YanMenu: React.FC<YanMenuProps> = ({
         >
           {!dar ? (
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-emerald-600 flex items-center justify-center text-white font-extrabold text-sm shadow-md shrink-0">
-                🍁
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-400 via-indigo-600 to-purple-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-indigo-500/25 ring-1 ring-white/25 shrink-0">
+                <span className="font-black tracking-tighter text-white drop-shadow-xs">T</span>
               </div>
               <div className="min-w-0">
-                <h1 className="text-white font-extrabold text-base tracking-tight uppercase leading-tight truncate">
-                  KNB
-                </h1>
-                <p className="text-[11px] text-slate-400 leading-none mt-0.5 truncate">
-                  {t.platformAltBaslik}
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-white font-black text-base tracking-wider uppercase leading-tight truncate">
+                    TOMNAP
+                  </h1>
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    SAAS
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium tracking-tight truncate mt-0.5">
+                  Global Parcel &amp; Commerce
                 </p>
               </div>
             </div>
@@ -162,10 +167,10 @@ export const YanMenu: React.FC<YanMenuProps> = ({
             <button
               type="button"
               onClick={() => onDarDegistir && onDarDegistir(false)}
-              className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-600 to-emerald-600 flex items-center justify-center text-white font-extrabold text-base shadow-md cursor-pointer hover:scale-105 transition-transform"
-              title="KNB Lojistik"
+              className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 via-indigo-600 to-purple-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-indigo-500/25 ring-1 ring-white/25 cursor-pointer hover:scale-105 transition-transform"
+              title="TOMNAP SaaS"
             >
-              🍁
+              <span className="font-black tracking-tighter text-white">T</span>
             </button>
           )}
 
@@ -810,41 +815,66 @@ export const YanMenu: React.FC<YanMenuProps> = ({
           </div>
         )}
 
-        {/* Alt Bilgi Footer (Dar modda kompakt avatar & genişlet butonu) */}
-        <div className="p-3 border-t border-slate-800 mt-auto">
+        {/* Alt Bilgi Footer (Kurumsal SaaS Kimliği & Rol Göstergesi) */}
+        <div className="p-3 border-t border-slate-800/80 mt-auto bg-slate-950/40">
           {!dar ? (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs text-white font-bold shadow-xs">
-                  {aktifRol === 'SUPER_ADMIN' ? 'SA' : aktifRol === 'PATRON' ? 'PT' : aktifRol === 'BAKU_KURYE' ? 'KY' : 'US'}
+            <div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs text-white font-black shadow-xs ring-1 ${
+                    aktifRol === 'SUPER_ADMIN' ? 'bg-indigo-600 ring-indigo-400/50' :
+                    aktifRol === 'PATRON' ? 'bg-amber-600 ring-amber-400/50' :
+                    aktifRol === 'BAKU_KURYE' ? 'bg-teal-600 ring-teal-400/50' :
+                    aktifRol === 'BAKU_FINANS' ? 'bg-emerald-600 ring-emerald-400/50' :
+                    aktifRol === 'KANADA_SATINALMA' ? 'bg-rose-600 ring-rose-400/50' : 'bg-sky-600 ring-sky-400/50'
+                  }`}>
+                    {aktifRol === 'SUPER_ADMIN' ? 'SA' : aktifRol === 'PATRON' ? 'PT' : aktifRol === 'BAKU_KURYE' ? 'BK' : aktifRol === 'BAKU_FINANS' ? 'BF' : aktifRol === 'KANADA_SATINALMA' ? 'KS' : 'SS'}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-white font-bold truncate">
+                      {aktifRol === 'SUPER_ADMIN' ? 'Süper Admin (Dev)' : 
+                       aktifRol === 'PATRON' ? 'Patron / İdarəçi' : 
+                       aktifRol === 'BAKU_KURYE' ? 'Bakı Kuryeri' : 
+                       aktifRol === 'BAKU_FINANS' ? 'Bakı Maliyyə' : 
+                       aktifRol === 'KANADA_SATINALMA' ? 'Kanada Satınalma' : 'Satış Meneceri'}
+                    </p>
+                    <p className="text-[10px] text-slate-400 truncate">
+                      {aktifRol === 'SUPER_ADMIN' ? 'Full SaaS İcazəsi' : 
+                       aktifRol === 'PATRON' ? 'Maliyyə & KPI Modu' : 
+                       aktifRol === 'BAKU_KURYE' ? 'Çatdırılma Masası' : 'Rolu Üzrə İcazə'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs text-white font-bold truncate">
-                    {aktifRol === 'SUPER_ADMIN' ? 'Süper Admin (Dev)' : aktifRol === 'PATRON' ? 'Patron / Yönetici' : aktifRol === 'BAKU_KURYE' ? 'Bakü Kuryesi' : aktifRol}
-                  </p>
-                  <p className="text-[10px] text-slate-400">
-                    {aktifRol === 'SUPER_ADMIN' ? 'Full-Stack Modu' : 'İşletme Modu'}
-                  </p>
-                </div>
+                {onDarDegistir && (
+                  <button
+                    type="button"
+                    onClick={() => onDarDegistir(true)}
+                    className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="Menüyü Daralt (Geniş Tablo Modu)"
+                  >
+                    <PanelLeftClose className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-              {onDarDegistir && (
-                <button
-                  type="button"
-                  onClick={() => onDarDegistir(true)}
-                  className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-                  title="Menüyü Daralt (Geniş Tablo Modu)"
-                >
-                  <PanelLeftClose className="w-4 h-4" />
-                </button>
-              )}
+              <div className="mt-2 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] text-slate-500">
+                <span className="font-mono">TOMNAP v2.5</span>
+                <span className="text-emerald-500 font-semibold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                  SaaS Canlı
+                </span>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
               <div 
-                className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs text-white font-bold shadow-xs cursor-pointer"
-                title="Sistem Mimarı (Full-Stack Modu)"
+                className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs text-white font-black shadow-xs ring-1 cursor-pointer ${
+                  aktifRol === 'SUPER_ADMIN' ? 'bg-indigo-600 ring-indigo-400/50' :
+                  aktifRol === 'PATRON' ? 'bg-amber-600 ring-amber-400/50' :
+                  aktifRol === 'BAKU_KURYE' ? 'bg-teal-600 ring-teal-400/50' : 'bg-blue-600 ring-blue-400/50'
+                }`}
+                title="TOMNAP SaaS"
               >
-                SA
+                {aktifRol === 'SUPER_ADMIN' ? 'SA' : aktifRol === 'PATRON' ? 'PT' : aktifRol === 'BAKU_KURYE' ? 'BK' : 'US'}
               </div>
               {onDarDegistir && (
                 <button
