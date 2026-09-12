@@ -19,6 +19,7 @@ import firmalarRouter from './routes/firmalar';
 import kuryelerRouter from './routes/kuryeler';
 import gorselRouter from './routes/gorsel';
 import veritabaniRouter from './routes/veritabani';
+import kargoRouter from './routes/kargoEntegrasyon';
 
 export function createApp() {
   const app = express();
@@ -88,6 +89,7 @@ export function createApp() {
   app.use('/api', kuryelerRouter);
   app.use('/api', gorselRouter);
   app.use('/api', veritabaniRouter);
+  app.use('/api', kargoRouter);
 
   // Global Hata Yakalayıcı
   app.use(errorHandler);

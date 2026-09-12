@@ -19,13 +19,22 @@ import {
   ExternalLink,
   Tag,
   Truck,
-  ShieldCheck
+  ShieldCheck,
+  RefreshCw,
+  Upload,
+  SlidersHorizontal,
+  Activity,
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useDil } from '../context/DilKonteksti';
 import { cleanPdfText, safePrintHtml } from '../utils/pdfHelpers';
+import { useAppStore } from '../store/appStore';
+import { fetchWithRetry } from '../lib/apiClient';
+import { KargoEntegrasyonModal } from './KargoEntegrasyonModal';
 
 interface KargoManifestoSayfasiProps {
   siparisler: Siparis[];
@@ -63,6 +72,88 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
   const [kopyalandi, setKopyalandi] = useState(false);
   const [yazdiriliyor, setYazdiriliyor] = useState(false);
   const [pdfHazirlaniyor, setPdfHazirlaniyor] = useState(false);
+
+  // Kargo & Aramex Entegrasyon Durumları
+  const { seciliFirmaId, siparisleriYukle } = useAppStore();
+  const [kargoModalAcik, setKargoModalAcik] = useState(false);
+  const [kargoSenkronizeEdiliyor, setKargoSenkronizeEdiliyor] = useState(false);
+  const [dispatchYukleniyor, setDispatchYukleniyor] = useState(false);
+  const [kargoBildirimi, setKargoBildirimi] = useState<{ tip: 'basari' | 'hata'; mesaj: string } | null>(null);
+  const dispatchInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Aramex / Kargo Canlı Senkronizasyon Tetikleyicisi
+  const handleAramexSenkronizeEt = async () => {
+    setKargoSenkronizeEdiliyor(true);
+    setKargoBildirimi(null);
+    try {
+      const res = await fetchWithRetry('/api/kargo/senkronize-et', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: seciliFirmaId || 'all' }),
+      });
+      const data = await res.json();
+      if (data.basarili) {
+        await siparisleriYukle();
+        setKargoBildirimi({
+          tip: 'basari',
+          mesaj: data.mesaj || 'Kargo statusları uğurla yeniləndi!',
+        });
+        setTimeout(() => setKargoBildirimi(null), 6000);
+      } else {
+        setKargoBildirimi({ tip: 'hata', mesaj: data.hata || 'Sinxronizasiya xətası baş verdi.' });
+      }
+    } catch (err: any) {
+      setKargoBildirimi({ tip: 'hata', mesaj: `Server xətası: ${err.message}` });
+    } finally {
+      setKargoSenkronizeEdiliyor(false);
+    }
+  };
+
+  // Aramex Daily Dispatch / Excel Yükleme İşleyicisi
+  const handleDispatchDosyaSecildi = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setDispatchYukleniyor(true);
+    setKargoBildirimi(null);
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64 = (reader.result as string) || '';
+        const res = await fetchWithRetry('/api/kargo/manifesto-yukle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dosya_base64: base64,
+            dosya_adi: file.name,
+            tenantId: seciliFirmaId || 'kanada_shopper_baku',
+            otomatik_esle: true,
+          }),
+        });
+        const data = await res.json();
+        if (data.basarili) {
+          await siparisleriYukle();
+          setKargoBildirimi({
+            tip: 'basari',
+            mesaj: data.mesaj || 'Excel faylı uğurla oxundu və sifarişlərə bağlandı!',
+          });
+          setTimeout(() => setKargoBildirimi(null), 7000);
+        } else {
+          setKargoBildirimi({
+            tip: 'hata',
+            mesaj: data.hata || (data.hatalar && data.hatalar[0]) || 'Fayl oxunarkən xəta baş verdi.',
+          });
+        }
+      } catch (err: any) {
+        setKargoBildirimi({ tip: 'hata', mesaj: `Yükləmə xətası: ${err.message}` });
+      } finally {
+        setDispatchYukleniyor(false);
+        if (dispatchInputRef.current) dispatchInputRef.current.value = '';
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Benzersiz şehir listesi
   const sehirler = useMemo(() => {
@@ -715,8 +806,17 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
           </div>
         </div>
 
-        {/* Aksiyon Butonları (Excel, PDF, Yazdır) */}
+        {/* Aksiyon Butonları (Aramex, Excel, PDF, Yazdır, Parametreler) */}
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {/* Gizli Dispatch Dosya Yükleyici */}
+          <input
+            type="file"
+            ref={dispatchInputRef}
+            onChange={handleDispatchDosyaSecildi}
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+          />
+
           {onSiparislereDon && (
             <button
               type="button"
@@ -728,13 +828,37 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
             </button>
           )}
 
+          {/* Aramex / Kargo Canlı Senkronizasyon */}
+          <button
+            type="button"
+            onClick={handleAramexSenkronizeEt}
+            disabled={kargoSenkronizeEdiliyor}
+            title="Aramex və ya aktiv kargo API ilə yoldakı bağlamaları dərhal yoxla"
+            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-60 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer ring-1 ring-blue-400/40"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${kargoSenkronizeEdiliyor ? 'animate-spin' : ''}`} />
+            <span>{kargoSenkronizeEdiliyor ? 'Sinxronlaşdırılır...' : 'Aramex Canlı Sinxron'}</span>
+          </button>
+
+          {/* Daily Dispatch Excel İçe Aktarma */}
+          <button
+            type="button"
+            onClick={() => dispatchInputRef.current?.click()}
+            disabled={dispatchYukleniyor}
+            title="Aramex-in hər axşam e-poçtla göndərdiyi Daily Dispatch Excel/CSV faylını daxil et"
+            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-950 text-xs font-extrabold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+          >
+            <Upload className={`w-3.5 h-3.5 ${dispatchYukleniyor ? 'animate-bounce' : ''}`} />
+            <span>{dispatchYukleniyor ? 'Oxunur...' : 'Daily Dispatch İdxal'}</span>
+          </button>
+
           <button
             type="button"
             onClick={excelIndir}
             title="Excel (.xlsx)"
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
           >
-            <FileSpreadsheet className="w-4 h-4" />
+            <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>{t.excelIndir}</span>
           </button>
 
@@ -743,9 +867,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
             onClick={pdfIndir}
             disabled={pdfHazirlaniyor}
             title="PDF"
-            className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:bg-rose-400 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 disabled:bg-rose-400 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
           >
-            <FileText className="w-4 h-4" />
+            <FileText className="w-3.5 h-3.5" />
             <span>{pdfHazirlaniyor ? '...' : t.pdfIndir}</span>
           </button>
 
@@ -753,9 +877,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
             type="button"
             onClick={handleYazdir}
             disabled={yazdiriliyor}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer border border-slate-700"
           >
-            <Printer className="w-4 h-4" />
+            <Printer className="w-3.5 h-3.5" />
             <span>{t.manifestoCap}</span>
           </button>
 
@@ -763,13 +887,50 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
             type="button"
             onClick={handleEtiketleriYazdir}
             disabled={yazdiriliyor}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
           >
-            <Tag className="w-4 h-4" />
+            <Tag className="w-3.5 h-3.5" />
             <span>{t.paketStikerleri}</span>
+          </button>
+
+          {/* Kargo Ayarları Modalı Butonu */}
+          <button
+            type="button"
+            onClick={() => setKargoModalAcik(true)}
+            title="Kargo Provayder (Aramex, DHL, UPS) və API Tənzimləmələri"
+            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer border border-slate-700"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      {/* Kargo Əməliyyat Bildirişi (Toast) */}
+      {kargoBildirimi && (
+        <div
+          className={`p-4 rounded-xl text-xs font-semibold flex items-center justify-between shadow-xs border animate-in fade-in duration-200 ${
+            kargoBildirimi.tip === 'basari'
+              ? 'bg-emerald-50 text-emerald-900 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-200 dark:border-emerald-800'
+              : 'bg-rose-50 text-rose-900 border-rose-300 dark:bg-rose-950/50 dark:text-rose-200 dark:border-rose-800'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {kargoBildirimi.tip === 'basari' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <ShieldCheck className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{kargoBildirimi.mesaj}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setKargoBildirimi(null)}
+            className="p-1 rounded-md text-slate-400 hover:text-slate-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* 2. Dörtlü Canlı İstatistik Kartları */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1244,6 +1405,16 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Kargo & Aramex Tənzimləmələri Modalı */}
+      <KargoEntegrasyonModal
+        acik={kargoModalAcik}
+        onKapat={() => setKargoModalAcik(false)}
+        seciliTenantId={seciliFirmaId}
+        onAyarlarGuncellendi={() => {
+          siparisleriYukle();
+        }}
+      />
     </div>
   );
 };

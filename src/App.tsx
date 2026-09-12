@@ -23,6 +23,7 @@ import { MobilAltNav } from './components/MobilAltNav';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { VeritabaniYonetimModal } from './components/VeritabaniYonetimModal';
 import { IzolasyonDogrulamaModal } from './components/IzolasyonDogrulamaModal';
+import { KargoEntegrasyonModal } from './components/KargoEntegrasyonModal';
 import { CheckCircle2, Trash2, X, Loader2 } from 'lucide-react';
 
 type SekmeTipi = 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
@@ -99,6 +100,7 @@ export default function App() {
   const [silinecekSiparis, setSilinecekSiparis] = useState<Siparis | null>(null);
   const [silmeIslemiSuruyor, setSilmeIslemiSuruyor] = useState(false);
   const [kargoManifestAcik, setKargoManifestAcik] = useState(false);
+  const [kargoModalAcik, setKargoModalAcik] = useState(false);
   const [bakuTahsilatAcik, setBakuTahsilatAcik] = useState(false);
   const [inboxAcik, setInboxAcik] = useState(false);
 
@@ -255,6 +257,7 @@ export default function App() {
           onYeniFirmaAc={() => setVeritabaniModalAcik(true)}
           firmaSiparisSayilari={firmaSiparisSayilari}
           onIzolasyonModalAc={() => setIzolasyonModalAcik(true)}
+          onKargoModalAc={() => setKargoModalAcik(true)}
         />
 
         {/* Başarı / Bilgi Bildirim Toast */}
@@ -555,6 +558,16 @@ export default function App() {
         onKapat={() => setIzolasyonModalAcik(false)}
         seciliFirmaId={seciliFirmaId}
         firmalar={firmalar}
+      />
+
+      {/* Çoxlu Kargo (Multi-Carrier) & Aramex API İnteqrasiya Modalı */}
+      <KargoEntegrasyonModal
+        acik={kargoModalAcik}
+        onKapat={() => setKargoModalAcik(false)}
+        seciliTenantId={seciliFirmaId}
+        onAyarlarGuncellendi={() => {
+          siparisleriYukle(seciliFirmaId);
+        }}
       />
 
       {/* İnternet ve Oflayn Durum Bildiricisi */}

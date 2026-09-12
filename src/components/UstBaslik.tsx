@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Inbox, PanelLeftClose, PanelLeftOpen, Database } from 'lucide-react';
+import { Menu, Inbox, PanelLeftClose, PanelLeftOpen, Database, Plane } from 'lucide-react';
 import { KullaniciRolu, FirmaTenant } from '../types';
 import { RolSecici } from './RolSecici';
 import { DilSecici } from './DilSecici';
@@ -28,6 +28,7 @@ interface UstBaslikProps {
   onYeniFirmaAc?: () => void;
   firmaSiparisSayilari?: Record<string, number>;
   onIzolasyonModalAc?: () => void;
+  onKargoModalAc?: () => void;
 }
 
 export const UstBaslik: React.FC<UstBaslikProps> = ({
@@ -51,6 +52,7 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
   onYeniFirmaAc,
   firmaSiparisSayilari = {},
   onIzolasyonModalAc,
+  onKargoModalAc,
 }) => {
   const { t } = useDil();
 
@@ -177,6 +179,20 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
 
         {/* Dil Değiştirici: AZ / EN / RU */}
         <DilSecici />
+
+        {/* Kargo / Aramex API Parametrləri Butonu */}
+        {onKargoModalAc && (aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'KANADA_SATINALMA') && (
+          <button
+            type="button"
+            id="btn-header-kargo-api"
+            onClick={onKargoModalAc}
+            className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 px-2.5 py-1.5 rounded-xl text-xs text-blue-900 dark:text-blue-200 shadow-2xs transition-all cursor-pointer"
+            title="Aramex / Kargo API və Rota Tənzimləmələri"
+          >
+            <Plane className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <span className="font-bold text-[11px] hidden md:inline">Kargo API</span>
+          </button>
+        )}
 
         {/* Kompakt Sistem Durumu / Veritabanı Butonu */}
         <button
