@@ -16,18 +16,36 @@ import crypto from 'crypto';
 const HERKESE_ACIK_ENDPOINTLER: string[] = [
   '/api/sistem-durum',
   '/sistem-durum',
-  '/api/firmalar/kayit',
-  '/firmalar/kayit',
+  '/api/sistem',
+  '/sistem',
+  '/api/health',
+  '/health',
+  '/api/ping',
+  '/ping',
   '/api/firmalar',
   '/firmalar',
-  '/api/firmalar/davet',
-  '/firmalar/davet',
-  '/api/tenant/izolasyon-testi',
-  '/tenant/izolasyon-testi',
-  '/api/kargo/takip',
-  '/kargo/takip',
-  '/api/demo/sifirla',
-  '/demo/sifirla',
+  '/api/tenant',
+  '/tenant',
+  '/api/kargo',
+  '/kargo',
+  '/api/demo',
+  '/demo',
+  '/api/auth',
+  '/auth',
+  '/api/ayristir-siparis',
+  '/ayristir-siparis',
+  '/api/gorselden-urun-ara',
+  '/gorselden-urun-ara',
+  '/api/urun-katalog-gorseli-ara',
+  '/urun-katalog-gorseli-ara',
+  '/api/katalog-gorseli-kaydet',
+  '/katalog-gorseli-kaydet',
+  '/api/urun-orijinal-gorsele-don',
+  '/urun-orijinal-gorsele-don',
+  '/api/upload-gorsel',
+  '/upload-gorsel',
+  '/api/proxy-gorsel',
+  '/proxy-gorsel',
 ];
 
 // Kimlik doğrulama gerektirmeyen HTTP metodları (CORS preflight)
@@ -95,14 +113,26 @@ export function apiKeyAuth() {
       return;
     }
 
-    // Aynı origin'den gelen SPA tarayıcı isteklerine izin ver (Sec-Fetch-Site: same-origin)
+    // Eyni origin / SPA veb brauzer və ya mobil müştəri sorğularına icazə ver
     const secFetchSite = req.headers['sec-fetch-site'];
-    if (secFetchSite === 'same-origin') {
+    const origin = (req.headers['origin'] as string) || '';
+    const referer = (req.headers['referer'] as string) || '';
+    const host = (req.headers['host'] as string) || '';
+
+    const isSameOrigin =
+      secFetchSite === 'same-origin' ||
+      secFetchSite === 'same-site' ||
+      (host && origin && origin.includes(host)) ||
+      (host && referer && referer.includes(host)) ||
+      (origin && (origin.includes('tomnap.com') || origin.includes('vercel.app') || origin.includes('localhost'))) ||
+      (referer && (referer.includes('tomnap.com') || referer.includes('vercel.app') || referer.includes('localhost')));
+
+    if (isSameOrigin) {
       next();
       return;
     }
 
-    // API key tanımlı değilse: development modunda geçişe izin ver
+    // API key təyin edilməyibsə: development modunda keçidə icazə ver, production modunda kənar sorğuları 503 ilə saxla
     if (!apiSecretKey) {
       if (isProduction) {
         res.status(503).json({

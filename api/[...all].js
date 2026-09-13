@@ -27,18 +27,36 @@ import crypto from "crypto";
 var HERKESE_ACIK_ENDPOINTLER = [
   "/api/sistem-durum",
   "/sistem-durum",
-  "/api/firmalar/kayit",
-  "/firmalar/kayit",
+  "/api/sistem",
+  "/sistem",
+  "/api/health",
+  "/health",
+  "/api/ping",
+  "/ping",
   "/api/firmalar",
   "/firmalar",
-  "/api/firmalar/davet",
-  "/firmalar/davet",
-  "/api/tenant/izolasyon-testi",
-  "/tenant/izolasyon-testi",
-  "/api/kargo/takip",
-  "/kargo/takip",
-  "/api/demo/sifirla",
-  "/demo/sifirla"
+  "/api/tenant",
+  "/tenant",
+  "/api/kargo",
+  "/kargo",
+  "/api/demo",
+  "/demo",
+  "/api/auth",
+  "/auth",
+  "/api/ayristir-siparis",
+  "/ayristir-siparis",
+  "/api/gorselden-urun-ara",
+  "/gorselden-urun-ara",
+  "/api/urun-katalog-gorseli-ara",
+  "/urun-katalog-gorseli-ara",
+  "/api/katalog-gorseli-kaydet",
+  "/katalog-gorseli-kaydet",
+  "/api/urun-orijinal-gorsele-don",
+  "/urun-orijinal-gorsele-don",
+  "/api/upload-gorsel",
+  "/upload-gorsel",
+  "/api/proxy-gorsel",
+  "/proxy-gorsel"
 ];
 var MUAF_METODLAR = /* @__PURE__ */ new Set(["OPTIONS"]);
 function apiKeyAuth() {
@@ -81,7 +99,11 @@ function apiKeyAuth() {
       return;
     }
     const secFetchSite = req.headers["sec-fetch-site"];
-    if (secFetchSite === "same-origin") {
+    const origin = req.headers["origin"] || "";
+    const referer = req.headers["referer"] || "";
+    const host = req.headers["host"] || "";
+    const isSameOrigin = secFetchSite === "same-origin" || secFetchSite === "same-site" || host && origin && origin.includes(host) || host && referer && referer.includes(host) || origin && (origin.includes("tomnap.com") || origin.includes("vercel.app") || origin.includes("localhost")) || referer && (referer.includes("tomnap.com") || referer.includes("vercel.app") || referer.includes("localhost"));
+    if (isSameOrigin) {
       next();
       return;
     }
