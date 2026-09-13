@@ -3,7 +3,7 @@ import { createApp } from '../src/server/index';
 const app = createApp();
 
 export default function handler(req: any, res: any) {
-  return new Promise((resolve) => {
+  try {
     // Vercel Serverless mühitində URL və Query String normallaşdırması:
     const originalUrl = req.url || '';
     const queryIndex = originalUrl.indexOf('?');
@@ -26,14 +26,11 @@ export default function handler(req: any, res: any) {
       }
     }
 
-    // Serverless mühitdə body-parser donmasını əngəllə
-    if (req.body !== undefined && typeof req.body === 'object') {
-      req._body = true;
+    return app(req, res);
+  } catch (err: any) {
+    console.error('Vercel Serverless Handler Xətası:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ basarili: false, hata: err?.message || 'Daxili server xətası' });
     }
-
-    res.on('finish', () => resolve(true));
-    res.on('close', () => resolve(true));
-
-    app(req, res);
-  });
+  }
 }
