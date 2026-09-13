@@ -50,6 +50,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
 
     setYukleniyor(true);
     try {
+      let data: any = null;
       const res = await fetch('/api/firmalar/kayit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -64,9 +65,24 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.basarili) {
-        throw new Error(data.hata || (isEn ? 'Registration failed.' : 'Qeydiyyat zamanı xəta baş verdi.'));
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+      }
+
+      if (!res.ok || !data?.basarili) {
+        const errorMsg =
+          data?.hata ||
+          (isEn
+            ? 'A server error occurred during registration. Please try again shortly.'
+            : isRu
+            ? 'Произошла ошибка сервера при регистрации. Пожалуйста, повторите попытку позже.'
+            : 'Qeydiyyat zamanı serverlə əlaqə xətası baş verdi. Zəhmət olmasa bir az sonra yenidən cəhd edin.');
+        throw new Error(errorMsg);
       }
 
       setKayitliButik(data.firma);

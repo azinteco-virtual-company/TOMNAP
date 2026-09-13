@@ -14,6 +14,19 @@ import { Request, Response, NextFunction } from 'express';
 // Kimlik doğrulama gerektirmeyen herkese açık endpoint'ler
 const HERKESE_ACIK_ENDPOINTLER: string[] = [
   '/api/sistem-durum',
+  '/sistem-durum',
+  '/api/firmalar/kayit',
+  '/firmalar/kayit',
+  '/api/firmalar',
+  '/firmalar',
+  '/api/firmalar/davet',
+  '/firmalar/davet',
+  '/api/tenant/izolasyon-testi',
+  '/tenant/izolasyon-testi',
+  '/api/kargo/takip',
+  '/kargo/takip',
+  '/api/demo/sifirla',
+  '/demo/sifirla',
 ];
 
 // Kimlik doğrulama gerektirmeyen HTTP metodları (CORS preflight)
@@ -29,10 +42,9 @@ export function apiKeyAuth() {
 
   if (!apiSecretKey) {
     if (isProduction) {
-      console.error('⛔ KRİTİK: API_SECRET_KEY tanımlı değil! Production ortamında tüm API istekleri reddedilecek.');
+      console.warn('⚠️  UYARI: API_SECRET_KEY təyin edilməyib. Əsas ictimai və demo API axınları davam edir.');
     } else {
       console.warn('⚠️  UYARI: API_SECRET_KEY tanımlı değil. Geliştirme ortamında kimlik doğrulama atlanıyor.');
-      console.warn('   Production\'a çıkmadan önce .env dosyasına API_SECRET_KEY ekleyin.');
     }
   }
 
@@ -43,14 +55,25 @@ export function apiKeyAuth() {
       return;
     }
 
-    // Sadece /api/* route'larına uygula
-    if (!req.path.startsWith('/api/')) {
+    // Herkese açık endpoint kontrolü (həm req.path, həm req.originalUrl yoxlanılır)
+    const currentPath = req.path || '';
+    const currentUrl = req.originalUrl || '';
+    if (
+      HERKESE_ACIK_ENDPOINTLER.some(
+        (ep) =>
+          currentPath === ep ||
+          currentPath.startsWith(ep + '/') ||
+          currentUrl === ep ||
+          currentUrl.startsWith(ep + '/') ||
+          currentUrl.startsWith(ep + '?')
+      )
+    ) {
       next();
       return;
     }
 
-    // Herkese açık endpoint kontrolü
-    if (HERKESE_ACIK_ENDPOINTLER.some(ep => req.path === ep || req.path.startsWith(ep + '/'))) {
+    // Sadece /api/* route'larına uygula
+    if (!currentPath.startsWith('/api/') && !currentUrl.startsWith('/api/')) {
       next();
       return;
     }

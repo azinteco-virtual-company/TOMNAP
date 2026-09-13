@@ -241,5 +241,35 @@
       "BAKU_FINANS": 0,
       "BAKU_KURYE": 1
     }
+  },
+  {
+    "id": "test_alman_butik_flol",
+    "ad": "Test Alman Butik",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Ali Pepi tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "BEKLEMEDE",
+    "paket": "PRO",
+    "sahipAdi": "Ali Pepi",
+    "sahipEmail": "musab.tural.osmanli@gmail.com",
+    "sahipTelefon": "+994103337692",
+    "kayitTarihi": "2026-09-13T09:10:13.893Z",
+    "menseiUlke": "DE",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 2,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 5
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 0
+    }
   }
 ]

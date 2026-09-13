@@ -1,13 +1,7 @@
-import WebSocket from 'ws';
-if (typeof (globalThis as any).WebSocket === 'undefined') {
-  (globalThis as any).WebSocket = WebSocket;
-}
-
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import helmet from 'helmet';
-import { createServer as createViteServer } from 'vite';
 
 import { PORT, UPLOADS_DIR } from './config';
 import { apiKeyAuth } from './middleware/auth';
@@ -70,9 +64,13 @@ export function createApp() {
   app.post('/api/katalog-gorseli-kaydet', buyukPayloadParser);
   app.post('/api/gorselden-urun-ara', buyukPayloadParser);
 
-  // Uploads dizini oluştur
-  if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  // Uploads dizini oluştur (Serverless read-only mühitlərdə EROFS xətasının qarşısını al)
+  try {
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
+  } catch {
+    // Read-only filesystem (məs. Vercel Lambda /var/task)
   }
 
   // Görseller için ek CORS başlıkları (Helmet'ın üzerine)
@@ -85,16 +83,20 @@ export function createApp() {
   app.use(gorselRouter);
   app.use('/uploads', express.static(UPLOADS_DIR));
 
-  // Route'ları Mount Et
-  app.use('/api', sistemRouter);
-  app.use('/api', siparislerRouter);
-  app.use('/api', musterilerRouter);
-  app.use('/api', inboxRouter);
-  app.use('/api', firmalarRouter);
-  app.use('/api', kuryelerRouter);
-  app.use('/api', gorselRouter);
-  app.use('/api', veritabaniRouter);
-  app.use('/api', kargoRouter);
+  // Route'ları Mount Et (/api və həmçinin Vercel rewrite-ləri üçün / prefiksi ilə)
+  const mountRoutes = (basePath: string) => {
+    app.use(basePath, sistemRouter);
+    app.use(basePath, siparislerRouter);
+    app.use(basePath, musterilerRouter);
+    app.use(basePath, inboxRouter);
+    app.use(basePath, firmalarRouter);
+    app.use(basePath, kuryelerRouter);
+    app.use(basePath, gorselRouter);
+    app.use(basePath, veritabaniRouter);
+    app.use(basePath, kargoRouter);
+  };
+  mountRoutes('/api');
+  mountRoutes('/');
 
   // Global Hata Yakalayıcı
   app.use(errorHandler);
@@ -106,6 +108,7 @@ export async function startServer() {
   const app = createApp();
 
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
