@@ -120,7 +120,6 @@ router.post('/kargo/senkronize-et', async (req, res) => {
     const { tenantId = 'all' } = req.body;
     const sonuc = await kargoMerkezi.topluSenkronizeEt(tenantId);
     res.json({
-      basarili: true,
       mesaj: sonuc.guncellenenSayi > 0
         ? `${sonuc.sorgulananSayi} kargodan ${sonuc.guncellenenSayi} ədədinin statusu yeniləndi!`
         : `${sonuc.sorgulananSayi} aktiv kargo yoxlandı, bütün statuslar aktualdır.`,

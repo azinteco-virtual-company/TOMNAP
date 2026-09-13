@@ -55,12 +55,31 @@ router.get('/veritabani/durum', async (req, res) => {
   }
 });
 
-// POST /api/veritabani/temizle — Canlıya Geç / Bütün Demo Verilerini Temizle (Clean Live Mode)
+// POST /api/veritabani/temizle — Seçili Butik / Demo Verilerini Temizle (Tenant Korumalı)
 router.post('/veritabani/temizle', async (req, res) => {
   try {
+    const { tenant_id, onay_kodu } = req.body;
+    const hedefTenant = tenant_id || 'demo_sandbox';
+
+    // Canlı bir tenant'ın temizlenmesi için güvenlik kilidi:
+    // Sadece demo_sandbox sorgusuz temizlenebilir, canlı tenantlar için açık onay_kodu veya ALLOW_GLOBAL_RESET gerekir
+    const isGlobalResetAllowed = process.env.ALLOW_GLOBAL_RESET === 'true';
+    const isDemoTarget = hedefTenant === 'demo_sandbox';
+
+    if (!isDemoTarget && !isGlobalResetAllowed && onay_kodu !== 'CANLI_TEMIZLEME_ONAY_2026') {
+      return res.status(403).json({
+        basarili: false,
+        hata: `"${hedefTenant}" canlı firma veritabanıdır. Yanlışlıkla silinmeyi önlemek için yalnızca demo hesabı ("demo_sandbox") sıfırlanabilir veya geçerli onay kodu gereklidir.`,
+      });
+    }
+
     let silinenAdet = 0;
     if (supabase) {
-      const { data, error } = await supabase.from('siparisler').delete().neq('adet', -999999).select('id');
+      let deleteQuery = supabase.from('siparisler').delete();
+      if (hedefTenant !== 'all') {
+        deleteQuery = deleteQuery.eq('tenant_id', hedefTenant);
+      }
+      const { data, error } = await deleteQuery.select('id');
       if (error) {
         console.error('Supabase temizleme hatası:', error.message);
         return res.status(500).json({ basarili: false, hata: 'Supabase temizlenemedi: ' + error.message });
@@ -68,15 +87,23 @@ router.post('/veritabani/temizle', async (req, res) => {
       silinenAdet = data?.length || 0;
     }
 
-    silinenAdet = Math.max(silinenAdet, siparislerVeritabani.length);
-    setSiparislerVeritabani([]);
+    if (hedefTenant === 'all') {
+      silinenAdet = Math.max(silinenAdet, siparislerVeritabani.length);
+      setSiparislerVeritabani([]);
+    } else {
+      const oncekiSayi = siparislerVeritabani.length;
+      const filtrelenmis = siparislerVeritabani.filter(s => (s.tenant_id || 'kanada_shopper_baku') !== hedefTenant);
+      silinenAdet = Math.max(silinenAdet, oncekiSayi - filtrelenmis.length);
+      setSiparislerVeritabani(filtrelenmis);
+    }
 
-    console.log(`🧹 Veritabanı temizlendi. Toplam silinen: ${silinenAdet}`);
+    console.log(`🧹 Veritabanı temizlendi (${hedefTenant}). Toplam silinen: ${silinenAdet}`);
     res.json({
       basarili: true,
-      mesaj: 'Verilənlər bazası uğurla təmizləndi. Sistem canlı müştəri sifarişlərini qəbul etməyə tam hazırdır!',
+      mesaj: `"${hedefTenant}" butiki üçün sifarişlər uğurla təmizləndi!`,
       silinen_adet: silinenAdet,
       toplam: 0,
+      hedef_tenant: hedefTenant,
     });
   } catch (err: any) {
     console.error('Temizleme istisnası:', err);
@@ -84,17 +111,19 @@ router.post('/veritabani/temizle', async (req, res) => {
   }
 });
 
-// POST /api/veritabani/demo-yukle — Demo Verilerini Geri Yükle (Təqdimat / Sınaq Rejimi)
+// POST /api/veritabani/demo-yukle — Demo Verilerini Geri Yükle (Tenant İzolasyonlu)
 router.post('/veritabani/demo-yukle', async (req, res) => {
   try {
+    const hedefTenant = req.body.tenant_id || 'demo_sandbox';
+
     if (supabase) {
-      await supabase.from('siparisler').delete().neq('adet', -999999);
+      await supabase.from('siparisler').delete().eq('tenant_id', hedefTenant);
     }
-    setSiparislerVeritabani([]);
+    const digerSiparisler = siparislerVeritabani.filter(s => (s.tenant_id || 'kanada_shopper_baku') !== hedefTenant);
 
     const eklenecekler = BASLANGIC_SIPARISLER.map(s => ({
       ...s,
-      tenant_id: s.tenant_id || 'kanada_shopper_baku',
+      tenant_id: hedefTenant,
       is_demo: true,
     }));
 
@@ -110,12 +139,12 @@ router.post('/veritabani/demo-yukle', async (req, res) => {
       }
     }
 
-    setSiparislerVeritabani([...eklenecekler]);
+    setSiparislerVeritabani([...digerSiparisler, ...eklenecekler]);
 
-    console.log(`✅ Demo verileri yüklendi: ${eklenecekler.length} sipariş.`);
+    console.log(`✅ Demo verileri yüklendi (${hedefTenant}): ${eklenecekler.length} sipariş.`);
     res.json({
       basarili: true,
-      mesaj: `${eklenecekler.length} demo sifariş, tarixi qrafiklər və logistika qeydləri bazaya uğurla bərpa edildi!`,
+      mesaj: `${eklenecekler.length} demo sifariş "${hedefTenant}" üçün bazaya uğurla bərpa edildi!`,
       toplam: eklenecekler.length,
       kaynak: supabase ? 'supabase' : 'bellek',
     });

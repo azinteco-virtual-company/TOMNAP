@@ -13,6 +13,11 @@ const router = Router();
 // Sayfadan og:image çekerek yüksek çözünürlüklü stüdyo fotoğrafını bulan yardımcı fonksiyon
 export async function fetchOgImageFromUrl(pageUrl: string): Promise<string | null> {
   if (!pageUrl || !pageUrl.startsWith('http')) return null;
+  const urlKontrol = urlGuvenlimi(pageUrl);
+  if (!urlKontrol.guvenli) {
+    console.warn(`[SSRF Engellendi] fetchOgImageFromUrl: ${pageUrl} — Sebep: ${urlKontrol.sebep}`);
+    return null;
+  }
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4500);
@@ -47,6 +52,11 @@ export async function fetchOgImageFromUrl(pageUrl: string): Promise<string | nul
 // URL'nin gerçekten erişilebilir ve geçerli bir görsel olup olmadığını test eden yardımcı fonksiyon
 export async function isValidImageUrl(url: string): Promise<boolean> {
   if (!url || !url.startsWith('http')) return false;
+  const urlKontrol = urlGuvenlimi(url);
+  if (!urlKontrol.guvenli) {
+    console.warn(`[SSRF Engellendi] isValidImageUrl: ${url} — Sebep: ${urlKontrol.sebep}`);
+    return false;
+  }
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3500);
@@ -463,6 +473,17 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
       return res.status(400).json({ basarili: false, hata: 'siparis_id, urun_indeksi ve katalog_gorsel_url gereklidir.' });
     }
 
+    // SSRF Koruması: Dış URL verilmişse veritabanına sorgu atmadan önce doğrula
+    if (typeof katalog_gorsel_url === 'string' && (katalog_gorsel_url.startsWith('http://') || katalog_gorsel_url.startsWith('https://'))) {
+      const urlKontrol = urlGuvenlimi(katalog_gorsel_url);
+      if (!urlKontrol.guvenli) {
+        return res.status(403).json({
+          basarili: false,
+          hata: `Güvenlik engeli (SSRF): ${urlKontrol.sebep}`,
+        });
+      }
+    }
+
     let mevcutSiparis: any = null;
     if (supabase) {
       const { data } = await supabase.from('siparisler').select('*').eq('id', siparis_id).single();
@@ -512,6 +533,13 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
         console.warn('Kırpıntı görseli dosyaya kaydedilemedi:', errKirpinti);
       }
     } else if (kaydedilecekGorselUrl.startsWith('http://') || kaydedilecekGorselUrl.startsWith('https://')) {
+      const urlKontrol = urlGuvenlimi(kaydedilecekGorselUrl);
+      if (!urlKontrol.guvenli) {
+        return res.status(403).json({
+          basarili: false,
+          hata: `Güvenlik engeli (SSRF): ${urlKontrol.sebep}`,
+        });
+      }
       try {
         const response = await fetch(kaydedilecekGorselUrl, {
           headers: {

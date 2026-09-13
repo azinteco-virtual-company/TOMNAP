@@ -83,7 +83,7 @@ export function createApp() {
   app.use(gorselRouter);
   app.use('/uploads', express.static(UPLOADS_DIR));
 
-  // Route'ları Mount Et (/api və həmçinin Vercel rewrite-ləri üçün / prefiksi ilə)
+  // Route'ları Mount Et (Yalnızca /api altında güvenli ve korumalı)
   const mountRoutes = (basePath: string) => {
     app.use(basePath, sistemRouter);
     app.use(basePath, siparislerRouter);
@@ -96,7 +96,6 @@ export function createApp() {
     app.use(basePath, kargoRouter);
   };
   mountRoutes('/api');
-  mountRoutes('/');
 
   // Global Hata Yakalayıcı
   app.use(errorHandler);

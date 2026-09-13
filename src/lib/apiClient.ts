@@ -40,8 +40,20 @@ export async function fetchWithRetry(
     }
 
     try {
+      const defaultHeaders: Record<string, string> = {};
+      const viteApiKey = (import.meta as any).env?.VITE_API_SECRET_KEY;
+      if (viteApiKey) {
+        defaultHeaders['x-api-key'] = viteApiKey;
+      }
+
+      const mergedHeaders = {
+        ...defaultHeaders,
+        ...(fetchOptions.headers as any),
+      };
+
       const response = await fetch(url, {
         ...fetchOptions,
+        headers: mergedHeaders,
         signal: controller.signal,
       });
 

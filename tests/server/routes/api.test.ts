@@ -93,4 +93,32 @@ describe('API Rota Entegrasyon Testleri', () => {
     expect(silRes.status).toBe(200);
     expect(silRes.body.basarili).toBe(true);
   });
+
+  it('kök yoldan (/siparisler) doğrudan istek yapıldığında 404 dönmeli (bypass engeli)', async () => {
+    const res = await request(app).get('/siparisler');
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /api/katalog-gorseli-kaydet dahili ağ/metadata SSRF adreslerini 403 ile engellemeli', async () => {
+    const res = await request(app)
+      .post('/api/katalog-gorseli-kaydet')
+      .send({
+        siparis_id: 'sip-test-ssrf',
+        urun_indeksi: 0,
+        katalog_gorsel_url: 'http://169.254.169.254/latest/meta-data/',
+      });
+    expect(res.status).toBe(403);
+    expect(res.body.basarili).toBe(false);
+    expect(res.body.hata).toContain('SSRF');
+  });
+
+  it('POST /api/veritabani/temizle canlı tenant için onaysız çağrıldığında 403 dönmeli', async () => {
+    const res = await request(app)
+      .post('/api/veritabani/temizle')
+      .send({
+        tenant_id: 'kanada_shopper_baku',
+      });
+    expect(res.status).toBe(403);
+    expect(res.body.basarili).toBe(false);
+  });
 });

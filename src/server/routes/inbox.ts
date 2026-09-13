@@ -10,11 +10,45 @@ import { OnayBekleyenKaydi } from '../types';
 const router = Router();
 
 // GET /api/inbox — Onay Bekleyen Gelen Kutusu Listele
-router.get('/inbox', (req, res) => {
+router.get('/inbox', async (req, res) => {
   const seciliTenant = req.query.tenant_id as string | undefined;
-  let mesajlar = onayBekleyenler;
+  let mesajlar = [...onayBekleyenler];
+
+  if (supabase) {
+    try {
+      let query = supabase.from('inbox_mesajlar').select('*');
+      if (seciliTenant && seciliTenant !== 'all') {
+        query = query.eq('tenant_id', seciliTenant);
+      }
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        for (const item of data) {
+          const idx = mesajlar.findIndex(m => m.id === item.id);
+          const mapped: OnayBekleyenKaydi = {
+            id: item.id,
+            gelis_tarihi: item.olusturma_tarihi || new Date().toISOString(),
+            kaynak: item.kaynak || 'INSTAGRAM_DM',
+            gonderen_kullanici: item.gonderen_kullanici,
+            konusma_gecmisi: item.konusma_gecmisi,
+            tetikleyici_kod: item.durum || '#SİPARİŞ',
+            oneri_siparis: item.oneri_siparis || {},
+            durum: item.durum || 'BEKLEMEDE',
+            tenant_id: item.tenant_id,
+          };
+          if (idx !== -1) {
+            mesajlar[idx] = mapped;
+          } else {
+            mesajlar.unshift(mapped);
+          }
+        }
+      }
+    } catch (e) {
+      // In-memory fallback
+    }
+  }
+
   if (seciliTenant && seciliTenant !== 'all') {
-    mesajlar = onayBekleyenler.filter(m => (m.tenant_id || 'kanada_shopper_baku') === seciliTenant);
+    mesajlar = mesajlar.filter(m => (m.tenant_id || 'kanada_shopper_baku') === seciliTenant);
   }
   res.json({
     basarili: true,
@@ -132,6 +166,22 @@ Sohbet: "${mesaj}"`;
 
   onayBekleyenler.unshift(yeniInbox);
 
+  if (supabase) {
+    try {
+      await supabase.from('inbox_mesajlar').insert({
+        id: yeniInbox.id,
+        tenant_id: hedefTenantId,
+        gonderen_kullanici: yeniInbox.gonderen_kullanici,
+        kaynak: yeniInbox.kaynak,
+        konusma_gecmisi: yeniInbox.konusma_gecmisi,
+        durum: yeniInbox.durum,
+        oneri_siparis: yeniInbox.oneri_siparis,
+      });
+    } catch (sbErr) {
+      console.warn('Webhook inbox Supabase kaydetme uyarısı:', sbErr);
+    }
+  }
+
   res.json({
     basarili: true,
     mesaj: 'Mesaj tetikleyici ile yakalandı ve onay bekleyenler havuzuna eklendi.',
@@ -208,6 +258,9 @@ router.post('/inbox/:id/onayla', async (req, res) => {
 
   // Durumu güncelle
   onayBekleyenler[bulunanIndex].durum = 'ONAYLANDI';
+  if (supabase) {
+    supabase.from('inbox_mesajlar').update({ durum: 'ONAYLANDI' }).eq('id', id).then();
+  }
 
   res.json({
     basarili: true,
@@ -222,6 +275,9 @@ router.post('/inbox/:id/reddet', (req, res) => {
   const bulunanIndex = onayBekleyenler.findIndex(m => m.id === id);
   if (bulunanIndex !== -1) {
     onayBekleyenler[bulunanIndex].durum = 'REDDEDILDI';
+    if (supabase) {
+      supabase.from('inbox_mesajlar').update({ durum: 'REDDEDILDI' }).eq('id', id).then();
+    }
     return res.json({ basarili: true, mesaj: 'Mesaj reddedildi/arşivlendi.' });
   }
   res.status(404).json({ basarili: false, hata: 'Mesaj bulunamadı.' });

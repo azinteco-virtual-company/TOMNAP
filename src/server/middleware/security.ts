@@ -185,18 +185,23 @@ export function corsMiddleware() {
     const origin = req.headers.origin;
 
     if (izinliOriginler === null) {
-      // Geliştirme: hepsine izin ver (ama production'da CORS_ORIGIN ayarlanmalı)
-      res.header('Access-Control-Allow-Origin', origin || '*');
+      // Geliştirme modu veya wildcard: origin varsa origin'i yansıt ve credentials aç, yoksa * ver
+      if (origin) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+      } else {
+        res.header('Access-Control-Allow-Origin', '*');
+      }
     } else if (origin && izinliOriginler.includes(origin)) {
       res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
     } else if (!origin) {
-      // Tarayıcı dışı istekler (curl, Postman vb.) — origin göndermez
+      // Tarayıcı dışı istekler (curl, Postman vb.)
       res.header('Access-Control-Allow-Origin', izinliOriginler[0] || '*');
     }
 
     res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key');
-    res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Max-Age', '86400'); // 24 saat preflight cache
 
     if (req.method === 'OPTIONS') {

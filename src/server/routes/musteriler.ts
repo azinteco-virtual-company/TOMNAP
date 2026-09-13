@@ -38,18 +38,37 @@ router.get('/musteriler', async (req, res) => {
       ? tumSiparisler.filter(s => (s.tenant_id || 'kanada_shopper_baku') === seciliTenant)
       : tumSiparisler;
 
-    // 2. Bu butik için müşteri havuzunu belirle
+    // 2. Bu butik için müşteri havuzunu belirle (Supabase + In-memory senkron)
+    let tumMusteriler: MusteriKaydi[] = [...musterilerVeritabani];
+    if (supabase) {
+      try {
+        const { data: dbMusteriler, error } = await supabase.from('musteriler').select('*');
+        if (!error && dbMusteriler && dbMusteriler.length > 0) {
+          for (const dbm of dbMusteriler) {
+            const idx = tumMusteriler.findIndex(m => m.id === dbm.id);
+            if (idx !== -1) {
+              tumMusteriler[idx] = { ...tumMusteriler[idx], ...dbm };
+            } else {
+              tumMusteriler.push(dbm);
+            }
+          }
+        }
+      } catch (sbMusteriErr) {
+        // In-memory fallback
+      }
+    }
+
     let tenantMusteriListesi: MusteriKaydi[] = [];
 
     if (seciliTenant && seciliTenant !== 'all') {
       if (seciliTenant === 'kanada_shopper_baku' || seciliTenant === 'demo_sandbox') {
-        tenantMusteriListesi = musterilerVeritabani.filter(m => !m.tenant_id || m.tenant_id === seciliTenant);
+        tenantMusteriListesi = tumMusteriler.filter(m => !m.tenant_id || m.tenant_id === seciliTenant);
       } else {
         // Yeni veya özel butik: Sadece bu butik için kaydedilmiş müşteriler
-        tenantMusteriListesi = musterilerVeritabani.filter(m => m.tenant_id === seciliTenant);
+        tenantMusteriListesi = tumMusteriler.filter(m => m.tenant_id === seciliTenant);
       }
 
-      // Ayrıca bu butik için siparişi olan ama musterilerVeritabani listesinde henüz olmayan kişileri dinamik ekle
+      // Ayrıca bu butik için siparişi olan ama listede henüz olmayan kişileri dinamik ekle
       for (const s of ilgiliSiparisler) {
         if (!s.musteri_adi) continue;
         const telNo = (s.telefon_numarasi || '').replace(/\s+/g, '');
@@ -172,7 +191,7 @@ router.get('/musteriler/:id/siparisler', async (req, res) => {
 });
 
 // POST /api/musteriler — Müşteri Ekle / Güncelle
-router.post('/musteriler', (req, res) => {
+router.post('/musteriler', async (req, res) => {
   const { id, ad_soyad, telefon, instagram_kullanici_adi, sehir, adres, musteri_tipi, notlar, tenant_id } = req.body;
   if (!ad_soyad) {
     return res.status(400).json({ basarili: false, hata: 'Müşteri adı zorunludur.' });
@@ -206,6 +225,28 @@ router.post('/musteriler', (req, res) => {
       tenant_id: tenant_id || 'kanada_shopper_baku',
     };
     musterilerVeritabani.unshift(musteri);
+  }
+
+  // Supabase kalıcılığı
+  if (supabase) {
+    try {
+      await supabase.from('musteriler').upsert({
+        id: musteri.id,
+        ad_soyad: musteri.ad_soyad,
+        telefon: musteri.telefon,
+        instagram_kullanici_adi: musteri.instagram_kullanici_adi,
+        sehir: musteri.sehir,
+        adres: musteri.adres,
+        musteri_tipi: musteri.musteri_tipi,
+        notlar: musteri.notlar,
+        tenant_id: musteri.tenant_id,
+        toplam_siparis_sayisi: musteri.toplam_siparis_sayisi,
+        toplam_harcama: musteri.toplam_harcama,
+        kalan_toplam_borc: musteri.kalan_toplam_borc,
+      });
+    } catch (errDb) {
+      console.warn('Müşteri Supabase kaydetme uyarısı:', errDb);
+    }
   }
 
   res.json({ basarili: true, musteri });

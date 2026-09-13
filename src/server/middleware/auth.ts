@@ -10,6 +10,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 
 // Kimlik doğrulama gerektirmeyen herkese açık endpoint'ler
 const HERKESE_ACIK_ENDPOINTLER: string[] = [
@@ -78,7 +79,30 @@ export function apiKeyAuth() {
       return;
     }
 
-    // API key tanımlı değilse: production'da engelle, dev'de atla
+    // İstekten API key'i çıkar
+    const gonderilen = extractApiKey(req);
+
+    // Eğer geçerli API anahtarı gönderilmişse doğrula
+    if (gonderilen && apiSecretKey) {
+      if (timingSafeEqual(gonderilen, apiSecretKey)) {
+        next();
+        return;
+      }
+      res.status(401).json({
+        basarili: false,
+        hata: 'Geçersiz API anahtarı. Lütfen doğru anahtarı kullanın.',
+      });
+      return;
+    }
+
+    // Aynı origin'den gelen SPA tarayıcı isteklerine izin ver (Sec-Fetch-Site: same-origin)
+    const secFetchSite = req.headers['sec-fetch-site'];
+    if (secFetchSite === 'same-origin') {
+      next();
+      return;
+    }
+
+    // API key tanımlı değilse: development modunda geçişe izin ver
     if (!apiSecretKey) {
       if (isProduction) {
         res.status(503).json({
@@ -87,32 +111,15 @@ export function apiKeyAuth() {
         });
         return;
       }
-      // Development: atla
       next();
       return;
     }
 
-    // İstekten API key'i çıkar
-    const gonderilen = extractApiKey(req);
-
-    if (!gonderilen) {
-      res.status(401).json({
-        basarili: false,
-        hata: 'Kimlik doğrulama gerekli. İstek başlığına x-api-key ekleyin veya ?api_key= parametresi kullanın.',
-      });
-      return;
-    }
-
-    // Sabit zamanlı karşılaştırma (timing attack koruması)
-    if (!timingSafeEqual(gonderilen, apiSecretKey)) {
-      res.status(401).json({
-        basarili: false,
-        hata: 'Geçersiz API anahtarı. Lütfen doğru anahtarı kullanın.',
-      });
-      return;
-    }
-
-    next();
+    // Harici API çağrısı ve key yok
+    res.status(401).json({
+      basarili: false,
+      hata: 'Kimlik doğrulama gerekli. İstek başlığına x-api-key ekleyin veya ?api_key= parametresi kullanın.',
+    });
   };
 }
 
@@ -149,12 +156,10 @@ function extractApiKey(req: Request): string | null {
  */
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) {
-    // Uzunluk farkı varsa yine de sabit zamanda kontrol et
     const dummyBuffer = Buffer.alloc(Math.max(a.length, b.length));
     const aBuffer = Buffer.from(a.padEnd(dummyBuffer.length));
     const bBuffer = Buffer.from(b.padEnd(dummyBuffer.length));
     try {
-      const crypto = require('crypto');
       return crypto.timingSafeEqual(aBuffer, bBuffer) && a.length === b.length;
     } catch {
       return false;
@@ -162,10 +167,8 @@ function timingSafeEqual(a: string, b: string): boolean {
   }
 
   try {
-    const crypto = require('crypto');
     return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
   } catch {
-    // Fallback: normal karşılaştırma (crypto mevcut değilse)
     return a === b;
   }
 }
