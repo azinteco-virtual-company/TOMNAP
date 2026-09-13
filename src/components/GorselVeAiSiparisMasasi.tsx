@@ -98,7 +98,7 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
       reader.onload = (e) => {
         const img = new Image();
         img.onload = () => {
-          const maxDim = 1600;
+          const maxDim = 1200;
           let w = img.width;
           let h = img.height;
           if (w > maxDim || h > maxDim) {
@@ -120,7 +120,7 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, w, h);
             ctx.drawImage(img, 0, 0, w, h);
-            dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            dataUrl = canvas.toDataURL('image/jpeg', 0.75);
           }
 
           const dosyaAdi = ozelAdPrefix 
@@ -233,16 +233,26 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
         }),
       });
 
+      if (!response.ok) {
+        if (response.status === 413) {
+          throw new Error('Yüklənən şəkillərin həcmi server limitini aşır (4.5MB). Zəhmət olmasa şəkilləri azaldın və ya bir-bir yükləyin.');
+        } else if (response.status === 504) {
+          throw new Error('Süni intellekt analizi vaxt aşımına uğradı (Vercel Timeout). Zəhmət olmasa təkrar cəhd edin.');
+        } else if (response.status === 429) {
+          throw new Error('Süni intellekt sorğu limiti aşılıb. Zəhmət olmasa bir qədər gözləyin.');
+        }
+      }
+
       const responseText = await response.text();
       let data: any;
       try {
         data = JSON.parse(responseText);
       } catch (parseErr) {
-        throw new Error('Sunucu JSON yanıtı vermedi. Görsellerin boyutu yüksek olabilir veya sunucu yeniden başlatılıyor.');
+        throw new Error('Sunucu JSON yanıtı vermedi. Şəbəkə bağlantısını yoxlayın və ya təkrar cəhd edin.');
       }
 
       if (!response.ok || !data.basarili) {
-        throw new Error(data.hata || 'Ayrıştırma işlemi gerçekleştirilemedi.');
+        throw new Error(data?.hata || 'Ayrıştırma işlemi gerçekleştirilemedi.');
       }
 
       const bulunanSiparis = data.siparis || data.ayristirilan_veri;

@@ -121,8 +121,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       const res = await fetchWithRetry(url, { timeoutMs: 10000, retries: 2 });
       const data = await res.json();
       if (data.basarili && Array.isArray(data.siparisler)) {
+        let gelenSiparisler = data.siparisler;
+        if (fId === 'demo_sandbox' && gelenSiparisler.length === 0) {
+          gelenSiparisler = BASLANGIC_SIPARISLER.map((s) => ({ ...s, tenant_id: 'demo_sandbox', is_demo: true }));
+        }
         set({
-          siparisler: data.siparisler,
+          siparisler: gelenSiparisler,
           dbKaynak: data.kaynak || 'supabase',
         });
       }

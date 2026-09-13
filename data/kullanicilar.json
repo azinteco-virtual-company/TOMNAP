@@ -148,5 +148,80 @@
     "aktivasyon_token": null,
     "token_gecerlilik": null,
     "olusturma_tarihi": "2026-09-13T17:39:08.278Z"
+  },
+  {
+    "id": "usr_ffnxg72kdnq",
+    "tenant_id": "numune_parfumeriya_kdnq",
+    "ad_soyad": "Nərgiz Məmmədova",
+    "email": "butik_1789322749474@testboutique.com",
+    "telefon": "+994 50 999 88 77",
+    "rol": "PATRON",
+    "durum": "BEKLEMEDE_SIFRE",
+    "aktivasyon_token": "2ceb51a8c140d7f133b3be3c64eed7d2b8b12fb13069f9afa690624d5214c5de",
+    "token_gecerlilik": "2026-09-14T18:05:49.478Z",
+    "olusturma_tarihi": "2026-09-13T18:05:49.478Z"
+  },
+  {
+    "id": "usr_z1igw7mke2v",
+    "tenant_id": "gozleyen_butik_ke2v",
+    "ad_soyad": "Lalə İsmayılova",
+    "email": "pending_1789322750019@testboutique.com",
+    "telefon": "+994 50 888 77 66",
+    "rol": "PATRON",
+    "durum": "BEKLEMEDE_SIFRE",
+    "aktivasyon_token": "44074ecbec09f8f817d80e32ad9de808d25726ef2c1cf0f197bcb941f53dc4ca",
+    "token_gecerlilik": "2026-09-14T18:05:50.023Z",
+    "olusturma_tarihi": "2026-09-13T18:05:50.023Z"
+  },
+  {
+    "id": "usr_mn58dkjke6r",
+    "tenant_id": "token_test_butik_ke6r",
+    "ad_soyad": "Elvin Qasımov",
+    "email": "token_test_1789322750160@testboutique.com",
+    "telefon": "+994 50 777 66 55",
+    "rol": "PATRON",
+    "durum": "BEKLEMEDE_SIFRE",
+    "aktivasyon_token": "9a02a7b07a8ab0446e460be90bcd378e46968ab20376a3a246b63a71e058adf3",
+    "token_gecerlilik": "2026-09-14T18:05:50.163Z",
+    "olusturma_tarihi": "2026-09-13T18:05:50.163Z"
+  },
+  {
+    "id": "usr_jjz6jfhke9z",
+    "tenant_id": "aktiv_butik_ke9z",
+    "ad_soyad": "Samir Vəliyev",
+    "email": "activate_1789322750276@testboutique.com",
+    "telefon": "+994 50 666 55 44",
+    "rol": "PATRON",
+    "durum": "AKTIF",
+    "aktivasyon_token": null,
+    "token_gecerlilik": null,
+    "olusturma_tarihi": "2026-09-13T18:05:50.279Z",
+    "sifre_hash": "scrypt:afb5d5c06b50cf0d94220ed0d349418f:c01df7e60f8de857237ffa553674a5a823f69d8b50220e38493856d138d9438a2ae6991fbae458888bf8b71bc77da197c4a0549ade9624ad96df9ef2e5ebb523"
+  },
+  {
+    "id": "usr_ikimm0rkegw",
+    "tenant_id": "login_test_butik_kegw",
+    "ad_soyad": "Fərid Əhmədov",
+    "email": "login_test_1789322750525@testboutique.com",
+    "telefon": "+994 50 555 44 33",
+    "rol": "PATRON",
+    "durum": "AKTIF",
+    "aktivasyon_token": null,
+    "token_gecerlilik": null,
+    "olusturma_tarihi": "2026-09-13T18:05:50.528Z",
+    "sifre_hash": "scrypt:f1e1a6d904e7b1e681b6b60deea6983f:8f030dd88f26c763d0624ae94cdc17a6131d12c23e3985a777fefe56f140956e983ea5d1609c1126f9fe4c3a4e65bdcffebb12b80723bbd7a989732b37952ac5"
+  },
+  {
+    "id": "usr_dsu2qplket6",
+    "tenant_id": "kanada_shopper_baku",
+    "ad_soyad": "Cavid Həsənov",
+    "email": "kurye_1789322750860@courier.az",
+    "telefon": "+994 50 333 22 11",
+    "rol": "BAKU_KURYE",
+    "sifre_hash": "scrypt:b12121dbc7054b96bc3fec053be82639:a128fd04d115f6f10dcdf88f9a43d011207f23f4158993603a31d6169b05aedb0d5877c6cf426c44101ed240684798cdaa2f50c03c0f97a3a1e347176afb3d76",
+    "durum": "AKTIF",
+    "aktivasyon_token": null,
+    "token_gecerlilik": null,
+    "olusturma_tarihi": "2026-09-13T18:05:51.001Z"
   }
 ]

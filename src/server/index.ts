@@ -47,8 +47,8 @@ export function createApp() {
     }
     next();
   });
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(express.json({ limit: '25mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
   // 4. API Key Kimlik Doğrulama (tüm /api/* route'larına uygulanır)
   app.use(apiKeyAuth());
@@ -66,13 +66,6 @@ export function createApp() {
   app.use('/api/veritabani/temizle', veritabaniYonetimLimiter);
   app.use('/api/veritabani/demo-yukle', veritabaniYonetimLimiter);
   app.use('/api/veritabani/yedek-yukle', veritabaniYonetimLimiter);
-
-  // 8. Görsel yükleme endpoint'i için büyük payload'a izin ver (ayrı parser)
-  const buyukPayloadParser = express.json({ limit: '25mb' });
-  app.post('/api/upload-gorsel', buyukPayloadParser);
-  app.post('/api/ayristir-siparis', buyukPayloadParser);
-  app.post('/api/katalog-gorseli-kaydet', buyukPayloadParser);
-  app.post('/api/gorselden-urun-ara', buyukPayloadParser);
 
   // Uploads dizini oluştur (Serverless read-only mühitlərdə EROFS xətasının qarşısını al)
   try {

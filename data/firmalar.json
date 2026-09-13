@@ -11,7 +11,7 @@
       "KANADA_SATINALMA": 0,
       "SATIS_SORUMLUSU": 0,
       "BAKU_FINANS": 0,
-      "BAKU_KURYE": 2
+      "BAKU_KURYE": 3
     }
   },
   {
@@ -563,6 +563,156 @@
     "sahipEmail": "login_test_1789321147796@testboutique.com",
     "sahipTelefon": "+994 50 555 44 33",
     "kayitTarihi": "2026-09-13T17:39:07.800Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 2,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 5
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 0
+    }
+  },
+  {
+    "id": "numune_parfumeriya_kdnq",
+    "ad": "Nümunə Parfümeriya",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Nərgiz Məmmədova tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "BEKLEMEDE",
+    "paket": "PRO",
+    "sahipAdi": "Nərgiz Məmmədova",
+    "sahipEmail": "butik_1789322749474@testboutique.com",
+    "sahipTelefon": "+994 50 999 88 77",
+    "kayitTarihi": "2026-09-13T18:05:49.478Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 2,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 5
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 0
+    }
+  },
+  {
+    "id": "gozleyen_butik_ke2v",
+    "ad": "Gözləyən Butik",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Lalə İsmayılova tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "BEKLEMEDE",
+    "paket": "PRO",
+    "sahipAdi": "Lalə İsmayılova",
+    "sahipEmail": "pending_1789322750019@testboutique.com",
+    "sahipTelefon": "+994 50 888 77 66",
+    "kayitTarihi": "2026-09-13T18:05:50.023Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 2,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 5
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 0
+    }
+  },
+  {
+    "id": "token_test_butik_ke6r",
+    "ad": "Token Test Butik",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Elvin Qasımov tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "BEKLEMEDE",
+    "paket": "PRO",
+    "sahipAdi": "Elvin Qasımov",
+    "sahipEmail": "token_test_1789322750160@testboutique.com",
+    "sahipTelefon": "+994 50 777 66 55",
+    "kayitTarihi": "2026-09-13T18:05:50.163Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 2,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 5
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 0
+    }
+  },
+  {
+    "id": "aktiv_butik_ke9z",
+    "ad": "Aktiv Butik",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Samir Vəliyev tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "AKTIF",
+    "paket": "PRO",
+    "sahipAdi": "Samir Vəliyev",
+    "sahipEmail": "activate_1789322750276@testboutique.com",
+    "sahipTelefon": "+994 50 666 55 44",
+    "kayitTarihi": "2026-09-13T18:05:50.279Z",
+    "menseiUlke": "CA",
+    "rolLimitleri": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 2,
+      "SATIS_SORUMLUSU": 2,
+      "BAKU_FINANS": 2,
+      "BAKU_KURYE": 5
+    },
+    "aktifKullaniciSayilari": {
+      "PATRON": 1,
+      "KANADA_SATINALMA": 0,
+      "SATIS_SORUMLUSU": 0,
+      "BAKU_FINANS": 0,
+      "BAKU_KURYE": 0
+    }
+  },
+  {
+    "id": "login_test_butik_kegw",
+    "ad": "Login Test Butik",
+    "sehir": "Bakı",
+    "varsayilanParaBirimi": "AZN",
+    "varsayilanKomisyonYuzdesi": 15,
+    "aciklama": "Fərid Əhmədov tərəfindən qeydiyyatdan keçirilmiş butik",
+    "isDemo": false,
+    "onayDurumu": "AKTIF",
+    "paket": "PRO",
+    "sahipAdi": "Fərid Əhmədov",
+    "sahipEmail": "login_test_1789322750525@testboutique.com",
+    "sahipTelefon": "+994 50 555 44 33",
+    "kayitTarihi": "2026-09-13T18:05:50.528Z",
     "menseiUlke": "CA",
     "rolLimitleri": {
       "PATRON": 1,
