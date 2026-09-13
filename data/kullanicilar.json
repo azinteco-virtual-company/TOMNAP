@@ -1,1 +1,77 @@
-[]
+[
+  {
+    "id": "usr_xy0r5g7ilmf",
+    "tenant_id": "numune_parfumeriya_ilme",
+    "ad_soyad": "Nərgiz Məmmədova",
+    "email": "butik_1789320986865@testboutique.com",
+    "telefon": "+994 50 999 88 77",
+    "rol": "PATRON",
+    "durum": "BEKLEMEDE_SIFRE",
+    "aktivasyon_token": "8fb12bf97c75b6f85fe5a6edcaa71f20c5d4e7f4880ee41d16f2c4084f825256",
+    "token_gecerlilik": "2026-09-14T17:36:26.871Z",
+    "olusturma_tarihi": "2026-09-13T17:36:26.871Z"
+  },
+  {
+    "id": "usr_5hqkiuxilut",
+    "tenant_id": "gozleyen_butik_ilus",
+    "ad_soyad": "Lalə İsmayılova",
+    "email": "pending_1789320987168@testboutique.com",
+    "telefon": "+994 50 888 77 66",
+    "rol": "PATRON",
+    "durum": "BEKLEMEDE_SIFRE",
+    "aktivasyon_token": "43448689cc72fd739560e3c88ad32814f7f37907b271587301f9f7913c759dda",
+    "token_gecerlilik": "2026-09-14T17:36:27.173Z",
+    "olusturma_tarihi": "2026-09-13T17:36:27.173Z"
+  },
+  {
+    "id": "usr_7a85a7jily3",
+    "tenant_id": "token_test_butik_ily2",
+    "ad_soyad": "Elvin Qasımov",
+    "email": "token_test_1789320987287@testboutique.com",
+    "telefon": "+994 50 777 66 55",
+    "rol": "PATRON",
+    "durum": "BEKLEMEDE_SIFRE",
+    "aktivasyon_token": "fb7a7b4e2744bf148a751ca8b5c84a7ac604792eb5c36a3351f2dab21166e786",
+    "token_gecerlilik": "2026-09-14T17:36:27.291Z",
+    "olusturma_tarihi": "2026-09-13T17:36:27.291Z"
+  },
+  {
+    "id": "usr_4btb224im1f",
+    "tenant_id": "aktiv_butik_im1f",
+    "ad_soyad": "Samir Vəliyev",
+    "email": "activate_1789320987409@testboutique.com",
+    "telefon": "+994 50 666 55 44",
+    "rol": "PATRON",
+    "durum": "AKTIF",
+    "aktivasyon_token": null,
+    "token_gecerlilik": null,
+    "olusturma_tarihi": "2026-09-13T17:36:27.411Z",
+    "sifre_hash": "scrypt:8c15600d94cebfd7db725f01a6b6bf06:0af996b9d2d535fe78b02130d0b231e0d449efeb09f5faaf989608b445cbd69d36d43d757cac2869a7c7131c10adc018ea3e47725d280d886ce870342e5de5c2"
+  },
+  {
+    "id": "usr_w5dflytim8c",
+    "tenant_id": "login_test_butik_im8c",
+    "ad_soyad": "Fərid Əhmədov",
+    "email": "login_test_1789320987657@testboutique.com",
+    "telefon": "+994 50 555 44 33",
+    "rol": "PATRON",
+    "durum": "AKTIF",
+    "aktivasyon_token": null,
+    "token_gecerlilik": null,
+    "olusturma_tarihi": "2026-09-13T17:36:27.660Z",
+    "sifre_hash": "scrypt:43a81927870a8248f8e6dfea1f0fd6e4:a6d11274fa31e7dac5681e649028d4dfd34c979835462ca1dc4027f0469b00985298636aed20f3094763d402ce5fecae6b1d0f8e50275457c890481fe1fbde2e"
+  },
+  {
+    "id": "usr_8oq8z15imkg",
+    "tenant_id": "kanada_shopper_baku",
+    "ad_soyad": "Cavid Həsənov",
+    "email": "kurye_1789320987981@courier.az",
+    "telefon": "+994 50 333 22 11",
+    "rol": "BAKU_KURYE",
+    "sifre_hash": "scrypt:01e3c2b7b421cf24d5a468bc27383a7b:8ace6a101e6fbb801803b8088dc60caf00c41015207a2cae4deb437d477aa02aa6df3196e658dc4cc02f02d56ed1905cc86ab2c2bdfef9a677f89f4bac40d5fb",
+    "durum": "AKTIF",
+    "aktivasyon_token": null,
+    "token_gecerlilik": null,
+    "olusturma_tarihi": "2026-09-13T17:36:28.128Z"
+  }
+]

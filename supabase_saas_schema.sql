@@ -49,7 +49,22 @@ CREATE TABLE IF NOT EXISTS public.davetler (
     kullanan_telefon VARCHAR(50)
 );
 
--- 3. SİPARİŞLƏR CƏDVƏLİNDƏ TENANT_ID VƏ YENİ KOLONLARIN TƏMİNATI
+-- 3. İSTİFADƏÇİLƏR VƏ HESAB TƏHLÜKƏSİZLİYİ (USERS & AUTH) CƏDVƏLİ
+CREATE TABLE IF NOT EXISTS public.kullanicilar (
+    id VARCHAR(100) PRIMARY KEY,
+    tenant_id VARCHAR(100) NOT NULL REFERENCES public.firmalar(id) ON DELETE CASCADE,
+    ad_soyad VARCHAR(150) NOT NULL,
+    email VARCHAR(150) NOT NULL,
+    telefon VARCHAR(50),
+    rol VARCHAR(50) NOT NULL, -- 'SUPER_ADMIN', 'PATRON', 'KANADA_SATINALMA', 'SATIS_SORUMLUSU', 'BAKU_FINANS', 'BAKU_KURYE'
+    sifre_hash VARCHAR(255),
+    durum VARCHAR(30) DEFAULT 'BEKLEMEDE_SIFRE', -- 'BEKLEMEDE_SIFRE', 'AKTIF', 'PASIF'
+    aktivasyon_token VARCHAR(100),
+    token_gecerlilik TIMESTAMPTZ,
+    olusturma_tarihi TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- 4. SİPARİŞLƏR CƏDVƏLİNDƏ TENANT_ID VƏ YENİ KOLONLARIN TƏMİNATI
 DO $$ 
 BEGIN
     -- tenant_id
@@ -93,12 +108,78 @@ UPDATE public.siparisler
 SET tenant_id = 'kanada_shopper_baku' 
 WHERE tenant_id IS NULL OR tenant_id = '';
 
--- 4. İNDEKS VƏ PERFORMANS OPTİMİZASİYASI
+-- 5. MÜŞTƏRİLƏR (CRM) CƏDVƏLİ
+CREATE TABLE IF NOT EXISTS public.musteriler (
+    id VARCHAR(100) PRIMARY KEY,
+    tenant_id VARCHAR(100) NOT NULL DEFAULT 'kanada_shopper_baku' REFERENCES public.firmalar(id) ON DELETE CASCADE,
+    ad_soyad VARCHAR(150) NOT NULL,
+    telefon VARCHAR(50),
+    instagram_kullanici_adi VARCHAR(100),
+    sehir VARCHAR(100),
+    adres TEXT,
+    musteri_tipi VARCHAR(50) DEFAULT 'TANIMADIK', -- 'TANIMADIK', 'SADIK_MUSTERI', 'AKRABA_YAKIN', 'VIP'
+    toplam_siparis_sayisi INTEGER DEFAULT 0,
+    toplam_harcama NUMERIC(12, 2) DEFAULT 0.00,
+    kalan_toplam_borc NUMERIC(12, 2) DEFAULT 0.00,
+    notlar TEXT,
+    olusturma_tarihi TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    son_siparis_tarihi TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- 6. GƏLƏN MESAJLAR VƏ SİFARİŞ QƏBULU (INBOX) CƏDVƏLİ
+CREATE TABLE IF NOT EXISTS public.inbox_mesajlar (
+    id VARCHAR(100) PRIMARY KEY,
+    tenant_id VARCHAR(100) NOT NULL DEFAULT 'kanada_shopper_baku' REFERENCES public.firmalar(id) ON DELETE CASCADE,
+    gonderen_kullanici VARCHAR(100) NOT NULL,
+    kaynak VARCHAR(50) NOT NULL, -- 'INSTAGRAM_DM', 'INSTAGRAM_LIVE', 'INSTAGRAM_REELS', 'WHATSAPP'
+    konusma_gecmisi TEXT NOT NULL,
+    durum VARCHAR(30) DEFAULT 'BEKLEMEDE', -- 'BEKLEMEDE', 'ONAYLANDI', 'REDDEDILDI'
+    oneri_siparis JSONB NOT NULL DEFAULT '{}'::jsonb,
+    olusturma_tarihi TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- 7. İNDEKS VƏ PERFORMANS OPTİMİZASİYASI
 CREATE INDEX IF NOT EXISTS idx_firmalar_onay ON public.firmalar(onay_durumu);
 CREATE INDEX IF NOT EXISTS idx_davetler_token ON public.davetler(token);
 CREATE INDEX IF NOT EXISTS idx_davetler_firma ON public.davetler(firma_id);
+CREATE INDEX IF NOT EXISTS idx_kullanicilar_tenant ON public.kullanicilar(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_kullanicilar_email ON public.kullanicilar(email);
+CREATE INDEX IF NOT EXISTS idx_kullanicilar_token ON public.kullanicilar(aktivasyon_token);
 CREATE INDEX IF NOT EXISTS idx_siparisler_tenant_id ON public.siparisler(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_siparisler_tenant_lojistik ON public.siparisler(tenant_id, lojistik_durumu);
 CREATE INDEX IF NOT EXISTS idx_siparisler_tenant_finans ON public.siparisler(tenant_id, finans_durumu);
 CREATE INDEX IF NOT EXISTS idx_siparisler_tenant_kurye ON public.siparisler(tenant_id, baku_kurye_id);
 CREATE INDEX IF NOT EXISTS idx_siparisler_is_demo ON public.siparisler(is_demo);
+CREATE INDEX IF NOT EXISTS idx_musteriler_tenant_id ON public.musteriler(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_musteriler_tenant_telefon ON public.musteriler(tenant_id, telefon);
+CREATE INDEX IF NOT EXISTS idx_inbox_tenant_id ON public.inbox_mesajlar(tenant_id);
+
+-- 8. ROW LEVEL SECURITY (RLS) TƏHLÜKƏSİZLİK QAYDALARI
+ALTER TABLE public.firmalar ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.davetler ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kullanicilar ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.siparisler ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.musteriler ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inbox_mesajlar ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Firmaları Yönetebilir' AND tablename = 'firmalar') THEN
+        CREATE POLICY "Anon ve Servis Rolü Firmaları Yönetebilir" ON public.firmalar FOR ALL USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Davetleri Yönetebilir' AND tablename = 'davetler') THEN
+        CREATE POLICY "Anon ve Servis Rolü Davetleri Yönetebilir" ON public.davetler FOR ALL USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Kullanıcıları Yönetebilir' AND tablename = 'kullanicilar') THEN
+        CREATE POLICY "Anon ve Servis Rolü Kullanıcıları Yönetebilir" ON public.kullanicilar FOR ALL USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Siparişleri Yönetebilir' AND tablename = 'siparisler') THEN
+        CREATE POLICY "Anon ve Servis Rolü Siparişleri Yönetebilir" ON public.siparisler FOR ALL USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Müşterileri Yönetebilir' AND tablename = 'musteriler') THEN
+        CREATE POLICY "Anon ve Servis Rolü Müşterileri Yönetebilir" ON public.musteriler FOR ALL USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Inbox Yönetebilir' AND tablename = 'inbox_mesajlar') THEN
+        CREATE POLICY "Anon ve Servis Rolü Inbox Yönetebilir" ON public.inbox_mesajlar FOR ALL USING (true);
+    END IF;
+END $$;
