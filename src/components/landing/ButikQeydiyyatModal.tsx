@@ -30,6 +30,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
   const [hata, setHata] = useState<string | null>(null);
   const [tamamlandi, setTamamlandi] = useState(false);
   const [kayitliButik, setKayitliButik] = useState<any>(null);
+  const [aktivasyonLinki, setAktivasyonLinki] = useState<string | null>(null);
 
   if (!acik) return null;
 
@@ -37,13 +38,13 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
     e.preventDefault();
     setHata(null);
 
-    if (!butikAdi.trim() || !sahipAdi.trim() || !sahipTelefon.trim() || sahipTelefon.length < 9) {
+    if (!butikAdi.trim() || !sahipAdi.trim() || !sahipTelefon.trim() || !sahipEmail.trim() || !sahipEmail.includes('@') || sahipTelefon.length < 9) {
       setHata(
         isEn
-          ? 'Please enter Store Name, Owner Name, and Contact Number.'
+          ? 'Please enter Store Name, Owner Name, Valid Email, and Contact Number.'
           : isRu
-          ? 'Пожалуйста, укажите название бутика, имя владельца и телефон.'
-          : 'Zəhmət olmasa Butik Adı, Sahib Adı və Əlaqə Nömrəsini tam daxil edin.'
+          ? 'Пожалуйста, укажите название бутика, имя владельца, корректный email и телефон.'
+          : 'Zəhmət olmasa Butik Adı, Sahib Adı, Düzgün E-poçt və Əlaqə Nömrəsini tam daxil edin.'
       );
       return;
     }
@@ -61,7 +62,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
             ad: butikAdi.trim(),
             sehir: sehir.trim() || 'Baku',
             sahipAdi: sahipAdi.trim(),
-            sahipEmail: sahipEmail.trim(),
+            sahipEmail: sahipEmail.trim().toLowerCase(),
             sahipTelefon: sahipTelefon.trim(),
             paket,
             menseiUlke,
@@ -79,6 +80,9 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
 
         if (res.ok && data?.basarili && data?.firma) {
           basariliFirma = data.firma;
+          if (data.aktivasyonLinki) {
+            setAktivasyonLinki(data.aktivasyonLinki);
+          }
         }
       } catch (fetchErr) {
         console.warn('API qeydiyyat cəhdi xətası, yerli ehtiyat rejiminə keçilir:', fetchErr);
@@ -189,15 +193,17 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                     ? `Congratulations, "${kayitliButik?.ad}" registered successfully!` 
                     : isRu 
                     ? `Поздравляем, «${kayitliButik?.ad}» успешно зарегистрирован!` 
-                    : `Təbriklər, "${kayitliButik?.ad}" uğurla qeydiyyatdan keçdi!`}
+                    : `Təbriklər, "${kayitliButik?.ad}" qeydiyyatı qəbul edildi!`}
                 </h4>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  {isEn
-                    ? `Your dedicated workspace (${kayitliButik?.id}) is configured. You can start onboarding immediately and configure your team, logistics, and inbound orders.`
-                    : isRu
-                    ? `Ваше изолированное пространство (${kayitliButik?.id}) готово. Вы можете сразу перейти к онбордингу, настройке команды и приёму заказов.`
-                    : `Butikiniz üçün fərdi iş mühiti (${kayitliButik?.id}) aktivləşdirildi. Dərhal iş masanıza keçərək komandanızı, logistikanı və sifarişləri idarə etməyə başlaya bilərsiniz.`}
-                </p>
+                <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-200 text-xs leading-relaxed space-y-1">
+                  <div className="font-bold flex items-center justify-center gap-1.5 text-indigo-300">
+                    <Mail className="w-4 h-4 text-indigo-400" />
+                    <span>Şifrə təyini linki e-poçtunuza göndərildi</span>
+                  </div>
+                  <p>
+                    <strong>{sahipEmail}</strong> poçt qutusuna göndərilən təhlükəsiz linkə keçid edərək butikiniz üçün şifrənizi təyin edin.
+                  </p>
+                </div>
               </div>
 
               {/* Seçilmiş Paket Xülasəsi */}
@@ -218,21 +224,32 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                 </div>
               </div>
 
-              {/* Dərhal İş Sahəsinə Keçid & Alternativ Düymələr */}
+              {/* Dərhal Şifrə Təyin Et & Keçid */}
               <div className="pt-2 flex flex-col gap-2.5 max-w-md mx-auto">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onBasariliKayit && kayitliButik) {
-                      onBasariliKayit(kayitliButik);
-                    }
-                    onKapat();
-                  }}
-                  className="w-full px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
-                >
-                  <span>{isEn ? 'Enter Workspace & Start Now' : isRu ? 'Перейти в Рабочее Пространство' : 'İş Sahəsinə Keçid & Başla'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                {aktivasyonLinki ? (
+                  <a
+                    href={aktivasyonLinki}
+                    onClick={onKapat}
+                    className="w-full px-5 py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    <span>{isEn ? 'Set Password & Login Now' : 'Şifrənizi İndi Təyin Edin və Giriş Edin'}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onBasariliKayit && kayitliButik) {
+                        onBasariliKayit(kayitliButik);
+                      }
+                      onKapat();
+                    }}
+                    className="w-full px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    <span>{isEn ? 'Enter Workspace & Start Now' : isRu ? 'Перейти в Рабочее Пространство' : 'İş Sahəsinə Keçid & Başla'}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                )}
 
                 <div className="flex gap-2">
                   {onDemoAc && (
@@ -325,12 +342,13 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    {isEn ? 'Email Address' : isRu ? 'Email адрес' : 'E-poçt Ünvanı'}
+                    {isEn ? 'Email Address *' : isRu ? 'Email адрес *' : 'E-poçt Ünvanı * (Şifrə Təyini üçün)'}
                   </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="email"
+                      required
                       placeholder="boutique@example.com"
                       value={sahipEmail}
                       onChange={(e) => setSahipEmail(e.target.value)}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, UserPlus, Copy, Check, Share2, Shield, Users, AlertCircle, Loader2 } from 'lucide-react';
+import { X, UserPlus, Copy, Check, Share2, Shield, Users, AlertCircle, Loader2, Mail, CheckCircle2, User } from 'lucide-react';
 import { FirmaTenant, KullaniciRolu } from '../types';
 
 interface DavetOlusturModalProps {
@@ -14,8 +14,11 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
   seciliFirma,
 }) => {
   const [seciliRol, setSeciliRol] = useState<KullaniciRolu>('BAKU_KURYE');
+  const [adSoyad, setAdSoyad] = useState('');
+  const [email, setEmail] = useState('');
   const [yukleniyor, setYukleniyor] = useState(false);
   const [davetUrl, setDavetUrl] = useState<string | null>(null);
+  const [emailGonderildi, setEmailGonderildi] = useState(false);
   const [kopyalandi, setKopyalandi] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
 
@@ -51,7 +54,9 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
         body: JSON.stringify({
           tenantId: seciliFirma.id,
           rol: seciliRol,
-          olusturanKisi: 'Butik İdarəçisi',
+          olusturanKisi: seciliFirma.sahipAdi || 'Butik Patronu',
+          email: email.trim() || undefined,
+          adSoyad: adSoyad.trim() || undefined,
         }),
       });
 
@@ -62,6 +67,7 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
 
       const tamUrl = `${window.location.origin}${data.davetUrl}`;
       setDavetUrl(tamUrl);
+      setEmailGonderildi(Boolean(data.emailGonderildi));
     } catch (err: any) {
       setHata(err.message || 'Xəta baş verdi.');
     } finally {
@@ -188,6 +194,42 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
             </div>
           </div>
 
+          {/* İşçinin Məlumatları (E-poçt ilə dəvət üçün) */}
+          <div className="space-y-2.5 pt-1">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                İşçinin Adı və Soyadı (İstəyə görə)
+              </label>
+              <div className="relative">
+                <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={adSoyad}
+                  onChange={(e) => setAdSoyad(e.target.value)}
+                  placeholder="Məs: Murad Əliyev"
+                  className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                <span>İşçinin E-poçt Ünvanı (Dəvət Məktubu üçün)</span>
+                <span className="text-[10px] text-indigo-400 font-normal">Avtomatik Göndərmə</span>
+              </label>
+              <div className="relative">
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="murad@example.com"
+                  className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Kota Məlumatı */}
           <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/60 flex items-center justify-between text-xs">
             <span className="text-slate-400">Vəzifə Kvotası:</span>
@@ -212,19 +254,25 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
               {yukleniyor ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Dəvət Kodu Yaradılır...</span>
+                  <span>Dəvət Məktubu Göndərilir...</span>
                 </>
               ) : qalanYer <= 0 ? (
                 <span>Bu Rol Üzrə Limit Dolmuşdur</span>
               ) : (
                 <>
                   <UserPlus className="w-4 h-4" />
-                  <span>Dəvət Linki Yarat</span>
+                  <span>{email.trim() ? 'E-poçt ilə Dəvət Göndər & Link Yarat' : 'Dəvət Linki Yarat'}</span>
                 </>
               )}
             </button>
           ) : (
             <div className="space-y-3 animate-in fade-in">
+              {emailGonderildi && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>Dəvət və şifrə təyini məktubu <strong>{email}</strong> ünvanına göndərildi!</span>
+                </div>
+              )}
               <div className="p-2.5 rounded-xl bg-slate-950 border border-indigo-500/50 flex items-center justify-between gap-2 text-xs">
                 <span className="text-slate-300 truncate font-mono text-[11px]">
                   {davetUrl}

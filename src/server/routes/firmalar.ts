@@ -1,7 +1,15 @@
 import { Router } from 'express';
-import { firmalarVeritabani, siparislerVeritabani, firmalariKaydetDosyaya } from '../services/state';
+import {
+  firmalarVeritabani,
+  siparislerVeritabani,
+  firmalariKaydetDosyaya,
+  kullanicilarVeritabani,
+  kullanicilariKaydetDosyaya,
+} from '../services/state';
 import { supabase } from '../services/supabase';
-import { FirmaTenantItem } from '../types';
+import { tokenUret, sifreDogrula, sifreHashle } from '../services/crypto';
+import { sendActivationEmail, sendInviteEmail } from '../services/emailService';
+import { FirmaTenantItem, KullaniciKaydi } from '../types';
 
 const router = Router();
 
@@ -72,10 +80,10 @@ router.post('/firmalar/kayit', async (req, res) => {
     const menseiUlke = String(body.menseiUlke || 'CA').trim();
     const aciklama = String(body.aciklama || '').trim();
 
-    if (!ad || !sahipAdi || !sahipTelefon) {
+    if (!ad || !sahipAdi || !sahipTelefon || !sahipEmail) {
       return res.status(400).json({
         basarili: false,
-        hata: 'Butik adı, sahibinin adı və əlaqə telefonu mütləqdir.',
+        hata: 'Butik adı, sahibinin adı, əlaqə telefonu və e-poçt ünvanı mütləqdir.',
       });
     }
 
@@ -124,7 +132,7 @@ router.post('/firmalar/kayit', async (req, res) => {
       varsayilanKomisyonYuzdesi: 15,
       aciklama: aciklama || `${sahipAdi} tərəfindən qeydiyyatdan keçirilmiş butik`,
       isDemo: false,
-      onayDurumu: 'BEKLEMEDE', // Super Admin təsdiqi gözləyir
+      onayDurumu: 'BEKLEMEDE', // Şifrə təyin edilənə və ya təsdiq olunana qədər gözləmədə
       paket: normalPaket,
       sahipAdi,
       sahipEmail,
@@ -144,39 +152,87 @@ router.post('/firmalar/kayit', async (req, res) => {
     firmalarVeritabani.push(yeniFirma);
     firmalariKaydetDosyaya(firmalarVeritabani);
 
+    // 1. Patron üçün İstifadəçi Qeydi və Şifrə Təyin Tokeni Yarat
+    const aktivasyonToken = tokenUret(32);
+    const tokenGecerlilik = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 saat
+
+    const yeniPatronUser: KullaniciKaydi = {
+      id: 'usr_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4),
+      tenant_id: slug,
+      ad_soyad: sahipAdi,
+      email: sahipEmail.toLowerCase(),
+      telefon: sahipTelefon,
+      rol: 'PATRON',
+      durum: 'BEKLEMEDE_SIFRE',
+      aktivasyon_token: aktivasyonToken,
+      token_gecerlilik: tokenGecerlilik,
+      olusturma_tarihi: new Date().toISOString(),
+    };
+
+    kullanicilarVeritabani.push(yeniPatronUser);
+    kullanicilariKaydetDosyaya(kullanicilarVeritabani);
+
     // Supabase-ə yazmağa cəhd et (cədvəl varsa dərhal sinxronlaşsın, 3s timeout ilə)
     if (supabase) {
       try {
-        const insertPromise = supabase.from('firmalar').insert({
-          id: yeniFirma.id,
-          ad: yeniFirma.ad,
-          sehir: yeniFirma.sehir,
-          varsayilan_para_birimi: yeniFirma.varsayilanParaBirimi,
-          varsayilan_komisyon_yuzdesi: yeniFirma.varsayilanKomisyonYuzdesi,
-          aciklama: yeniFirma.aciklama,
-          is_demo: yeniFirma.isDemo,
-          onay_durumu: yeniFirma.onayDurumu,
-          paket: yeniFirma.paket,
-          sahip_adi: yeniFirma.sahipAdi,
-          sahip_email: yeniFirma.sahipEmail,
-          sahip_telefon: yeniFirma.sahipTelefon,
-          mensei_ulke: yeniFirma.menseiUlke,
-          rol_limitleri: yeniFirma.rolLimitleri,
-          aktif_kullanici_sayilari: yeniFirma.aktifKullaniciSayilari,
-        });
+        const insertPromise = Promise.all([
+          supabase.from('firmalar').insert({
+            id: yeniFirma.id,
+            ad: yeniFirma.ad,
+            sehir: yeniFirma.sehir,
+            varsayilan_para_birimi: yeniFirma.varsayilanParaBirimi,
+            varsayilan_komisyon_yuzdesi: yeniFirma.varsayilanKomisyonYuzdesi,
+            aciklama: yeniFirma.aciklama,
+            is_demo: yeniFirma.isDemo,
+            onay_durumu: yeniFirma.onayDurumu,
+            paket: yeniFirma.paket,
+            sahip_adi: yeniFirma.sahipAdi,
+            sahip_email: yeniFirma.sahipEmail,
+            sahip_telefon: yeniFirma.sahipTelefon,
+            mensei_ulke: yeniFirma.menseiUlke,
+            rol_limitleri: yeniFirma.rolLimitleri,
+            aktif_kullanici_sayilari: yeniFirma.aktifKullaniciSayilari,
+          }),
+          supabase.from('kullanicilar').insert({
+            id: yeniPatronUser.id,
+            tenant_id: yeniPatronUser.tenant_id,
+            ad_soyad: yeniPatronUser.ad_soyad,
+            email: yeniPatronUser.email,
+            telefon: yeniPatronUser.telefon,
+            rol: yeniPatronUser.rol,
+            durum: yeniPatronUser.durum,
+            aktivasyon_token: yeniPatronUser.aktivasyon_token,
+            token_gecerlilik: yeniPatronUser.token_gecerlilik,
+            olusturma_tarihi: yeniPatronUser.olusturma_tarihi,
+          }),
+        ]);
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Supabase insert timeout')), 3000)
         );
         await Promise.race([insertPromise, timeoutPromise]);
       } catch (errDb) {
-        console.warn('Supabase firmalar yazma xətası (yerli yaddaş aktivdir):', errDb);
+        console.warn('Supabase firmalar/kullanicilar yazma xətası (yerli yaddaş aktivdir):', errDb);
       }
     }
 
+    // 2. Təhlükəsiz Şifrə Təyini E-poçtu Göndər
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost:3000';
+    const appUrl = `${protocol}://${host}`;
+
+    const emailResult = await sendActivationEmail({
+      email: sahipEmail,
+      adSoyad: sahipAdi,
+      butikAdi: ad,
+      token: aktivasyonToken,
+      appUrl,
+    });
+
     res.json({
       basarili: true,
-      mesaj: `Təbriklər! "${ad}" butiki üçün müraciətiniz qeydə alındı. Super Admin təsdiqindən sonra aktivləşdiriləcək.`,
+      mesaj: `Təbriklər! "${ad}" butiki üçün qeydiyyat qəbul edildi. Şifrənizi təyin etmək üçün təhlükəsizlik linki ${sahipEmail} ünvanına göndərildi.`,
       firma: yeniFirma,
+      aktivasyonLinki: emailResult.link,
     });
   } catch (err: any) {
     res.status(500).json({ basarili: false, hata: err.message });
@@ -188,6 +244,7 @@ router.post('/firmalar/giris', async (req, res) => {
   try {
     const body = req.body || {};
     const girisMetni = String(body.identifikator || body.telefon || body.kod || '').trim();
+    const sifreMetni = String(body.sifre || '').trim();
 
     if (!girisMetni) {
       return res.status(400).json({
@@ -199,7 +256,7 @@ router.post('/firmalar/giris', async (req, res) => {
     const lower = girisMetni.toLowerCase();
 
     // 1. Super Admin Kodları Yoxlanışı
-    if (lower === 'admin2026') {
+    if (lower === 'admin2026' || (lower === 'admin' && sifreMetni === 'admin2026')) {
       return res.json({
         basarili: true,
         tip: 'super_admin',
@@ -210,7 +267,7 @@ router.post('/firmalar/giris', async (req, res) => {
     }
 
     // 2. Canlı Demo Kodları Yoxlanışı (Təqdimatlar üçün toxunulmaz)
-    if (lower === 'tomnap2026' || lower === 'tomnap') {
+    if (lower === 'tomnap2026' || lower === 'tomnap' || (lower === 'demo' && sifreMetni === 'tomnap2026')) {
       return res.json({
         basarili: true,
         tip: 'demo',
@@ -222,6 +279,57 @@ router.post('/firmalar/giris', async (req, res) => {
 
     // 3. Telefon nömrəsini təmizləyərək rəqəmlər üzrə müqayisə
     const reqDigits = girisMetni.replace(/[^0-9]/g, '');
+
+    // Əvvəlcə istifadəçilər bazasında (kullanicilar) axtar
+    const tapilanKullanici = kullanicilarVeritabani.find((u) => {
+      const emailMatch = u.email && u.email.toLowerCase() === lower;
+      const uDigits = String(u.telefon || '').replace(/[^0-9]/g, '');
+      const phoneMatch =
+        reqDigits.length >= 7 &&
+        uDigits.length >= 7 &&
+        (reqDigits.endsWith(uDigits.slice(-7)) || uDigits.endsWith(reqDigits.slice(-7)));
+      return emailMatch || phoneMatch;
+    });
+
+    if (tapilanKullanici) {
+      if (tapilanKullanici.sifre_hash) {
+        if (!sifreMetni) {
+          return res.status(400).json({
+            basarili: false,
+            hata: 'Zəhmət olmasa şifrənizi daxil edin.',
+          });
+        }
+        if (!sifreDogrula(sifreMetni, tapilanKullanici.sifre_hash)) {
+          return res.status(401).json({
+            basarili: false,
+            hata: 'Daxil edilmiş şifrə yanlışdır. Zəhmət olmasa yenidən yoxlayın.',
+          });
+        }
+      } else if (sifreMetni && tapilanKullanici.durum === 'BEKLEMEDE_SIFRE') {
+        return res.status(403).json({
+          basarili: false,
+          hata: 'Hesabınız hələ aktivləşdirilməyib. Zəhmət olmasa e-poçt ünvanınıza göndərilən təhlükəsiz linkə keçid edərək şifrənizi təyin edin.',
+        });
+      }
+
+      const f = firmalarVeritabani.find((item) => item.id === tapilanKullanici.tenant_id);
+      return res.json({
+        basarili: true,
+        tip: 'butik',
+        rol: tapilanKullanici.rol,
+        tenantId: tapilanKullanici.tenant_id,
+        kullanici: {
+          id: tapilanKullanici.id,
+          adSoyad: tapilanKullanici.ad_soyad,
+          email: tapilanKullanici.email,
+          telefon: tapilanKullanici.telefon,
+          rol: tapilanKullanici.rol,
+          tenantId: tapilanKullanici.tenant_id,
+        },
+        firma: f,
+        mesaj: `Xoş gəldiniz, ${tapilanKullanici.ad_soyad}!`,
+      });
+    }
 
     // Yaddaşdakı firmalarda axtar
     let tapilanFirma: any = null;
@@ -327,7 +435,7 @@ router.patch('/firmalar/:id/onay', async (req, res) => {
 // POST /api/firmalar/davet-olustur — Rol Üzrə Komanda Dəvət Linki Yaratma
 router.post('/firmalar/davet-olustur', async (req, res) => {
   try {
-    const { tenantId, rol, olusturanKisi = 'Butik Patronu' } = req.body;
+    const { tenantId, rol, olusturanKisi = 'Butik Patronu', email, adSoyad } = req.body;
     const firma = firmalarVeritabani.find((f) => f.id === tenantId);
     if (!firma) {
       return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
@@ -356,9 +464,36 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
       olusturmaTarihi: new Date().toISOString(),
       gecerlilikTarihi,
       kullanildiMi: false,
+      email: email ? String(email).trim().toLowerCase() : undefined,
+      kullananKisi: adSoyad ? String(adSoyad).trim() : undefined,
     };
 
     davetlerVeritabani.push(davet);
+
+    // E-poçt göstərilibsə real dəvət göndər
+    let emailGonderildi = false;
+    let davetUrlTam = `/davet-qebul?token=${token}`;
+
+    if (email && String(email).includes('@')) {
+      const protocol = req.protocol || 'http';
+      const host = req.get('host') || 'localhost:3000';
+      const appUrl = `${protocol}://${host}`;
+
+      const emailSonuc = await sendInviteEmail({
+        email: String(email).trim().toLowerCase(),
+        adSoyad: adSoyad ? String(adSoyad).trim() : undefined,
+        butikAdi: firma.ad,
+        rol,
+        token,
+        davetEden: olusturanKisi,
+        appUrl,
+      });
+
+      emailGonderildi = emailSonuc.basarili;
+      if (emailSonuc.link) {
+        davetUrlTam = emailSonuc.link;
+      }
+    }
 
     if (supabase) {
       try {
@@ -378,6 +513,11 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
       basarili: true,
       davet,
       davetUrl: `/davet?token=${token}`,
+      davetUrlTam,
+      emailGonderildi,
+      mesaj: emailGonderildi
+        ? `Dəvət məktubu ${email} ünvanına göndərildi.`
+        : `Dəvət linki uğurla yaradıldı.`,
       kalanKota: limit - movcud,
     });
   } catch (err: any) {
@@ -407,7 +547,7 @@ router.get('/firmalar/davet/:token', async (req, res) => {
 
 // POST /api/firmalar/davet/katil — Komandaya Qoşulma (Dəvəti Təsdiqləmə)
 router.post('/firmalar/davet/katil', async (req, res) => {
-  const { token, adSoyad, telefon } = req.body;
+  const { token, adSoyad, telefon, sifre } = req.body;
   const davet = davetlerVeritabani.find((d) => d.token === token);
   if (!davet) {
     return res.status(404).json({ basarili: false, hata: 'Dəvət tapılmadı.' });
@@ -420,6 +560,41 @@ router.post('/firmalar/davet/katil', async (req, res) => {
 
   davet.kullanildiMi = true;
   davet.kullananKisi = adSoyad;
+
+  // Əgər şifrə təqdim edilibsə istifadəçi qeydi yaradılır
+  if (sifre && typeof sifre === 'string' && sifre.length >= 6) {
+    const yeniUser: KullaniciKaydi = {
+      id: 'usr_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4),
+      tenant_id: firma.id,
+      ad_soyad: adSoyad,
+      email: davet.email || `${davet.token.slice(0, 8)}@tomnap.internal`,
+      telefon: telefon || '',
+      rol: davet.rol as any,
+      sifre_hash: sifreHashle(sifre),
+      durum: 'AKTIF',
+      aktivasyon_token: null,
+      token_gecerlilik: null,
+      olusturma_tarihi: new Date().toISOString(),
+    };
+    kullanicilarVeritabani.push(yeniUser);
+    kullanicilariKaydetDosyaya(kullanicilarVeritabani);
+
+    if (supabase) {
+      try {
+        await supabase.from('kullanicilar').insert({
+          id: yeniUser.id,
+          tenant_id: yeniUser.tenant_id,
+          ad_soyad: yeniUser.ad_soyad,
+          email: yeniUser.email,
+          telefon: yeniUser.telefon,
+          rol: yeniUser.rol,
+          sifre_hash: yeniUser.sifre_hash,
+          durum: 'AKTIF',
+          olusturma_tarihi: yeniUser.olusturma_tarihi,
+        });
+      } catch (e) {}
+    }
+  }
 
   // Sayı artır
   if (!firma.aktifKullaniciSayilari) {

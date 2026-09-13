@@ -39,6 +39,8 @@ export const AccessGateModal: React.FC<AccessGateModalProps> = ({
 
   // Butik Girişi üçün sahələr
   const [identifikator, setIdentifikator] = useState('+994 ');
+  const [butikSifre, setButikSifre] = useState('');
+  const [butikSifreGoster, setButikSifreGoster] = useState(false);
   const [butikYukleniyor, setButikYukleniyor] = useState(false);
   const [butikHata, setButikHata] = useState<string | null>(null);
 
@@ -59,10 +61,21 @@ export const AccessGateModal: React.FC<AccessGateModalProps> = ({
     if (!temizMetin || temizMetin === '+994' || temizMetin.length < 4) {
       setButikHata(
         isEn
-          ? 'Please enter your registered phone number, email, or boutique name.'
+          ? 'Please enter your registered phone number or email.'
           : isRu
-          ? 'Пожалуйста, введите ваш телефон, email или название бутика.'
-          : 'Zəhmət olmasa qeydiyyatdan keçdiyiniz telefon nömrəsi, e-poçt və ya butik adını daxil edin.'
+          ? 'Пожалуйста, введите ваш телефон или email.'
+          : 'Zəhmət olmasa qeydiyyatdan keçdiyiniz telefon nömrəsi və ya e-poçt ünvanını daxil edin.'
+      );
+      return;
+    }
+
+    if (!butikSifre.trim()) {
+      setButikHata(
+        isEn
+          ? 'Please enter your password.'
+          : isRu
+          ? 'Пожалуйста, введите ваш пароль.'
+          : 'Zəhmət olmasa şifrənizi daxil edin.'
       );
       return;
     }
@@ -71,14 +84,20 @@ export const AccessGateModal: React.FC<AccessGateModalProps> = ({
     try {
       let data: any = null;
       try {
-        const res = await fetch('/api/firmalar/giris', {
+        const res = await fetch('/api/auth/giris', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifikator: temizMetin }),
+          body: JSON.stringify({ identifikator: temizMetin, sifre: butikSifre }),
         });
         data = await res.json();
       } catch (fetchErr) {
-        console.warn('API giriş xətası, yerli axtarış yoxlanılır:', fetchErr);
+        console.warn('Auth API giriş xətası, firmalar endpoint yoxlanılır:', fetchErr);
+        const res = await fetch('/api/firmalar/giris', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifikator: temizMetin, sifre: butikSifre }),
+        });
+        data = await res.json();
       }
 
       // Əgər API tapdısa
@@ -127,10 +146,10 @@ export const AccessGateModal: React.FC<AccessGateModalProps> = ({
       throw new Error(
         data?.hata ||
           (isEn
-            ? 'No boutique found with these credentials. Please check or register.'
+            ? 'Invalid credentials. Please verify your phone/email and password.'
             : isRu
-            ? 'Бутик с такими данными не найден. Проверьте или зарегистрируйтесь.'
-            : 'Bu məlumatlara uyğun aktiv butik tapılmadı. Nömrənizi yoxlayın və ya qeydiyyatdan keçin.')
+            ? 'Неверные данные для входа. Пожалуйста, проверьте логин и пароль.'
+            : 'Giriş məlumatları yanlışdır. Zəhmət olmasa nömrə/e-poçt və şifrənizi yoxlayın.')
       );
     } catch (err: any) {
       setButikHata(err.message || 'Giriş xətası baş verdi.');
@@ -273,14 +292,14 @@ export const AccessGateModal: React.FC<AccessGateModalProps> = ({
                 <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
                   <span>
                     {isEn
-                      ? 'Owner Phone / Email / Store Name'
+                      ? 'Registered Phone or Email'
                       : isRu
-                      ? 'Телефон / Email / Имя Бутика'
-                      : 'Qeydiyyatlı Telefon / E-poçt / Butik Adı'}
+                      ? 'Телефон или Email'
+                      : 'Qeydiyyatlı Telefon və ya E-poçt'}
                   </span>
-                  <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                  <span className="text-[10px] text-indigo-400 font-semibold flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3" />
-                    <span>{isEn ? 'Direct Entry' : 'Birbaşa Giriş'}</span>
+                    <span>{isEn ? 'Encrypted Login' : 'Təhlükəsiz Giriş'}</span>
                   </span>
                 </label>
 
@@ -296,9 +315,39 @@ export const AccessGateModal: React.FC<AccessGateModalProps> = ({
                       setIdentifikator(e.target.value);
                       if (butikHata) setButikHata(null);
                     }}
-                    placeholder="+994 50 123 45 67"
+                    placeholder="+994 50 123 45 67 / butik@example.com"
                     className="w-full pl-10 pr-3.5 py-3 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-sans"
                   />
+                </div>
+              </div>
+
+              {/* Şifrə Girişi */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                  <span>{isEn ? 'Password' : isRu ? 'Пароль' : 'Şəxsi Şifrəniz'}</span>
+                </label>
+
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <Lock className="w-4 h-4 text-indigo-400" />
+                  </div>
+                  <input
+                    type={butikSifreGoster ? 'text' : 'password'}
+                    value={butikSifre}
+                    onChange={(e) => {
+                      setButikSifre(e.target.value);
+                      if (butikHata) setButikHata(null);
+                    }}
+                    placeholder="••••••••"
+                    className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950/80 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-sans"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setButikSifreGoster(!butikSifreGoster)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 cursor-pointer"
+                  >
+                    {butikSifreGoster ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
 
                 {butikHata && (

@@ -29,6 +29,7 @@ import { LandingPage } from './components/landing/LandingPage';
 import { ButikQeydiyyatModal } from './components/landing/ButikQeydiyyatModal';
 import { AccessGateModal } from './components/AccessGateModal';
 import { DavetQebulSayfasi } from './components/DavetQebulSayfasi';
+import { SifreBelirleSayfasi } from './components/SifreBelirleSayfasi';
 import { DavetOlusturModal } from './components/DavetOlusturModal';
 import { TenantOnayMerkeziModal } from './components/TenantOnayMerkeziModal';
 import { CheckCircle2, Trash2, X, Loader2, RotateCcw } from 'lucide-react';
@@ -289,9 +290,19 @@ export default function App() {
     );
   }
 
-  // 2. Komanda Dəvət Qəbul Səhifəsi (/davet və ya /davet/:token)
-  if (location.pathname === '/davet' || location.pathname.startsWith('/davet')) {
+  // 2. Komanda Dəvət Qəbul Səhifəsi (/davet, /davet-qebul)
+  if (
+    location.pathname === '/davet' ||
+    location.pathname.startsWith('/davet') ||
+    location.pathname === '/davet-qebul' ||
+    location.pathname.startsWith('/davet-qebul')
+  ) {
     return <DavetQebulSayfasi />;
+  }
+
+  // 3. Şəxsi Şifrə Təyini & Aktivasiya Səhifəsi (/sifre-belirle)
+  if (location.pathname === '/sifre-belirle' || location.pathname.startsWith('/sifre-belirle')) {
+    return <SifreBelirleSayfasi />;
   }
 
   // 3. Qorunan Sahə: Əgər daxili yola (/app, /kurye və s.) icazəsiz daxil olmaq istəyirsə

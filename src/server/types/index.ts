@@ -104,6 +104,21 @@ export interface DavetKaydi {
   gecerlilikTarihi: string;
   kullanildiMi: boolean;
   kullananKisi?: string;
+  email?: string;
+}
+
+export interface KullaniciKaydi {
+  id: string;
+  tenant_id: string;
+  ad_soyad: string;
+  email: string;
+  telefon?: string;
+  rol: 'SUPER_ADMIN' | 'PATRON' | 'KANADA_SATINALMA' | 'SATIS_SORUMLUSU' | 'BAKU_FINANS' | 'BAKU_KURYE';
+  sifre_hash?: string;
+  durum: 'BEKLEMEDE_SIFRE' | 'AKTIF' | 'PASIF';
+  aktivasyon_token?: string | null;
+  token_gecerlilik?: string | null;
+  olusturma_tarihi: string;
 }
 
 export interface OnayBekleyenKaydi {

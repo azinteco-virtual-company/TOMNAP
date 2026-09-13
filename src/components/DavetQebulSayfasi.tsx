@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, Building2, UserCheck, ShieldCheck, ArrowRight, Loader2, AlertCircle, CheckCircle2, Phone, User } from 'lucide-react';
+import { Sparkles, Building2, UserCheck, ShieldCheck, ArrowRight, Loader2, AlertCircle, CheckCircle2, Phone, User, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { KullaniciRolu } from '../types';
 
@@ -17,6 +17,9 @@ export const DavetQebulSayfasi: React.FC = () => {
 
   const [adSoyad, setAdSoyad] = useState('');
   const [telefon, setTelefon] = useState('+994 ');
+  const [sifre, setSifre] = useState('');
+  const [sifreTekrar, setSifreTekrar] = useState('');
+  const [sifreGoster, setSifreGoster] = useState(false);
   const [gonderiliyor, setGonderiliyor] = useState(false);
   const [tamamlandi, setTamamlandi] = useState(false);
 
@@ -51,12 +54,22 @@ export const DavetQebulSayfasi: React.FC = () => {
       return;
     }
 
+    if (sifre.length < 6) {
+      alert('Zəhmət olmasa ən azı 6 simvoldan ibarət şifrə təyin edin.');
+      return;
+    }
+
+    if (sifre !== sifreTekrar) {
+      alert('Daxil edilən şifrələr bir-biri ilə eyni deyil!');
+      return;
+    }
+
     setGonderiliyor(true);
     try {
       const res = await fetch('/api/firmalar/davet/katil', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, adSoyad, telefon }),
+        body: JSON.stringify({ token, adSoyad, telefon, sifre }),
       });
       const data = await res.json();
       if (!res.ok || !data.basarili) {
@@ -203,6 +216,49 @@ export const DavetQebulSayfasi: React.FC = () => {
                       placeholder="+994 50 123 45 67"
                       value={telefon}
                       onChange={(e) => setTelefon(e.target.value)}
+                      className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Giriş Şifrəniz (Minimum 6 simvol) *
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type={sifreGoster ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      placeholder="••••••••"
+                      value={sifre}
+                      onChange={(e) => setSifre(e.target.value)}
+                      className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-10 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSifreGoster(!sifreGoster)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200"
+                    >
+                      {sifreGoster ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Şifrənin Təkrarı *
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type={sifreGoster ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      placeholder="••••••••"
+                      value={sifreTekrar}
+                      onChange={(e) => setSifreTekrar(e.target.value)}
                       className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                     />
                   </div>

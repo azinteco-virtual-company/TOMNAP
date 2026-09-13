@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { FIRMALAR_DOSYA_YOLU } from '../config';
+import { FIRMALAR_DOSYA_YOLU, KULLANICILAR_DOSYA_YOLU } from '../config';
 import { BASLANGIC_SIPARISLER } from '../../data/ornek-siparisler';
-import { MusteriKaydi, FirmaTenantItem, OnayBekleyenKaydi } from '../types';
+import { MusteriKaydi, FirmaTenantItem, OnayBekleyenKaydi, KullaniciKaydi } from '../types';
 
 // In-memory sipariş veritabanı
 export let siparislerVeritabani: any[] = [...BASLANGIC_SIPARISLER];
@@ -172,6 +172,40 @@ export let firmalarVeritabani: FirmaTenantItem[] = firmalariYukleDosyadan();
 
 export function setFirmalarVeritabani(yeniListe: FirmaTenantItem[]) {
   firmalarVeritabani = yeniListe;
+}
+
+// Kullanıcılar dosyadan yükleme / kaydetme
+export function kullanicilariYukleDosyadan(): KullaniciKaydi[] {
+  try {
+    if (fs.existsSync(KULLANICILAR_DOSYA_YOLU)) {
+      const icerik = fs.readFileSync(KULLANICILAR_DOSYA_YOLU, 'utf-8');
+      const parsed = JSON.parse(icerik);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Kullanıcılar dosyadan okunamadı:', e);
+  }
+  return [];
+}
+
+export function kullanicilariKaydetDosyaya(kullanicilar: KullaniciKaydi[]) {
+  try {
+    const dir = path.dirname(KULLANICILAR_DOSYA_YOLU);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(KULLANICILAR_DOSYA_YOLU, JSON.stringify(kullanicilar, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Kullanıcılar dosyaya yazılamadı:', e);
+  }
+}
+
+export let kullanicilarVeritabani: KullaniciKaydi[] = kullanicilariYukleDosyadan();
+
+export function setKullanicilarVeritabani(yeniListe: KullaniciKaydi[]) {
+  kullanicilarVeritabani = yeniListe;
 }
 
 // In-memory onay bekleyen mesajlar havuzu (Gelen Kutusu / Staging Inbox)

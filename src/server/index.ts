@@ -19,6 +19,7 @@ import kuryelerRouter from './routes/kuryeler';
 import gorselRouter from './routes/gorsel';
 import veritabaniRouter from './routes/veritabani';
 import kargoRouter from './routes/kargoEntegrasyon';
+import authRouter from './routes/auth';
 
 export function createApp() {
   const app = express();
@@ -103,6 +104,7 @@ export function createApp() {
     app.use(basePath, gorselRouter);
     app.use(basePath, veritabaniRouter);
     app.use(basePath, kargoRouter);
+    app.use(basePath, authRouter);
   };
   mountRoutes('/api');
 

@@ -20,3 +20,8 @@ export const UPLOADS_DIR =
     ? path.join(process.cwd(), 'uploads')
     : path.join(process.cwd(), 'public', 'uploads'));
 export const FIRMALAR_DOSYA_YOLU = path.join(process.cwd(), 'data', 'firmalar.json');
+export const KULLANICILAR_DOSYA_YOLU = path.join(process.cwd(), 'data', 'kullanicilar.json');
+
+export const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+export const EMAIL_FROM = process.env.EMAIL_FROM || 'TOMNAP Platform <onboarding@resend.dev>';
+export const APP_URL = process.env.APP_URL || (IS_PRODUCTION ? 'https://tomnap.com' : `http://localhost:${PORT}`);

@@ -62,3 +62,46 @@ export function cozMetin(sifreliMetin: string): string {
     return sifreliMetin;
   }
 }
+
+/**
+ * Kullanıcı şifresini scrypt KDF ve rastgele 16 baytlık salt ile güvenli şekilde heşler.
+ * Format: scrypt:<salt_hex>:<hash_hex>
+ */
+export function sifreHashle(sifre: string): string {
+  if (!sifre || typeof sifre !== 'string') {
+    throw new Error('Geçersiz şifre formatı');
+  }
+  const salt = crypto.randomBytes(16);
+  const derivedKey = crypto.scryptSync(sifre, salt, 64);
+  return `scrypt:${salt.toString('hex')}:${derivedKey.toString('hex')}`;
+}
+
+/**
+ * Verilen düz şifrenin saklanan scrypt heşi ile eşleşip eşleşmediğini timingSafeEqual ile doğrular.
+ */
+export function sifreDogrula(sifre: string, saklananHash: string): boolean {
+  if (!sifre || !saklananHash || typeof sifre !== 'string' || typeof saklananHash !== 'string') {
+    return false;
+  }
+  try {
+    const parts = saklananHash.split(':');
+    if (parts.length !== 3 || parts[0] !== 'scrypt') {
+      return false;
+    }
+    const salt = Buffer.from(parts[1], 'hex');
+    const hash = Buffer.from(parts[2], 'hex');
+    const derivedKey = crypto.scryptSync(sifre, salt, 64);
+
+    return crypto.timingSafeEqual(hash, derivedKey);
+  } catch (err) {
+    console.error('Şifre doğrulama hatası:', err);
+    return false;
+  }
+}
+
+/**
+ * E-posta aktivasyonu ve şifre belirleme için güvenli rastgele hex token üretir.
+ */
+export function tokenUret(baytSayisi = 32): string {
+  return crypto.randomBytes(baytSayisi).toString('hex');
+}
