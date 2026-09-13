@@ -115,14 +115,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await fetchWithRetry('/api/firmalar', { timeoutMs: 8000, retries: 2 });
       const data = await res.json();
-      if (data.basarili && Array.isArray(data.firmalar)) {
+      let birlesmisFirmalar = (data.basarili && Array.isArray(data.firmalar)) ? [...data.firmalar] : [];
+      try {
+        const localList = JSON.parse(localStorage.getItem('tomnap_yerel_firmalar') || '[]');
+        if (Array.isArray(localList) && localList.length > 0) {
+          const ids = new Set(birlesmisFirmalar.map((f: any) => f.id));
+          for (const lf of localList) {
+            if (!ids.has(lf.id)) {
+              birlesmisFirmalar.push(lf);
+            }
+          }
+        }
+      } catch {}
+
+      if (birlesmisFirmalar.length > 0) {
         set({
-          firmalar: data.firmalar,
+          firmalar: birlesmisFirmalar,
           firmaSiparisSayilariServer: data.siparis_sayilari || {},
         });
       }
     } catch (e) {
       console.warn('Firmalar alınamadı:', e);
+      try {
+        const localList = JSON.parse(localStorage.getItem('tomnap_yerel_firmalar') || '[]');
+        if (Array.isArray(localList) && localList.length > 0) {
+          set((prev) => ({ firmalar: [...prev.firmalar, ...localList] }));
+        }
+      } catch {}
     }
   },
 

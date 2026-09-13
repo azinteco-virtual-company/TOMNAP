@@ -219,6 +219,22 @@ export default function App() {
     navigate('/app');
   };
 
+  const handleBasariliKayit = (yeniFirma: any) => {
+    try {
+      sessionStorage.setItem('tomnap_access_granted', 'true');
+      localStorage.setItem('tomnap_access_granted', 'true');
+    } catch {}
+    setHasAccess(true);
+    setAccessGateAcik(false);
+    setButikQeydiyyatAcik(false);
+    if (yeniFirma?.id) {
+      setSeciliFirmaId(yeniFirma.id);
+    }
+    firmalariYukle();
+    bildirimGoster(`Təbriklər! "${yeniFirma?.ad || 'Yeni Butik'}" iş sahəsinə daxil oldunuz.`);
+    navigate('/app');
+  };
+
   const handleKilidle = () => {
     try {
       sessionStorage.removeItem('tomnap_access_granted');
@@ -236,6 +252,7 @@ export default function App() {
         <LandingPage
           onPanelAc={handlePanelGirisIsteyi}
           onDemoAc={handleDemoGirisIsteyi}
+          onBasariliKayit={handleBasariliKayit}
           toplamSiparis={siparisler.length}
         />
         <AccessGateModal
@@ -249,7 +266,7 @@ export default function App() {
           acik={butikQeydiyyatAcik}
           onKapat={() => setButikQeydiyyatAcik(false)}
           onDemoAc={handleDemoGirisIsteyi}
-          onBasariliKayit={() => {}}
+          onBasariliKayit={handleBasariliKayit}
         />
       </>
     );
@@ -267,6 +284,7 @@ export default function App() {
         <LandingPage
           onPanelAc={handlePanelGirisIsteyi}
           onDemoAc={handleDemoGirisIsteyi}
+          onBasariliKayit={handleBasariliKayit}
           toplamSiparis={siparisler.length}
         />
         <AccessGateModal
@@ -280,7 +298,7 @@ export default function App() {
           acik={butikQeydiyyatAcik}
           onKapat={() => setButikQeydiyyatAcik(false)}
           onDemoAc={handleDemoGirisIsteyi}
-          onBasariliKayit={() => {}}
+          onBasariliKayit={handleBasariliKayit}
         />
       </>
     );

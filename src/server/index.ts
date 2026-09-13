@@ -23,6 +23,9 @@ import kargoRouter from './routes/kargoEntegrasyon';
 export function createApp() {
   const app = express();
 
+  // Reverse proxy / Vercel / Cloudflare uyumu
+  app.set('trust proxy', 1);
+
   // 1. HTTP Güvenlik Başlıkları (Helmet)
   app.use(helmet({
     contentSecurityPolicy: false, // SPA için CSP'yi devre dışı bırak (Vite dev server uyumu)
@@ -36,7 +39,13 @@ export function createApp() {
   // 3. HTTP İstek Günlüğü (Structured Request Logger)
   app.use(requestLogger);
 
-  // 4. JSON body parser — genel istekler için 10MB limit
+  // 4. JSON body parser — Serverless (Vercel) mühitində artıq oxunubsa ilişib qalmasın
+  app.use((req, res, next) => {
+    if (req.body !== undefined && typeof req.body === 'object') {
+      (req as any)._body = true;
+    }
+    next();
+  });
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

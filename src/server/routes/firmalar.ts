@@ -62,16 +62,15 @@ export const davetlerVeritabani: any[] = [];
 // POST /api/firmalar/kayit — İctimai Butik Qeydiyyatı (Self-Service Onboarding)
 router.post('/firmalar/kayit', async (req, res) => {
   try {
-    const {
-      ad,
-      sehir = 'Bakı',
-      sahipAdi,
-      sahipEmail,
-      sahipTelefon,
-      paket = 'PRO',
-      menseiUlke = 'CA',
-      aciklama = '',
-    } = req.body;
+    const body = req.body || {};
+    const ad = String(body.ad || '').trim();
+    const sahipAdi = String(body.sahipAdi || '').trim();
+    const sahipTelefon = String(body.sahipTelefon || '').trim();
+    const sahipEmail = String(body.sahipEmail || '').trim();
+    const sehir = String(body.sehir || 'Bakı').trim();
+    const paket = body.paket || 'PRO';
+    const menseiUlke = String(body.menseiUlke || 'CA').trim();
+    const aciklama = String(body.aciklama || '').trim();
 
     if (!ad || !sahipAdi || !sahipTelefon) {
       return res.status(400).json({

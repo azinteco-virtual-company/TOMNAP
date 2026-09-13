@@ -30,12 +30,14 @@ import { useDil } from '../../context/DilKonteksti';
 interface LandingPageProps {
   onPanelAc: () => void;
   onDemoAc: () => void;
+  onBasariliKayit?: (yeniFirma: any) => void;
   toplamSiparis?: number;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onPanelAc,
   onDemoAc,
+  onBasariliKayit,
   toplamSiparis = 109,
 }) => {
   const { dil } = useDil();
@@ -893,7 +895,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         acik={qeydiyyatAcik}
         onKapat={() => setQeydiyyatAcik(false)}
         onDemoAc={onDemoAc}
-        onBasariliKayit={() => {}}
+        onBasariliKayit={onBasariliKayit}
       />
     </div>
   );
