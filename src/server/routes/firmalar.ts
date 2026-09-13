@@ -86,6 +86,10 @@ router.post('/firmalar/kayit', async (req, res) => {
       .replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ğ/g, 'g')
       .replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36).slice(-4);
 
+    const upper = String(paket || 'PRO').toUpperCase();
+    const normalPaket: 'BASLANGIC' | 'PRO' | 'ENTERPRISE' =
+      upper === 'ENTERPRISE' ? 'ENTERPRISE' : upper === 'BASLANGIC' ? 'BASLANGIC' : 'PRO';
+
     // Pakete görə rol limitləri (Solo Başlanğıc: 1-1-1-1-1, Pro: 1-2-4-2-10)
     let rolLimitleri = {
       PATRON: 1,
@@ -95,7 +99,7 @@ router.post('/firmalar/kayit', async (req, res) => {
       BAKU_KURYE: 1,
     };
 
-    if (paket === 'PRO') {
+    if (normalPaket === 'PRO') {
       rolLimitleri = {
         PATRON: 1,
         KANADA_SATINALMA: 2,
@@ -103,7 +107,7 @@ router.post('/firmalar/kayit', async (req, res) => {
         BAKU_FINANS: 2,
         BAKU_KURYE: 5,
       };
-    } else if (paket === 'ENTERPRISE') {
+    } else if (normalPaket === 'ENTERPRISE') {
       rolLimitleri = {
         PATRON: 2,
         KANADA_SATINALMA: 5,
@@ -122,7 +126,7 @@ router.post('/firmalar/kayit', async (req, res) => {
       aciklama: aciklama || `${sahipAdi} tərəfindən qeydiyyatdan keçirilmiş butik`,
       isDemo: false,
       onayDurumu: 'BEKLEMEDE', // Super Admin təsdiqi gözləyir
-      paket,
+      paket: normalPaket,
       sahipAdi,
       sahipEmail,
       sahipTelefon,
@@ -141,10 +145,10 @@ router.post('/firmalar/kayit', async (req, res) => {
     firmalarVeritabani.push(yeniFirma);
     firmalariKaydetDosyaya(firmalarVeritabani);
 
-    // Supabase-ə yazmağa cəhd et (cədvəl varsa dərhal sinxronlaşsın)
+    // Supabase-ə yazmağa cəhd et (cədvəl varsa dərhal sinxronlaşsın, 3s timeout ilə)
     if (supabase) {
       try {
-        await supabase.from('firmalar').insert({
+        const insertPromise = supabase.from('firmalar').insert({
           id: yeniFirma.id,
           ad: yeniFirma.ad,
           sehir: yeniFirma.sehir,
@@ -161,8 +165,12 @@ router.post('/firmalar/kayit', async (req, res) => {
           rol_limitleri: yeniFirma.rolLimitleri,
           aktif_kullanici_sayilari: yeniFirma.aktifKullaniciSayilari,
         });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Supabase insert timeout')), 3000)
+        );
+        await Promise.race([insertPromise, timeoutPromise]);
       } catch (errDb) {
-        // PostgREST cədvəl xətası olarsa sus və yerli faylla davam et
+        console.warn('Supabase firmalar yazma xətası (yerli yaddaş aktivdir):', errDb);
       }
     }
 

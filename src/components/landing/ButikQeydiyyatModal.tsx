@@ -75,13 +75,28 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
       }
 
       if (!res.ok || !data?.basarili) {
-        const errorMsg =
-          data?.hata ||
-          (isEn
-            ? 'A server error occurred during registration. Please try again shortly.'
-            : isRu
-            ? 'Произошла ошибка сервера при регистрации. Пожалуйста, повторите попытку позже.'
-            : 'Qeydiyyat zamanı serverlə əlaqə xətası baş verdi. Zəhmət olmasa bir az sonra yenidən cəhd edin.');
+        let errorMsg = data?.hata;
+        if (!errorMsg) {
+          if (res.status === 404) {
+            errorMsg = isEn
+              ? 'Registration endpoint not found (404). Please ensure the backend API is reachable.'
+              : isRu
+              ? 'Эндпоинт регистрации не найден (404). Проверьте доступность API.'
+              : 'Qeydiyyat xidməti tapılmadı (404). API bağlantısını yoxlayın.';
+          } else if (res.status === 401 || res.status === 403) {
+            errorMsg = isEn
+              ? 'Access denied (401/403). Please refresh the page and try again.'
+              : isRu
+              ? 'Доступ ограничен (401/403). Пожалуйста, обновите страницу.'
+              : 'Giriş qadağandır (401/403). Zəhmət olmasa səhifəni yeniləyin.';
+          } else {
+            errorMsg = isEn
+              ? 'A server error occurred during registration. Please try again shortly.'
+              : isRu
+              ? 'Произошла ошибка сервера при регистрации. Пожалуйста, повторите попытку позже.'
+              : 'Qeydiyyat zamanı serverlə əlaqə xətası baş verdi. Zəhmət olmasa bir az sonra yenidən cəhd edin.';
+          }
+        }
         throw new Error(errorMsg);
       }
 
@@ -91,6 +106,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
         onBasariliKayit(data.firma);
       }
     } catch (err: any) {
+      console.error('Butik qeydiyyatı xətası:', err);
       setHata(err.message || (isEn ? 'Connection error to server.' : 'Serverlə əlaqə qurularkən xəta baş verdi.'));
     } finally {
       setYukleniyor(false);
