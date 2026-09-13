@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Settings2 } from 'lucide-react';
 import { Siparis } from '../types';
 import { useDil } from '../context/DilKonteksti';
 import {
@@ -35,8 +36,38 @@ export const FinansLojistikOzet: React.FC<FinansLojistikOzetProps> = ({ siparisl
     return new Date().toISOString().split('T')[0];
   });
 
-  // CAD ➔ AZN yaklaşık kur katsayısı: 1 CAD ≈ 1.25 AZN
-  const CAD_AZN_KURU = 1.25;
+  // CAD ➔ AZN kur katsayısı ve kg kargo ücreti (Dinamik & localStorage kalıcı)
+  const [cadKur, setCadKur] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('tomnap_cad_kur');
+      return saved ? Number(saved) || 1.25 : 1.25;
+    } catch {
+      return 1.25;
+    }
+  });
+
+  const [kargoBirimFiyatAzn, setKargoBirimFiyatAzn] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('tomnap_kargo_kg_azn');
+      return saved ? Number(saved) || 6.5 : 6.5;
+    } catch {
+      return 6.5;
+    }
+  });
+
+  const handleCadKurDegistir = (yeniKur: number) => {
+    setCadKur(yeniKur);
+    try {
+      localStorage.setItem('tomnap_cad_kur', String(yeniKur));
+    } catch {}
+  };
+
+  const handleKargoBirimDegistir = (yeniFiyat: number) => {
+    setKargoBirimFiyatAzn(yeniFiyat);
+    try {
+      localStorage.setItem('tomnap_kargo_kg_azn', String(yeniFiyat));
+    } catch {}
+  };
 
   // Genel Toplamlar
   const toplamSiparis = siparisler.length;
@@ -48,11 +79,11 @@ export const FinansLojistikOzet: React.FC<FinansLojistikOzetProps> = ({ siparisl
   const toplamKanadaAlisAzn = useMemo(() => {
     return siparisler.reduce((acc, s) => {
       if (s.kanada_alis_fiyati_azn) return acc + Number(s.kanada_alis_fiyati_azn);
-      if (s.kanada_alis_fiyati_cad) return acc + Number(s.kanada_alis_fiyati_cad) * CAD_AZN_KURU;
+      if (s.kanada_alis_fiyati_cad) return acc + Number(s.kanada_alis_fiyati_cad) * cadKur;
       // Tahmini %55 maliyet
       return acc + (Number(s.toplam_tutar) || 0) * 0.55;
     }, 0);
-  }, [siparisler]);
+  }, [siparisler, cadKur]);
 
   const toplamKargoAgirligi = useMemo(() => {
     return siparisler.reduce((acc, s) => acc + (Number(s.kargo_agirligi_kg) || 0.8), 0);
@@ -62,9 +93,9 @@ export const FinansLojistikOzet: React.FC<FinansLojistikOzetProps> = ({ siparisl
     return siparisler.reduce((acc, s) => {
       if (s.kargo_ucreti_azn) return acc + Number(s.kargo_ucreti_azn);
       const kilo = Number(s.kargo_agirligi_kg) || 0.8;
-      return acc + kilo * 6.5; // Kilo başı 6.5 AZN tahmini karqo
+      return acc + kilo * kargoBirimFiyatAzn;
     }, 0);
-  }, [siparisler]);
+  }, [siparisler, kargoBirimFiyatAzn]);
 
   const toplamNetKar = Math.max(0, toplamCiro - toplamKanadaAlisAzn - toplamKargoMaliyetiAzn);
   const ortalamaKarMarji = toplamCiro > 0 ? Math.round((toplamNetKar / toplamCiro) * 100) : 0;
@@ -186,13 +217,13 @@ export const FinansLojistikOzet: React.FC<FinansLojistikOzetProps> = ({ siparisl
         let alisAzn = Number(s.kanada_alis_fiyati_azn);
         if (!alisAzn) {
           if (s.kanada_alis_fiyati_cad) {
-            alisAzn = Number(s.kanada_alis_fiyati_cad) * CAD_AZN_KURU;
+            alisAzn = Number(s.kanada_alis_fiyati_cad) * cadKur;
           } else {
             alisAzn = ciroVal * 0.55;
           }
         }
 
-        const kargoAzn = Number(s.kargo_ucreti_azn) || kiloVal * 6.5;
+        const kargoAzn = Number(s.kargo_ucreti_azn) || kiloVal * kargoBirimFiyatAzn;
         const karVal = Math.max(0, ciroVal - alisAzn - kargoAzn);
 
         mevcut.siparisSayisi += 1;
@@ -332,7 +363,7 @@ export const FinansLojistikOzet: React.FC<FinansLojistikOzetProps> = ({ siparisl
     }
 
     return gunlukDizi;
-  }, [siparisler, tarihAraligi, qrupModu, ozelBaslangic, ozelBitis]);
+  }, [siparisler, tarihAraligi, qrupModu, ozelBaslangic, ozelBitis, cadKur, kargoBirimFiyatAzn]);
 
   // Aylık Kapsamlı Maliyyə & Lojistik İcmal Cədvəli
   const aylikMaliyeTablosu = useMemo(() => {
@@ -376,11 +407,11 @@ export const FinansLojistikOzet: React.FC<FinansLojistikOzetProps> = ({ siparisl
 
       let alisAzn = Number(s.kanada_alis_fiyati_azn);
       if (!alisAzn) {
-        if (s.kanada_alis_fiyati_cad) alisAzn = Number(s.kanada_alis_fiyati_cad) * CAD_AZN_KURU;
+        if (s.kanada_alis_fiyati_cad) alisAzn = Number(s.kanada_alis_fiyati_cad) * cadKur;
         else alisAzn = ciroVal * 0.55;
       }
 
-      const kargoAzn = Number(s.kargo_ucreti_azn) || kiloVal * 6.5;
+      const kargoAzn = Number(s.kargo_ucreti_azn) || kiloVal * kargoBirimFiyatAzn;
       const netKarVal = Math.max(0, ciroVal - alisAzn - kargoAzn);
 
       m.siparisSayisi += 1;
@@ -404,7 +435,7 @@ export const FinansLojistikOzet: React.FC<FinansLojistikOzetProps> = ({ siparisl
     });
 
     return sirali;
-  }, [siparisler]);
+  }, [siparisler, cadKur, kargoBirimFiyatAzn]);
 
   // Seçili aralığın toplamları
   const aralikToplamSiparis = useMemo(() => {
@@ -487,6 +518,54 @@ export const FinansLojistikOzet: React.FC<FinansLojistikOzetProps> = ({ siparisl
         toplamKargoMaliyetiAzn={toplamKargoMaliyetiAzn}
         t={t}
       />
+
+      {/* Maliyyə Parametrləri Barı (CAD/AZN Məzənnəsi və Kargo Tarifləri) */}
+      <div className="bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 text-slate-600 font-medium">
+          <Settings2 className="w-4 h-4 text-indigo-500" />
+          <span className="font-semibold text-slate-700">Maliyyə & Maya Dəyəri Parametrləri:</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500">1 CAD =</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0.1"
+              value={cadKur}
+              onChange={(e) => handleCadKurDegistir(parseFloat(e.target.value) || 1.25)}
+              className="w-20 px-2 py-1 bg-slate-50 border border-slate-200 rounded-md text-slate-800 font-semibold focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-center"
+              title="Kanada Dolları / AZN Məzənnəsi"
+            />
+            <span className="text-slate-600 font-medium">₼</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500">Kargo (1 kq) =</span>
+            <input
+              type="number"
+              step="0.5"
+              min="0"
+              value={kargoBirimFiyatAzn}
+              onChange={(e) => handleKargoBirimDegistir(parseFloat(e.target.value) || 6.5)}
+              className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-md text-slate-800 font-semibold focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-center"
+              title="Beynəlxalq Kargo kq Başına Tarif"
+            />
+            <span className="text-slate-600 font-medium">₼ / kq</span>
+          </div>
+          {(cadKur !== 1.25 || kargoBirimFiyatAzn !== 6.5) && (
+            <button
+              type="button"
+              onClick={() => {
+                handleCadKurDegistir(1.25);
+                handleKargoBirimDegistir(6.5);
+              }}
+              className="text-indigo-600 hover:text-indigo-700 underline text-2xs cursor-pointer font-medium"
+            >
+              Sıfırla
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Finans & Lojistik Analitika Paneli */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">

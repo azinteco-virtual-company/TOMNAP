@@ -13,6 +13,7 @@ import { UpsProvider } from './providers/ups';
 import { siparislerVeritabani, setSiparislerVeritabani } from '../state';
 import { supabase } from '../supabase';
 import { formatlaSiparis, hazirlaSupabasePayload } from '../siparisFormatlama';
+import { sifreleMetin, cozMetin } from '../crypto';
 
 const AYARLAR_DOSYA_YOLU = path.join(process.cwd(), 'data', 'kargo_ayarlari.json');
 
@@ -238,6 +239,15 @@ class KargoMerkezi {
         if (Array.isArray(data)) {
           for (const item of data) {
             if (item.tenantId) {
+              // Şifreli alanları çözerek belleğe al
+              if (item.kimlikBilgileri) {
+                if (item.kimlikBilgileri.sifre) {
+                  item.kimlikBilgileri.sifre = cozMetin(item.kimlikBilgileri.sifre);
+                }
+                if (item.kimlikBilgileri.pin) {
+                  item.kimlikBilgileri.pin = cozMetin(item.kimlikBilgileri.pin);
+                }
+              }
               this.tenantAyarlari.set(item.tenantId, item);
             }
           }
@@ -259,7 +269,15 @@ class KargoMerkezi {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      const list = Array.from(this.tenantAyarlari.values());
+      // Hassas şifre ve PIN alanlarını AES ile şifreleyerek diske yaz
+      const list = Array.from(this.tenantAyarlari.values()).map((item) => ({
+        ...item,
+        kimlikBilgileri: {
+          ...item.kimlikBilgileri,
+          sifre: item.kimlikBilgileri?.sifre ? sifreleMetin(item.kimlikBilgileri.sifre) : '',
+          pin: item.kimlikBilgileri?.pin ? sifreleMetin(item.kimlikBilgileri.pin) : '',
+        },
+      }));
       fs.writeFileSync(AYARLAR_DOSYA_YOLU, JSON.stringify(list, null, 2), 'utf-8');
     } catch (err) {
       console.error('Kargo ayarları dosyaya yazılamadı:', err);

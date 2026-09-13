@@ -7,3 +7,5 @@ coverage/
 .env*
 !.env.example
 .vercel
+data/kargo_ayarlari.json
+uploads/
