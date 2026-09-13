@@ -40,8 +40,20 @@ interface AppState {
 export const useAppStore = create<AppState>((set, get) => ({
   siparisler: BASLANGIC_SIPARISLER,
   firmalar: [],
-  seciliFirmaId: 'all',
-  aktifRol: 'SUPER_ADMIN',
+  seciliFirmaId: (() => {
+    try {
+      return localStorage.getItem('tomnap_aktif_tenant') || 'all';
+    } catch {
+      return 'all';
+    }
+  })(),
+  aktifRol: (() => {
+    try {
+      return (localStorage.getItem('tomnap_aktif_rol') as KullaniciRolu) || 'SUPER_ADMIN';
+    } catch {
+      return 'SUPER_ADMIN';
+    }
+  })(),
   inboxSayisi: 2,
   bildirim: null,
   dbKaynak: 'supabase',
@@ -58,8 +70,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setSiparisler: (siparisler) => set({ siparisler }),
   setFirmalar: (firmalar) => set({ firmalar }),
-  setSeciliFirmaId: (seciliFirmaId) => set({ seciliFirmaId }),
-  setAktifRol: (aktifRol) => set({ aktifRol }),
+  setSeciliFirmaId: (seciliFirmaId) => {
+    try {
+      localStorage.setItem('tomnap_aktif_tenant', seciliFirmaId);
+    } catch {}
+    set({ seciliFirmaId });
+  },
+  setAktifRol: (aktifRol) => {
+    try {
+      localStorage.setItem('tomnap_aktif_rol', aktifRol);
+    } catch {}
+    set({ aktifRol });
+  },
   setInboxSayisi: (inboxSayisi) => set({ inboxSayisi }),
   setBildirim: (bildirim) => set({ bildirim }),
   setDbKaynak: (dbKaynak) => set({ dbKaynak }),

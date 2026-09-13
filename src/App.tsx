@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Siparis } from './types';
+import { Siparis, KullaniciRolu } from './types';
 import { useAppStore } from './store/appStore';
 import { YanMenu } from './components/YanMenu';
 import { UstBaslik } from './components/UstBaslik';
@@ -207,12 +207,26 @@ export default function App() {
     }
   };
 
-  const handleBasariliGiris = (hedef: 'panel' | 'demo') => {
+  const handleBasariliGiris = (hedef: 'panel' | 'demo', firma?: any, rol?: KullaniciRolu) => {
+    try {
+      sessionStorage.setItem('tomnap_access_granted', 'true');
+      localStorage.setItem('tomnap_access_granted', 'true');
+    } catch {}
     setHasAccess(true);
     setAccessGateAcik(false);
     if (hedef === 'demo') {
       setSeciliFirmaId('demo_sandbox');
+      setAktifRol('SUPER_ADMIN');
       bildirimGoster('Canlı Sandbox Demo Mühitinə keçid edildi! 109 nümunəvi sifariş aktivdir.');
+    } else if (firma) {
+      setSeciliFirmaId(firma.id);
+      setAktifRol(rol || 'PATRON');
+      firmalariYukle();
+      bildirimGoster(`Xoş gəldiniz! "${firma.ad}" idarəetmə masasına daxil oldunuz.`);
+    } else if (rol === 'SUPER_ADMIN') {
+      setSeciliFirmaId('all');
+      setAktifRol('SUPER_ADMIN');
+      bildirimGoster('Səlahiyyətli Super Admin panelinə giriş təsdiqləndi.');
     } else {
       bildirimGoster('İş masasına giriş təsdiqləndi.');
     }
@@ -223,6 +237,8 @@ export default function App() {
     try {
       sessionStorage.setItem('tomnap_access_granted', 'true');
       localStorage.setItem('tomnap_access_granted', 'true');
+      if (yeniFirma?.id) localStorage.setItem('tomnap_aktif_tenant', yeniFirma.id);
+      localStorage.setItem('tomnap_aktif_rol', 'PATRON');
     } catch {}
     setHasAccess(true);
     setAccessGateAcik(false);
@@ -230,6 +246,7 @@ export default function App() {
     if (yeniFirma?.id) {
       setSeciliFirmaId(yeniFirma.id);
     }
+    setAktifRol('PATRON');
     firmalariYukle();
     bildirimGoster(`Təbriklər! "${yeniFirma?.ad || 'Yeni Butik'}" iş sahəsinə daxil oldunuz.`);
     navigate('/app');

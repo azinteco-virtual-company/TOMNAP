@@ -10,6 +10,8 @@ describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', ()
   const createdTenantIds: string[] = [];
   let primaryTenantId = '';
   let inviteToken = '';
+  const uniqueSuffix = Date.now().toString().slice(-6);
+  const testPhone = `+99450${uniqueSuffix}1`;
 
   afterAll(() => {
     if (createdTenantIds.length > 0 && fs.existsSync(FIRMALAR_DOSYA_YOLU)) {
@@ -31,8 +33,8 @@ describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', ()
         ad: 'Test Moda Evi',
         sehir: 'Bakı',
         sahipAdi: 'Zəhra Qasımova',
-        sahipTelefon: '+994 50 777 88 99',
-        sahipEmail: 'zehra@testmoda.az',
+        sahipTelefon: testPhone,
+        sahipEmail: `zehra_${uniqueSuffix}@testmoda.az`,
         paket: 'PRO',
         menseiUlke: 'CA',
       });
@@ -158,5 +160,55 @@ describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', ()
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
     expect(res.body.rol).toBe('BAKU_KURYE');
+  });
+
+  it('POST /api/firmalar/giris — telefon nömrəsi ilə butik sahibinin uğurlu girişi', async () => {
+    // 1. Formatlı nömrə ilə giriş
+    const res1 = await request(app)
+      .post('/api/firmalar/giris')
+      .send({ identifikator: testPhone });
+
+    expect(res1.status).toBe(200);
+    expect(res1.body.basarili).toBe(true);
+    expect(res1.body.rol).toBe('PATRON');
+    expect(res1.body.tenantId).toBe(primaryTenantId);
+
+    // 2. Fərqli formatlanmış rəqəmlərlə giriş (050...)
+    const res2 = await request(app)
+      .post('/api/firmalar/giris')
+      .send({ identifikator: '050' + testPhone.slice(6) });
+
+    expect(res2.status).toBe(200);
+    expect(res2.body.basarili).toBe(true);
+    expect(res2.body.tenantId).toBe(primaryTenantId);
+  });
+
+  it('POST /api/firmalar/giris — tomnap2026 demo və admin2026 giriş kodlarını qəbul etməlidir', async () => {
+    const demoRes = await request(app)
+      .post('/api/firmalar/giris')
+      .send({ identifikator: 'tomnap2026' });
+
+    expect(demoRes.status).toBe(200);
+    expect(demoRes.body.basarili).toBe(true);
+    expect(demoRes.body.tip).toBe('demo');
+    expect(demoRes.body.tenantId).toBe('demo_sandbox');
+
+    const adminRes = await request(app)
+      .post('/api/firmalar/giris')
+      .send({ identifikator: 'admin2026' });
+
+    expect(adminRes.status).toBe(200);
+    expect(adminRes.body.basarili).toBe(true);
+    expect(adminRes.body.tip).toBe('super_admin');
+    expect(adminRes.body.rol).toBe('SUPER_ADMIN');
+  });
+
+  it('POST /api/firmalar/giris — mövcud olmayan nömrə üçün 404 qaytarmalıdır', async () => {
+    const res = await request(app)
+      .post('/api/firmalar/giris')
+      .send({ identifikator: '+994 99 999 99 99' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.basarili).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Inbox, PanelLeftClose, PanelLeftOpen, Database, Plane, Globe, UserPlus, Building2, Lock } from 'lucide-react';
+import { Menu, Inbox, PanelLeftClose, PanelLeftOpen, Database, Plane, Globe, UserPlus, Building2, Lock, Store, ShieldCheck } from 'lucide-react';
 import { KullaniciRolu, FirmaTenant } from '../types';
 import { RolSecici } from './RolSecici';
 import { DilSecici } from './DilSecici';
@@ -146,16 +146,34 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
 
       {/* Sağ Bilgi Rozetleri, Dil Seçici, Rol Seçici & Onay Bekleyenler */}
       <div className="flex items-center space-x-2 shrink-0">
-        {/* Butik / Firma Seçici (Multi-Tenant SaaS - İzolasyon Göstergesi Dahil) */}
-        {firmalar.length > 0 && onFirmaSec && (
-          <FirmaSecici
-            firmalar={firmalar}
-            seciliFirmaId={seciliFirmaId}
-            onFirmaSec={onFirmaSec}
-            onYeniFirmaAc={onYeniFirmaAc}
-            siparisSayilari={firmaSiparisSayilari}
-            onIzolasyonModalAc={onIzolasyonModalAc}
-          />
+        {/* Butik / Firma Təyini */}
+        {aktifRol === 'SUPER_ADMIN' ? (
+          firmalar.length > 0 && onFirmaSec && (
+            <FirmaSecici
+              firmalar={firmalar}
+              seciliFirmaId={seciliFirmaId}
+              onFirmaSec={onFirmaSec}
+              onYeniFirmaAc={onYeniFirmaAc}
+              siparisSayilari={firmaSiparisSayilari}
+              onIzolasyonModalAc={onIzolasyonModalAc}
+            />
+          )
+        ) : (
+          /* Təcrid Olunmuş Fərdi Butik Nişanı (Yalnız öz butiki görünür!) */
+          <div className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
+            <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+              <Store className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex flex-col min-w-0 max-w-[120px] sm:max-w-[160px]">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 leading-none flex items-center gap-1">
+                <span>{aktifRol === 'PATRON' ? 'Patron Masası' : 'İş Masası'}</span>
+                <ShieldCheck className="w-2.5 h-2.5 text-emerald-600" title="Multi-tenant izolasiya aktivdir" />
+              </span>
+              <span className="text-xs font-semibold text-slate-800 truncate leading-tight mt-0.5">
+                {firmalar.find((f) => f.id === seciliFirmaId)?.ad || 'Butikim'}
+              </span>
+            </div>
+          </div>
         )}
 
         {/* Onay Bekleyenler (Inbox) Kompakt Bildirim Butonu */}

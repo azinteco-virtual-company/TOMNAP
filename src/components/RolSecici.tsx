@@ -82,6 +82,12 @@ export const RolSecici: React.FC<RolSeciciProps> = ({
   const aktifRolBilgisi = roller.find(r => r.id === aktifRol) || roller[0];
   const AktifIkon = aktifRolBilgisi.ikon;
 
+  // Əgər istifadəçi SUPER_ADMIN deyilsə, SUPER_ADMIN seçimi göstərilmir
+  const gosterilenRoller = roller.filter((r) => {
+    if (r.id === 'SUPER_ADMIN' && aktifRol !== 'SUPER_ADMIN') return false;
+    return true;
+  });
+
   return (
     <div className="relative">
       {/* Rol Seçim Butonu */}
@@ -123,7 +129,7 @@ export const RolSecici: React.FC<RolSeciciProps> = ({
             </div>
 
             <div className="py-1 space-y-1 max-h-80 overflow-y-auto">
-              {roller.map((rol) => {
+              {gosterilenRoller.map((rol) => {
                 const Ikon = rol.ikon;
                 const secili = rol.id === aktifRol;
 

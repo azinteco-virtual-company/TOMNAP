@@ -64,6 +64,12 @@ export const DavetQebulSayfasi: React.FC = () => {
       }
 
       setTamamlandi(true);
+      try {
+        sessionStorage.setItem('tomnap_access_granted', 'true');
+        localStorage.setItem('tomnap_access_granted', 'true');
+        if (data.tenantId) localStorage.setItem('tomnap_aktif_tenant', data.tenantId);
+        if (data.rol) localStorage.setItem('tomnap_aktif_rol', data.rol);
+      } catch {}
       // Global App Store rol və butikini avtomatik seç
       if (data.tenantId) setSeciliFirmaId(data.tenantId);
       if (data.rol) setAktifRol(data.rol as KullaniciRolu);

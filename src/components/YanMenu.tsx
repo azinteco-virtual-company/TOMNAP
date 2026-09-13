@@ -130,7 +130,7 @@ export const YanMenu: React.FC<YanMenuProps> = ({
   const canSeeGorselGiris = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'SATIS_SORUMLUSU' || aktifRol === 'KANADA_SATINALMA';
   const canSeeMusteriler = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'BAKU_FINANS' || aktifRol === 'SATIS_SORUMLUSU';
   const canSeeKargoManifest = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'KANADA_SATINALMA';
-  const canSeeKargoMerkezi = aktifRol !== 'BAKU_KURYE';
+  const canSeeKargoMerkezi = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'KANADA_SATINALMA';
   const canSeeBakuTahsilat = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'BAKU_FINANS';
   const canSeeInbox = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'SATIS_SORUMLUSU';
   const canSeeKuryeMasasi = aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'BAKU_KURYE';
