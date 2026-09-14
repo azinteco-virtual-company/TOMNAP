@@ -73,7 +73,13 @@ export const SifreBelirleSayfasi: React.FC = () => {
       const res = await fetch('/api/auth/sifre-belirle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, sifre }),
+        body: JSON.stringify({
+          token,
+          sifre,
+          email: tokenBilgisi?.email,
+          adSoyad: tokenBilgisi?.adSoyad,
+          telefon: tokenBilgisi?.telefon,
+        }),
       });
 
       const data = await res.json();

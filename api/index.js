@@ -8169,7 +8169,8 @@ router10.get("/auth/token-kontrol/:token", async (req, res) => {
     if (!token) {
       return res.status(400).json({ basarili: false, hata: "Token t\u0259qdim edilm\u0259yib." });
     }
-    const kullanici = kullanicilarVeritabani.find((u) => u.aktivasyon_token === token);
+    const cleanToken = token.trim();
+    let kullanici = kullanicilarVeritabani.find((u) => u.aktivasyon_token === cleanToken);
     if (kullanici) {
       if (kullanici.token_gecerlilik && new Date(kullanici.token_gecerlilik) < /* @__PURE__ */ new Date()) {
         return res.status(400).json({ basarili: false, hata: "Bu aktivasiya linkinin vaxt\u0131 bitmi\u015Fdir." });
@@ -8185,7 +8186,7 @@ router10.get("/auth/token-kontrol/:token", async (req, res) => {
         tenantId: kullanici.tenant_id
       });
     }
-    const davet = davetlerVeritabani.find((d) => d.token === token);
+    const davet = davetlerVeritabani.find((d) => d.token === cleanToken);
     if (davet) {
       if (davet.kullanildiMi) {
         return res.status(400).json({ basarili: false, hata: "Bu d\u0259v\u0259t linki art\u0131q istifad\u0259 edilmi\u015Fdir." });
@@ -8206,19 +8207,60 @@ router10.get("/auth/token-kontrol/:token", async (req, res) => {
     }
     if (supabase) {
       try {
-        const { data: sbUser } = await supabase.from("kullanicilar").select("*").eq("aktivasyon_token", token).maybeSingle();
+        let sbUser = null;
+        const { data: exactUser } = await supabase.from("kullanicilar").select("*").eq("aktivasyon_token", cleanToken).maybeSingle();
+        sbUser = exactUser;
+        if (!sbUser && cleanToken.length >= 16) {
+          const prefix = cleanToken.substring(0, 16);
+          const { data: prefixUsers } = await supabase.from("kullanicilar").select("*").like("aktivasyon_token", `${prefix}%`).eq("durum", "BEKLEMEDE_SIFRE").limit(2);
+          if (prefixUsers && prefixUsers.length === 1) {
+            sbUser = prefixUsers[0];
+          }
+        }
         if (sbUser) {
+          let butikAdi = "";
+          const firma = firmalarVeritabani.find((f) => f.id === sbUser.tenant_id);
+          if (firma) {
+            butikAdi = firma.ad;
+          } else {
+            const { data: sbFirma } = await supabase.from("firmalar").select("ad").eq("id", sbUser.tenant_id).maybeSingle();
+            if (sbFirma?.ad) butikAdi = sbFirma.ad;
+          }
           return res.json({
             basarili: true,
             tip: "aktivasyon",
             email: sbUser.email,
             adSoyad: sbUser.ad_soyad,
-            butikAdi: "",
+            butikAdi,
             rol: sbUser.rol,
             tenantId: sbUser.tenant_id
           });
         }
+        const { data: sbDavet } = await supabase.from("davetler").select("*").eq("token", cleanToken).maybeSingle();
+        if (sbDavet) {
+          if (sbDavet.kullanildi_mi) {
+            return res.status(400).json({ basarili: false, hata: "Bu d\u0259v\u0259t linki art\u0131q istifad\u0259 edilmi\u015Fdir." });
+          }
+          if (new Date(sbDavet.gecerlilik_tarihi) < /* @__PURE__ */ new Date()) {
+            return res.status(400).json({ basarili: false, hata: "Bu d\u0259v\u0259t linkinin vaxt\u0131 bitmi\u015Fdir." });
+          }
+          let butikAdi = sbDavet.tenant_ad || "";
+          if (!butikAdi) {
+            const { data: sbFirma } = await supabase.from("firmalar").select("ad").eq("id", sbDavet.tenant_id).maybeSingle();
+            if (sbFirma?.ad) butikAdi = sbFirma.ad;
+          }
+          return res.json({
+            basarili: true,
+            tip: "davet",
+            email: sbDavet.email || "",
+            adSoyad: sbDavet.kullanan_kisi || "",
+            butikAdi,
+            rol: sbDavet.rol,
+            tenantId: sbDavet.tenant_id
+          });
+        }
       } catch (e) {
+        console.warn("Supabase token-kontrol axtar\u0131\u015F x\u0259tas\u0131:", e);
       }
     }
     return res.status(404).json({
@@ -8231,9 +8273,9 @@ router10.get("/auth/token-kontrol/:token", async (req, res) => {
 });
 router10.post("/auth/sifre-belirle", async (req, res) => {
   try {
-    const { token, sifre, adSoyad, telefon } = req.body || {};
-    if (!token) {
-      return res.status(400).json({ basarili: false, hata: "T\u0259hl\xFCk\u0259sizlik tokeni m\xFCtl\u0259qdir." });
+    const { token, sifre, adSoyad, telefon, email } = req.body || {};
+    if (!token && !email) {
+      return res.status(400).json({ basarili: false, hata: "T\u0259hl\xFCk\u0259sizlik tokeni v\u0259 ya e-po\xE7t m\xFCtl\u0259qdir." });
     }
     if (!sifre || typeof sifre !== "string" || sifre.length < 6) {
       return res.status(400).json({
@@ -8242,14 +8284,42 @@ router10.post("/auth/sifre-belirle", async (req, res) => {
       });
     }
     const hashed = sifreHashle(sifre);
-    let user = kullanicilarVeritabani.find((u) => u.aktivasyon_token === token);
+    const cleanToken = String(token || "").trim();
+    let user = cleanToken ? kullanicilarVeritabani.find((u) => u.aktivasyon_token === cleanToken) : null;
+    if (!user && supabase) {
+      try {
+        if (cleanToken) {
+          const { data: exactUser } = await supabase.from("kullanicilar").select("*").eq("aktivasyon_token", cleanToken).maybeSingle();
+          if (exactUser) user = exactUser;
+        }
+        if (!user && email) {
+          const { data: emailUser } = await supabase.from("kullanicilar").select("*").eq("email", String(email).trim().toLowerCase()).eq("durum", "BEKLEMEDE_SIFRE").maybeSingle();
+          if (emailUser) user = emailUser;
+        }
+        if (!user && cleanToken && cleanToken.length >= 16) {
+          const prefix = cleanToken.substring(0, 16);
+          const { data: prefixUsers } = await supabase.from("kullanicilar").select("*").like("aktivasyon_token", `${prefix}%`).eq("durum", "BEKLEMEDE_SIFRE").limit(2);
+          if (prefixUsers && prefixUsers.length === 1) {
+            user = prefixUsers[0];
+          }
+        }
+      } catch (errDb) {
+        console.warn("Supabase sifre-belirle axtar\u0131\u015F x\u0259tas\u0131:", errDb);
+      }
+    }
     if (user) {
       user.sifre_hash = hashed;
       user.durum = "AKTIF";
       user.aktivasyon_token = null;
       user.token_gecerlilik = null;
-      if (adSoyad && adSoyad.trim()) user.ad_soyad = adSoyad.trim();
-      if (telefon && telefon.trim()) user.telefon = telefon.trim();
+      if (adSoyad && String(adSoyad).trim()) user.ad_soyad = String(adSoyad).trim();
+      if (telefon && String(telefon).trim()) user.telefon = String(telefon).trim();
+      const localIdx = kullanicilarVeritabani.findIndex((u) => u.id === user.id);
+      if (localIdx !== -1) {
+        kullanicilarVeritabani[localIdx] = { ...kullanicilarVeritabani[localIdx], ...user };
+      } else {
+        kullanicilarVeritabani.push(user);
+      }
       kullanicilariKaydetDosyaya(kullanicilarVeritabani);
       const firma = firmalarVeritabani.find((f) => f.id === user.tenant_id);
       if (firma && firma.onayDurumu === "BEKLEMEDE") {
@@ -8258,14 +8328,27 @@ router10.post("/auth/sifre-belirle", async (req, res) => {
       }
       if (supabase) {
         try {
-          await supabase.from("kullanicilar").update({
-            sifre_hash: hashed,
-            durum: "AKTIF",
-            aktivasyon_token: null,
-            token_gecerlilik: null
-          }).eq("id", user.id);
+          await Promise.all([
+            supabase.from("kullanicilar").update({
+              sifre_hash: hashed,
+              durum: "AKTIF",
+              aktivasyon_token: null,
+              token_gecerlilik: null,
+              ad_soyad: user.ad_soyad,
+              telefon: user.telefon
+            }).eq("id", user.id),
+            supabase.from("firmalar").update({
+              onay_durumu: "AKTIF"
+            }).eq("id", user.tenant_id)
+          ]);
         } catch (e) {
+          console.warn("Supabase sifre-belirle update x\u0259tas\u0131:", e);
         }
+      }
+      let donusFirmasi = firma;
+      if (!donusFirmasi && supabase) {
+        const { data: sbFirma } = await supabase.from("firmalar").select("*").eq("id", user.tenant_id).maybeSingle();
+        if (sbFirma) donusFirmasi = sbFirma;
       }
       return res.json({
         basarili: true,
@@ -8278,26 +8361,50 @@ router10.post("/auth/sifre-belirle", async (req, res) => {
           rol: user.rol,
           tenantId: user.tenant_id
         },
-        firma
+        firma: donusFirmasi
       });
     }
-    const davet = davetlerVeritabani.find((d) => d.token === token);
+    let davet = cleanToken ? davetlerVeritabani.find((d) => d.token === cleanToken) : null;
+    if (!davet && supabase && cleanToken) {
+      try {
+        const { data: sbDavet } = await supabase.from("davetler").select("*").eq("token", cleanToken).maybeSingle();
+        if (sbDavet) {
+          davet = {
+            token: sbDavet.token,
+            tenantId: sbDavet.tenant_id,
+            tenantAd: sbDavet.tenant_ad,
+            rol: sbDavet.rol,
+            olusturanKisi: sbDavet.olusturan_kisi,
+            olusturmaTarihi: sbDavet.olusturma_tarihi,
+            gecerlilikTarihi: sbDavet.gecerlilik_tarihi,
+            kullanildiMi: sbDavet.kullanildi_mi,
+            email: sbDavet.email,
+            kullananKisi: sbDavet.kullanan_kisi
+          };
+        }
+      } catch (e) {
+      }
+    }
     if (davet) {
       if (davet.kullanildiMi) {
         return res.status(400).json({ basarili: false, hata: "Bu d\u0259v\u0259t art\u0131q istifad\u0259 edilib." });
       }
-      const firma = firmalarVeritabani.find((f) => f.id === davet.tenantId);
+      let firma = firmalarVeritabani.find((f) => f.id === davet.tenantId);
+      if (!firma && supabase) {
+        const { data: sbFirma } = await supabase.from("firmalar").select("*").eq("id", davet.tenantId).maybeSingle();
+        if (sbFirma) firma = sbFirma;
+      }
       if (!firma) {
         return res.status(404).json({ basarili: false, hata: "\u018Flaq\u0259li butik tap\u0131lmad\u0131." });
       }
       davet.kullanildiMi = true;
       davet.kullananKisi = adSoyad || davet.kullananKisi || "Komanda \xDCzv\xFC";
-      const email = davet.email || `${davet.token.slice(0, 8)}@tomnap.internal`;
+      const userEmail = davet.email || email || `${davet.token.slice(0, 8)}@tomnap.internal`;
       const yeniUser = {
         id: "usr_" + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4),
         tenant_id: davet.tenantId,
         ad_soyad: adSoyad || davet.kullananKisi,
-        email,
+        email: userEmail,
         telefon: telefon || "",
         rol: davet.rol,
         sifre_hash: hashed,
@@ -8324,17 +8431,23 @@ router10.post("/auth/sifre-belirle", async (req, res) => {
       firmalariKaydetDosyaya(firmalarVeritabani);
       if (supabase) {
         try {
-          await supabase.from("kullanicilar").insert({
-            id: yeniUser.id,
-            tenant_id: yeniUser.tenant_id,
-            ad_soyad: yeniUser.ad_soyad,
-            email: yeniUser.email,
-            telefon: yeniUser.telefon,
-            rol: yeniUser.rol,
-            sifre_hash: yeniUser.sifre_hash,
-            durum: "AKTIF",
-            olusturma_tarihi: yeniUser.olusturma_tarihi
-          });
+          await Promise.all([
+            supabase.from("kullanicilar").insert({
+              id: yeniUser.id,
+              tenant_id: yeniUser.tenant_id,
+              ad_soyad: yeniUser.ad_soyad,
+              email: yeniUser.email,
+              telefon: yeniUser.telefon,
+              rol: yeniUser.rol,
+              sifre_hash: yeniUser.sifre_hash,
+              durum: "AKTIF",
+              olusturma_tarihi: yeniUser.olusturma_tarihi
+            }),
+            supabase.from("davetler").update({
+              kullanildi_mi: true,
+              kullanan_kisi: yeniUser.ad_soyad
+            }).eq("token", davet.token)
+          ]);
         } catch (e) {
         }
       }
