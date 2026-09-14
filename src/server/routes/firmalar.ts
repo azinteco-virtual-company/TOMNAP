@@ -172,46 +172,47 @@ router.post('/firmalar/kayit', async (req, res) => {
     kullanicilarVeritabani.push(yeniPatronUser);
     kullanicilariKaydetDosyaya(kullanicilarVeritabani);
 
-    // Supabase-ə yazmağa cəhd et (cədvəl varsa dərhal sinxronlaşsın, 3s timeout ilə)
+    // Supabase-ə yazmağa cəhd et (Etibarlı və tam ardıcıl, gizli timeout olmadan)
     if (supabase) {
       try {
-        const insertPromise = Promise.all([
-          supabase.from('firmalar').insert({
-            id: yeniFirma.id,
-            ad: yeniFirma.ad,
-            sehir: yeniFirma.sehir,
-            varsayilan_para_birimi: yeniFirma.varsayilanParaBirimi,
-            varsayilan_komisyon_yuzdesi: yeniFirma.varsayilanKomisyonYuzdesi,
-            aciklama: yeniFirma.aciklama,
-            is_demo: yeniFirma.isDemo,
-            onay_durumu: yeniFirma.onayDurumu,
-            paket: yeniFirma.paket,
-            sahip_adi: yeniFirma.sahipAdi,
-            sahip_email: yeniFirma.sahipEmail,
-            sahip_telefon: yeniFirma.sahipTelefon,
-            mensei_ulke: yeniFirma.menseiUlke,
-            rol_limitleri: yeniFirma.rolLimitleri,
-            aktif_kullanici_sayilari: yeniFirma.aktifKullaniciSayilari,
-          }),
-          supabase.from('kullanicilar').insert({
-            id: yeniPatronUser.id,
-            tenant_id: yeniPatronUser.tenant_id,
-            ad_soyad: yeniPatronUser.ad_soyad,
-            email: yeniPatronUser.email,
-            telefon: yeniPatronUser.telefon,
-            rol: yeniPatronUser.rol,
-            durum: yeniPatronUser.durum,
-            aktivasyon_token: yeniPatronUser.aktivasyon_token,
-            token_gecerlilik: yeniPatronUser.token_gecerlilik,
-            olusturma_tarihi: yeniPatronUser.olusturma_tarihi,
-          }),
-        ]);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Supabase insert timeout')), 3000)
-        );
-        await Promise.race([insertPromise, timeoutPromise]);
+        const { error: fErr } = await supabase.from('firmalar').insert({
+          id: yeniFirma.id,
+          ad: yeniFirma.ad,
+          sehir: yeniFirma.sehir,
+          varsayilan_para_birimi: yeniFirma.varsayilanParaBirimi,
+          varsayilan_komisyon_yuzdesi: yeniFirma.varsayilanKomisyonYuzdesi,
+          aciklama: yeniFirma.aciklama,
+          is_demo: yeniFirma.isDemo,
+          onay_durumu: yeniFirma.onayDurumu,
+          paket: yeniFirma.paket,
+          sahip_adi: yeniFirma.sahipAdi,
+          sahip_email: yeniFirma.sahipEmail,
+          sahip_telefon: yeniFirma.sahipTelefon,
+          mensei_ulke: yeniFirma.menseiUlke,
+          rol_limitleri: yeniFirma.rolLimitleri,
+          aktif_kullanici_sayilari: yeniFirma.aktifKullaniciSayilari,
+        });
+        if (fErr) {
+          console.error('Supabase firmalar insert xətası:', fErr);
+        }
+
+        const { error: uErr } = await supabase.from('kullanicilar').insert({
+          id: yeniPatronUser.id,
+          tenant_id: yeniPatronUser.tenant_id,
+          ad_soyad: yeniPatronUser.ad_soyad,
+          email: yeniPatronUser.email,
+          telefon: yeniPatronUser.telefon,
+          rol: yeniPatronUser.rol,
+          durum: yeniPatronUser.durum,
+          aktivasyon_token: yeniPatronUser.aktivasyon_token,
+          token_gecerlilik: yeniPatronUser.token_gecerlilik,
+          olusturma_tarihi: yeniPatronUser.olusturma_tarihi,
+        });
+        if (uErr) {
+          console.error('Supabase kullanicilar insert xətası:', uErr);
+        }
       } catch (errDb) {
-        console.warn('Supabase firmalar/kullanicilar yazma xətası (yerli yaddaş aktivdir):', errDb);
+        console.error('Supabase qeydiyyat yazma xətası:', errDb);
       }
     }
 

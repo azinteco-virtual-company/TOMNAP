@@ -89,6 +89,42 @@ router.get('/auth/token-kontrol/:token', async (req, res) => {
           }
         }
 
+        // D. Butiklər cədvəlində yetim qalmış butik axtarışı (Avtomatik Bərpa)
+        if (!sbUser) {
+          const { data: pendingBoutiques } = await supabase
+            .from('firmalar')
+            .select('*')
+            .order('kayit_tarihi', { ascending: false })
+            .limit(5);
+
+          if (pendingBoutiques && pendingBoutiques.length > 0) {
+            for (const pb of pendingBoutiques) {
+              const { data: existU } = await supabase
+                .from('kullanicilar')
+                .select('id')
+                .eq('tenant_id', pb.id)
+                .maybeSingle();
+
+              if (!existU) {
+                sbUser = {
+                  id: 'usr_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4),
+                  tenant_id: pb.id,
+                  ad_soyad: pb.sahip_adi || 'Butik Patronu',
+                  email: pb.sahip_email || '',
+                  telefon: pb.sahip_telefon || '',
+                  rol: 'PATRON',
+                  durum: 'BEKLEMEDE_SIFRE',
+                  aktivasyon_token: cleanToken,
+                  token_gecerlilik: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                  olusturma_tarihi: pb.kayit_tarihi || new Date().toISOString(),
+                };
+                await supabase.from('kullanicilar').insert(sbUser);
+                break;
+              }
+            }
+          }
+        }
+
         if (sbUser) {
           // Butik adını da tap
           let butikAdi = '';
@@ -221,6 +257,57 @@ router.post('/auth/sifre-belirle', async (req, res) => {
             .limit(2);
           if (prefixUsers && prefixUsers.length === 1) {
             user = prefixUsers[0];
+          }
+        }
+
+        // D. Auto-Heal: Əgər hələ də tapılmadısa, firmalar cədvəlində yetim butik axtar
+        if (!user) {
+          let pendingFirma: any = null;
+          if (email) {
+            const { data: pf } = await supabase
+              .from('firmalar')
+              .select('*')
+              .eq('sahip_email', String(email).trim().toLowerCase())
+              .order('kayit_tarihi', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (pf) pendingFirma = pf;
+          }
+
+          if (!pendingFirma) {
+            const { data: pfList } = await supabase
+              .from('firmalar')
+              .select('*')
+              .order('kayit_tarihi', { ascending: false })
+              .limit(5);
+
+            for (const item of (pfList || [])) {
+              const { data: eu } = await supabase
+                .from('kullanicilar')
+                .select('id')
+                .eq('tenant_id', item.id)
+                .maybeSingle();
+              if (!eu) {
+                pendingFirma = item;
+                break;
+              }
+            }
+          }
+
+          if (pendingFirma) {
+            user = {
+              id: 'usr_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4),
+              tenant_id: pendingFirma.id,
+              ad_soyad: adSoyad || pendingFirma.sahip_adi || 'Butik Patronu',
+              email: pendingFirma.sahip_email || email || '',
+              telefon: telefon || pendingFirma.sahip_telefon || '',
+              rol: 'PATRON',
+              durum: 'BEKLEMEDE_SIFRE',
+              aktivasyon_token: cleanToken,
+              token_gecerlilik: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+              olusturma_tarihi: pendingFirma.kayit_tarihi || new Date().toISOString(),
+            };
+            await supabase.from('kullanicilar').insert(user);
           }
         }
       } catch (errDb) {
@@ -431,8 +518,8 @@ router.post('/auth/sifre-belirle', async (req, res) => {
 // POST /api/auth/giris — İdentifikator (E-poçt / Telefon) və Şifrə ilə Giriş
 router.post('/auth/giris', async (req, res) => {
   try {
-    const { identifikator, sifre } = req.body || {};
-    const girisMetni = String(identifikator || '').trim();
+    const { identifikator, email, kullaniciAdi, telefon, sifre } = req.body || {};
+    const girisMetni = String(identifikator || email || kullaniciAdi || telefon || '').trim();
     const sifreMetni = String(sifre || '').trim();
 
     if (!girisMetni) {
@@ -488,14 +575,60 @@ router.post('/auth/giris', async (req, res) => {
       return emailMatch || phoneMatch;
     });
 
-    // Supabase varsa axtar
+    // Supabase varsa etibarlı axtarış (Email, Telefon və ya Butik adı)
     if (!tapilanKullanici && supabase) {
       try {
-        const { data: sbUser } = await supabase
-          .from('kullanicilar')
-          .select('*')
-          .or(`email.ilike.${lower},telefon.ilike.%${reqDigits.slice(-7)}%`)
-          .maybeSingle();
+        let sbUser: any = null;
+
+        // A. Email ilə axtarış
+        if (lower.includes('@')) {
+          const { data } = await supabase
+            .from('kullanicilar')
+            .select('*')
+            .ilike('email', lower)
+            .maybeSingle();
+          if (data) sbUser = data;
+        }
+
+        // B. Telefon ilə axtarış
+        if (!sbUser && reqDigits.length >= 7) {
+          const { data } = await supabase
+            .from('kullanicilar')
+            .select('*')
+            .ilike('telefon', `%${reqDigits.slice(-7)}%`)
+            .maybeSingle();
+          if (data) sbUser = data;
+        }
+
+        // C. Ad Soyad ilə axtarış
+        if (!sbUser) {
+          const { data } = await supabase
+            .from('kullanicilar')
+            .select('*')
+            .ilike('ad_soyad', lower)
+            .maybeSingle();
+          if (data) sbUser = data;
+        }
+
+        // D. Butik Adı ilə axtarış (İstifadəçi butik adını yazıbsa, həmin butikin PATRON istifadəçisini tap)
+        if (!sbUser) {
+          const { data: matchedFirma } = await supabase
+            .from('firmalar')
+            .select('id')
+            .or(`ad.ilike.%${girisMetni}%,sahip_email.ilike.%${lower}%`)
+            .limit(1)
+            .maybeSingle();
+
+          if (matchedFirma) {
+            const { data: patronUser } = await supabase
+              .from('kullanicilar')
+              .select('*')
+              .eq('tenant_id', matchedFirma.id)
+              .eq('rol', 'PATRON')
+              .maybeSingle();
+            if (patronUser) sbUser = patronUser;
+          }
+        }
 
         if (sbUser) {
           tapilanKullanici = {
@@ -513,7 +646,9 @@ router.post('/auth/giris', async (req, res) => {
           };
           kullanicilarVeritabani.push(tapilanKullanici);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Supabase giris axtarış xətası:', e);
+      }
     }
 
     // Əgər istifadəçi tapıldısa
@@ -534,7 +669,15 @@ router.post('/auth/giris', async (req, res) => {
         });
       }
 
-      const firma = firmalarVeritabani.find((f) => f.id === tapilanKullanici?.tenant_id);
+      let firma = firmalarVeritabani.find((f) => f.id === tapilanKullanici?.tenant_id);
+      if (!firma && supabase && tapilanKullanici?.tenant_id) {
+        const { data: sbFirma } = await supabase
+          .from('firmalar')
+          .select('*')
+          .eq('id', tapilanKullanici.tenant_id)
+          .maybeSingle();
+        if (sbFirma) firma = sbFirma;
+      }
 
       return res.json({
         basarili: true,
