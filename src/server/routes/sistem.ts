@@ -13,7 +13,9 @@ router.get('/sistem-durum', async (req, res) => {
 
   if (supabase) {
     try {
-      const { count, error } = await supabase.from('siparisler').select('*', { count: 'exact', head: true });
+      const { count, error } = await supabase
+        .from('siparisler')
+        .select('*', { count: 'exact', head: true });
       if (error) {
         supabaseHata = error.message;
       } else {
@@ -29,7 +31,9 @@ router.get('/sistem-durum', async (req, res) => {
     basarili: true,
     supabase: {
       bagli: supabaseAktif,
-      url: SUPABASE_URL ? SUPABASE_URL.replace(/https:\/\/(.{4}).*(\.supabase\.co)/, 'https://$1***$2') : null,
+      url: SUPABASE_URL
+        ? SUPABASE_URL.replace(/https:\/\/(.{4}).*(\.supabase\.co)/, 'https://$1***$2')
+        : null,
       kayit_sayisi: kayitSayisi,
       hata: supabaseHata,
     },
@@ -51,46 +55,66 @@ router.get('/tenant/izolasyon-testi', async (req, res) => {
     // 1. Test: Siparişler Tablosu İzolasyonu
     let siparislerTest: any[] = [];
     if (supabase) {
-      const { data } = await supabase.from('siparisler').select('id, tenant_id, musteri_adi').eq('tenant_id', hedefTenant);
+      const { data } = await supabase
+        .from('siparisler')
+        .select('id, tenant_id, musteri_adi')
+        .eq('tenant_id', hedefTenant);
       if (data) siparislerTest = data;
     } else {
-      siparislerTest = siparislerVeritabani.filter((s: any) => (s.tenant_id || 'kanada_shopper_baku') === hedefTenant);
+      siparislerTest = siparislerVeritabani.filter(
+        (s: any) => (s.tenant_id || 'kanada_shopper_baku') === hedefTenant
+      );
     }
-    const siparisSizintilari = siparislerTest.filter((s: any) => (s.tenant_id || 'kanada_shopper_baku') !== hedefTenant);
+    const siparisSizintilari = siparislerTest.filter(
+      (s: any) => (s.tenant_id || 'kanada_shopper_baku') !== hedefTenant
+    );
     toplamSizinti += siparisSizintilari.length;
     testSonuclari.push({
       modul: 'Siparişler',
       toplam_kayit: siparislerTest.length,
       sizinti_sayisi: siparisSizintilari.length,
       durum: siparisSizintilari.length === 0 ? 'GECTI' : 'BASARISIZ',
-      aciklama: siparisSizintilari.length === 0
-        ? `Tüm ${siparislerTest.length} sipariş kesin olarak "${hedefTenant}" tenant'ına ait.`
-        : `UYARI: ${siparisSizintilari.length} sipariş başka tenant'a ait!`,
+      aciklama:
+        siparisSizintilari.length === 0
+          ? `Tüm ${siparislerTest.length} sipariş kesin olarak "${hedefTenant}" tenant'ına ait.`
+          : `UYARI: ${siparisSizintilari.length} sipariş başka tenant'a ait!`,
     });
 
     // 2. Test: Müşteriler (CRM) Tablosu İzolasyonu
     let musterilerTest: any[] = [];
     if (supabase) {
-      const { data } = await supabase.from('musteriler').select('id, tenant_id, ad_soyad').eq('tenant_id', hedefTenant);
+      const { data } = await supabase
+        .from('musteriler')
+        .select('id, tenant_id, ad_soyad')
+        .eq('tenant_id', hedefTenant);
       if (data) musterilerTest = data;
     } else {
-      musterilerTest = musterilerVeritabani.filter((m: any) => (m.tenant_id || 'kanada_shopper_baku') === hedefTenant);
+      musterilerTest = musterilerVeritabani.filter(
+        (m: any) => (m.tenant_id || 'kanada_shopper_baku') === hedefTenant
+      );
     }
-    const musteriSizintilari = musterilerTest.filter((m: any) => (m.tenant_id || 'kanada_shopper_baku') !== hedefTenant);
+    const musteriSizintilari = musterilerTest.filter(
+      (m: any) => (m.tenant_id || 'kanada_shopper_baku') !== hedefTenant
+    );
     toplamSizinti += musteriSizintilari.length;
     testSonuclari.push({
       modul: 'Müşteriler (CRM)',
       toplam_kayit: musterilerTest.length,
       sizinti_sayisi: musteriSizintilari.length,
       durum: musteriSizintilari.length === 0 ? 'GECTI' : 'BASARISIZ',
-      aciklama: musteriSizintilari.length === 0
-        ? `Tüm ${musterilerTest.length} müşteri kaydı kesin olarak "${hedefTenant}" tenant'ına ait.`
-        : `UYARI: ${musteriSizintilari.length} müşteri kaydı başka tenant'a ait!`,
+      aciklama:
+        musteriSizintilari.length === 0
+          ? `Tüm ${musterilerTest.length} müşteri kaydı kesin olarak "${hedefTenant}" tenant'ına ait.`
+          : `UYARI: ${musteriSizintilari.length} müşteri kaydı başka tenant'a ait!`,
     });
 
     // 3. Test: Gelen Kutusu (Inbox) İzolasyonu
-    const inboxTest = onayBekleyenler.filter((m: any) => (m.tenant_id || 'kanada_shopper_baku') === hedefTenant);
-    const inboxSizintilari = inboxTest.filter((m: any) => (m.tenant_id || 'kanada_shopper_baku') !== hedefTenant);
+    const inboxTest = onayBekleyenler.filter(
+      (m: any) => (m.tenant_id || 'kanada_shopper_baku') === hedefTenant
+    );
+    const inboxSizintilari = inboxTest.filter(
+      (m: any) => (m.tenant_id || 'kanada_shopper_baku') !== hedefTenant
+    );
     toplamSizinti += inboxSizintilari.length;
     testSonuclari.push({
       modul: 'Gelen Kutusu (Inbox)',
@@ -104,7 +128,10 @@ router.get('/tenant/izolasyon-testi', async (req, res) => {
     const hayaletTenantId = 'hayalet_tenant_' + Math.random().toString(36).substring(7);
     let hayaletSiparisler: any[] = [];
     if (supabase) {
-      const { data } = await supabase.from('siparisler').select('id').eq('tenant_id', hayaletTenantId);
+      const { data } = await supabase
+        .from('siparisler')
+        .select('id')
+        .eq('tenant_id', hayaletTenantId);
       if (data) hayaletSiparisler = data;
     } else {
       hayaletSiparisler = siparislerVeritabani.filter((s: any) => s.tenant_id === hayaletTenantId);
@@ -127,14 +154,17 @@ router.get('/tenant/izolasyon-testi', async (req, res) => {
       tenant_id: hedefTenant,
       tum_testler_gecti: toplamSizinti === 0,
       toplam_sizinti_sayisi: toplamSizinti,
-      guvenlik_derecesi: toplamSizinti === 0 ? '100% GÜVENLİ & İZOLE' : 'RİSKLİ',
+      guvenlik_derecesi: toplamSizinti === 0 ? 'FİLTRELİ SORGU TUTARLI' : 'RİSKLİ',
       sonuclar: testSonuclari,
-      ozet: toplamSizinti === 0
-        ? `"${hedefTenant}" butikinin tüm verileri veritabanı ve uygulama katmanında %100 izole edilmiştir. Hiçbir yabancı tenant verisi karışmamaktadır.`
-        : `DİKKAT: ${toplamSizinti} adet yabancı kayıt tespit edildi!`
+      ozet:
+        toplamSizinti === 0
+          ? `"${hedefTenant}" için filtreli sorgular tutarlı. Bu tanılama yetkisiz erişim veya RLS güvenliğini kanıtlamaz.`
+          : `DİKKAT: ${toplamSizinti} adet yabancı kayıt tespit edildi!`,
     });
   } catch (err: any) {
-    res.status(500).json({ basarili: false, hata: 'İzolasyon testi sırasında hata: ' + err.message });
+    res
+      .status(500)
+      .json({ basarili: false, hata: 'İzolasyon testi sırasında hata: ' + err.message });
   }
 });
 

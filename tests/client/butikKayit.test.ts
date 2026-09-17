@@ -69,14 +69,14 @@ describe('Boutique registration API result', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       Response.json({ basarili: true, firma }, { status: 503 })
     );
-    await expect(butikKaydet(bilgiler, hataMesaji)).rejects.toThrow(hataMesaji);
+    await expect(butikKaydet(bilgiler, hataMesaji)).rejects.toMatchObject({ status: 503 });
   });
 
   it('rejects a proxy error page and a malformed success response', async () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response('<html>Gateway Timeout</html>', { status: 504 }))
       .mockResolvedValueOnce(Response.json({ basarili: true, firma: { ad: 'Missing ID' } }));
-    await expect(butikKaydet(bilgiler, hataMesaji)).rejects.toThrow(hataMesaji);
+    await expect(butikKaydet(bilgiler, hataMesaji)).rejects.toMatchObject({ status: 504 });
     await expect(butikKaydet(bilgiler, hataMesaji)).rejects.toThrow(hataMesaji);
   });
 

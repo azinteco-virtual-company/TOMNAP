@@ -22,16 +22,16 @@ router.get('/veritabani/durum', async (req, res) => {
         hata = error.message;
       } else if (data) {
         supabaseBagli = true;
-        siparisler = data.map(s => formatlaSiparis(s));
+        siparisler = data.map((s) => formatlaSiparis(s));
       }
     }
     if (!supabaseBagli) {
-      siparisler = siparislerVeritabani.map(s => formatlaSiparis(s));
+      siparisler = siparislerVeritabani.map((s) => formatlaSiparis(s));
     }
 
     toplamKayit = siparisler.length;
-    demoKayitSayisi = siparisler.filter(s => s.is_demo !== false).length;
-    canliKayitSayisi = siparisler.filter(s => s.is_demo === false).length;
+    demoKayitSayisi = siparisler.filter((s) => s.is_demo !== false).length;
+    canliKayitSayisi = siparisler.filter((s) => s.is_demo === false).length;
 
     const firmaDagilimi: Record<string, number> = {};
     for (const s of siparisler) {
@@ -46,7 +46,7 @@ router.get('/veritabani/durum', async (req, res) => {
       toplam_siparis: toplamKayit,
       demo_siparis_sayisi: demoKayitSayisi,
       canli_siparis_sayisi: canliKayitSayisi,
-      rejim: toplamKayit === 0 ? 'TEMIZ_CANLI' : (demoKayitSayisi > 0 ? 'DEMO_MODU' : 'CANLI_MODU'),
+      rejim: toplamKayit === 0 ? 'TEMIZ_CANLI' : demoKayitSayisi > 0 ? 'DEMO_MODU' : 'CANLI_MODU',
       firma_dagilimi: firmaDagilimi,
       hata,
     });
@@ -82,7 +82,9 @@ router.post('/veritabani/temizle', async (req, res) => {
       const { data, error } = await deleteQuery.select('id');
       if (error) {
         console.error('Supabase temizleme hatası:', error.message);
-        return res.status(500).json({ basarili: false, hata: 'Supabase temizlenemedi: ' + error.message });
+        return res
+          .status(500)
+          .json({ basarili: false, hata: 'Supabase temizlenemedi: ' + error.message });
       }
       silinenAdet = data?.length || 0;
     }
@@ -92,7 +94,9 @@ router.post('/veritabani/temizle', async (req, res) => {
       setSiparislerVeritabani([]);
     } else {
       const oncekiSayi = siparislerVeritabani.length;
-      const filtrelenmis = siparislerVeritabani.filter(s => (s.tenant_id || 'kanada_shopper_baku') !== hedefTenant);
+      const filtrelenmis = siparislerVeritabani.filter(
+        (s) => (s.tenant_id || 'kanada_shopper_baku') !== hedefTenant
+      );
       silinenAdet = Math.max(silinenAdet, oncekiSayi - filtrelenmis.length);
       setSiparislerVeritabani(filtrelenmis);
     }
@@ -119,9 +123,11 @@ router.post('/veritabani/demo-yukle', async (req, res) => {
     if (supabase) {
       await supabase.from('siparisler').delete().eq('tenant_id', hedefTenant);
     }
-    const digerSiparisler = siparislerVeritabani.filter(s => (s.tenant_id || 'kanada_shopper_baku') !== hedefTenant);
+    const digerSiparisler = siparislerVeritabani.filter(
+      (s) => (s.tenant_id || 'kanada_shopper_baku') !== hedefTenant
+    );
 
-    const eklenecekler = BASLANGIC_SIPARISLER.map(s => ({
+    const eklenecekler = BASLANGIC_SIPARISLER.map((s) => ({
       ...s,
       tenant_id: hedefTenant,
       is_demo: true,
@@ -131,7 +137,7 @@ router.post('/veritabani/demo-yukle', async (req, res) => {
       const chunkSize = 30;
       for (let i = 0; i < eklenecekler.length; i += chunkSize) {
         const chunk = eklenecekler.slice(i, i + chunkSize);
-        const sbChunk = chunk.map(item => hazirlaSupabasePayload(item));
+        const sbChunk = chunk.map((item) => hazirlaSupabasePayload(item));
         const { error } = await supabase.from('siparisler').insert(sbChunk);
         if (error) {
           console.error(`Supabase batch ${i} yükleme hatası:`, error.message);
@@ -159,13 +165,18 @@ router.get('/veritabani/yedek-al', async (req, res) => {
   try {
     let siparisler: any[] = [];
     if (supabase) {
-      const { data } = await supabase.from('siparisler').select('*').order('olusturma_tarihi', { ascending: false });
-      if (data) {
-        siparisler = data.map(s => formatlaSiparis(s));
-      }
-    }
-    if (siparisler.length === 0) {
-      siparisler = siparislerVeritabani.map(s => formatlaSiparis(s));
+      let query = supabase
+        .from('siparisler')
+        .select('*')
+        .order('olusturma_tarihi', { ascending: false });
+      if (req.tenantId !== 'all') query = query.eq('tenant_id', req.tenantId);
+      const { data, error } = await query;
+      if (error) return res.status(503).json({ basarili: false, hata: 'Yedek verisi okunamadı.' });
+      siparisler = (data || []).map(formatlaSiparis);
+    } else {
+      siparisler = siparislerVeritabani
+        .filter((s) => req.tenantId === 'all' || s.tenant_id === req.tenantId)
+        .map(formatlaSiparis);
     }
 
     const yedekPaketi = {
@@ -177,7 +188,10 @@ router.get('/veritabani/yedek-al', async (req, res) => {
     };
 
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename=knb_backup_${new Date().toISOString().slice(0, 10)}.json`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=knb_backup_${new Date().toISOString().slice(0, 10)}.json`
+    );
     res.json(yedekPaketi);
   } catch (err: any) {
     res.status(500).json({ basarili: false, hata: 'Yedek oluşturulamadı: ' + err.message });
@@ -189,7 +203,9 @@ router.post('/veritabani/yedek-yukle', async (req, res) => {
   try {
     const { siparisler, temizleVeYukle = true } = req.body;
     if (!Array.isArray(siparisler) || siparisler.length === 0) {
-      return res.status(400).json({ basarili: false, hata: 'Geçerli bir sipariş listesi bulunamadı.' });
+      return res
+        .status(400)
+        .json({ basarili: false, hata: 'Geçerli bir sipariş listesi bulunamadı.' });
     }
 
     if (temizleVeYukle) {
@@ -203,14 +219,16 @@ router.post('/veritabani/yedek-yukle', async (req, res) => {
       const chunkSize = 25;
       for (let i = 0; i < siparisler.length; i += chunkSize) {
         const chunk = siparisler.slice(i, i + chunkSize);
-        const sbChunk = chunk.map(s => hazirlaSupabasePayload(s));
+        const sbChunk = chunk.map((s) => hazirlaSupabasePayload(s));
         const { error } = await supabase.from('siparisler').insert(sbChunk);
         if (error) console.error('Yedek yükleme chunk hatası:', error.message);
       }
     }
 
-    const formatlanmis = siparisler.map(s => formatlaSiparis(s));
-    setSiparislerVeritabani(temizleVeYukle ? [...formatlanmis] : [...formatlanmis, ...siparislerVeritabani]);
+    const formatlanmis = siparisler.map((s) => formatlaSiparis(s));
+    setSiparislerVeritabani(
+      temizleVeYukle ? [...formatlanmis] : [...formatlanmis, ...siparislerVeritabani]
+    );
 
     res.json({
       basarili: true,

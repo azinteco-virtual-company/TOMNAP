@@ -18,15 +18,20 @@ const router = Router();
 router.get('/firmalar', async (req, res) => {
   const sayilar: Record<string, number> = {};
   for (const s of siparislerVeritabani) {
-    const tid = s.tenant_id || 'kanada_shopper_baku';
+    const tid = s.tenant_id;
+    if (!tid || (req.tenantId !== 'all' && tid !== req.tenantId)) continue;
     sayilar[tid] = (sayilar[tid] || 0) + 1;
   }
 
   // Supabase-dən oxumağa cəhd et, cədvəl yoxdursa yerli fayl/yaddaşa keç
   if (supabase) {
     try {
-      const { data, error } = await supabase.from('firmalar').select('*');
-      if (!error && data && data.length > 0) {
+      let query = supabase.from('firmalar').select('*');
+      if (req.auth?.role !== 'SUPER_ADMIN') query = query.eq('id', req.tenantId);
+      const { data, error } = await query;
+      if (error)
+        return res.status(503).json({ basarili: false, hata: 'Firma bilgileri okunamadı.' });
+      if (data) {
         const sbFirmalar: FirmaTenantItem[] = data.map((d: any) => ({
           id: d.id,
           ad: d.ad,
@@ -65,14 +70,16 @@ router.get('/firmalar', async (req, res) => {
         });
       }
     } catch (sbErr) {
-      // Supabase cədvəli hələ yaradılmayıbsa gracefully yaddaş bazasından qaytar
+      return res.status(503).json({ basarili: false, hata: 'Firma bilgileri okunamadı.' });
     }
   }
 
   res.json({
     basarili: true,
     kaynak: 'bellek',
-    firmalar: firmalarVeritabani,
+    firmalar: firmalarVeritabani.filter(
+      (f) => req.auth?.role === 'SUPER_ADMIN' || f.id === req.tenantId
+    ),
     siparis_sayilari: sayilar,
   });
 });
@@ -101,12 +108,10 @@ router.post('/firmalar/kayit', async (req, res) => {
     }
 
     if (IS_PRODUCTION && !RESEND_API_KEY) {
-      return res
-        .status(503)
-        .json({
-          basarili: false,
-          hata: 'Aktivasiya məktubu xidməti hazır deyil. Daha sonra yenidən cəhd edin.',
-        });
+      return res.status(503).json({
+        basarili: false,
+        hata: 'Aktivasiya məktubu xidməti hazır deyil. Daha sonra yenidən cəhd edin.',
+      });
     }
 
     getApplicationUrl();
@@ -219,12 +224,10 @@ router.post('/firmalar/kayit', async (req, res) => {
           aktif_kullanici_sayilari: yeniFirma.aktifKullaniciSayilari,
         });
         if (fErr) {
-          return res
-            .status(503)
-            .json({
-              basarili: false,
-              hata: 'Qeydiyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
-            });
+          return res.status(503).json({
+            basarili: false,
+            hata: 'Qeydiyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
+          });
         }
 
         const { error: uErr } = await supabase.from('kullanicilar').insert({
@@ -240,20 +243,16 @@ router.post('/firmalar/kayit', async (req, res) => {
           olusturma_tarihi: yeniPatronUser.olusturma_tarihi,
         });
         if (uErr) {
-          return res
-            .status(503)
-            .json({
-              basarili: false,
-              hata: 'İstifadəçi qeydi saxlanılmadı. Dəstək xidməti ilə əlaqə saxlayın.',
-            });
+          return res.status(503).json({
+            basarili: false,
+            hata: 'İstifadəçi qeydi saxlanılmadı. Dəstək xidməti ilə əlaqə saxlayın.',
+          });
         }
       } catch (errDb) {
-        return res
-          .status(503)
-          .json({
-            basarili: false,
-            hata: 'Qeydiyyat xidməti əlçatan deyil. Daha sonra yenidən cəhd edin.',
-          });
+        return res.status(503).json({
+          basarili: false,
+          hata: 'Qeydiyyat xidməti əlçatan deyil. Daha sonra yenidən cəhd edin.',
+        });
       }
     }
 
@@ -289,32 +288,59 @@ router.patch('/firmalar/:id/onay', async (req, res) => {
   const { id } = req.params;
   const { onayDurumu } = req.body; // 'AKTIF' | 'REDDEDILDI' | 'BEKLEMEDE'
 
-  const firma = firmalarVeritabani.find((f) => f.id === id);
-  if (!firma) {
-    return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
+  if (!['AKTIF', 'REDDEDILDI', 'BEKLEMEDE', 'DONDURULMUS'].includes(onayDurumu))
+    return res.status(400).json({ basarili: false, hata: 'Geçersiz firma durumu.' });
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('firmalar')
+        .update({ onay_durumu: onayDurumu })
+        .eq('id', id)
+        .select('id,ad,onay_durumu')
+        .maybeSingle();
+      if (error)
+        return res.status(503).json({ basarili: false, hata: 'Firma durumu kaydedilemedi.' });
+      if (!data) return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
+      const local = firmalarVeritabani.find((f) => f.id === id);
+      if (local) local.onayDurumu = onayDurumu;
+      return res.json({
+        basarili: true,
+        firma: { ...data, onayDurumu },
+        mesaj: 'Firma durumu güncellendi.',
+      });
+    }
+    const firma = firmalarVeritabani.find((f) => f.id === id);
+    if (!firma) return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
+    firma.onayDurumu = onayDurumu;
+    firmalariKaydetDosyaya(firmalarVeritabani);
+    return res.json({ basarili: true, firma, mesaj: 'Firma durumu güncellendi.' });
+  } catch {
+    return res.status(503).json({ basarili: false, hata: 'Firma durumu kaydedilemedi.' });
   }
-
-  firma.onayDurumu = onayDurumu || 'AKTIF';
-  firmalariKaydetDosyaya(firmalarVeritabani);
-
-  if (supabase) {
-    try {
-      await supabase.from('firmalar').update({ onay_durumu: firma.onayDurumu }).eq('id', id);
-    } catch (errDb) {}
-  }
-
-  res.json({
-    basarili: true,
-    mesaj: `"${firma.ad}" butikinin statusu "${firma.onayDurumu}" olaraq yeniləndi.`,
-    firma,
-  });
 });
 
 // POST /api/firmalar/davet-olustur — Rol Üzrə Komanda Dəvət Linki Yaratma
 router.post('/firmalar/davet-olustur', async (req, res) => {
   try {
     const { tenantId, rol, olusturanKisi = 'Butik Patronu', email, adSoyad } = req.body;
-    const firma = firmalarVeritabani.find((f) => f.id === tenantId);
+    let firma = firmalarVeritabani.find((f) => f.id === tenantId);
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('firmalar')
+        .select('*')
+        .eq('id', tenantId)
+        .maybeSingle();
+      if (error)
+        return res.status(503).json({ basarili: false, hata: 'Firma bilgileri okunamadı.' });
+      firma = data
+        ? {
+            ...data,
+            onayDurumu: data.onay_durumu,
+            rolLimitleri: data.rol_limitleri,
+            aktifKullaniciSayilari: data.aktif_kullanici_sayilari,
+          }
+        : undefined;
+    }
     if (!firma) {
       return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
     }
@@ -324,6 +350,9 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
     ) {
       return res.status(400).json({ basarili: false, hata: 'Etibarsız komanda rolu.' });
     }
+
+    if (firma.onayDurumu && firma.onayDurumu !== 'AKTIF')
+      return res.status(403).json({ basarili: false, hata: 'Firma aktif değil.' });
 
     // Limit yoxlanışı
     const limit = (firma.rolLimitleri as any)?.[rol] ?? 5;
@@ -361,7 +390,7 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
             token: davet.token,
             firma_id: davet.tenantId,
             rol: davet.rol,
-            olusturan_rol: davet.olusturanKisi,
+            olusturan_rol: req.auth?.role || 'PATRON',
             durum: 'AKTIF',
             son_kullanma_tarihi: davet.gecerlilikTarihi,
           })
@@ -416,7 +445,7 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
 });
 
 // POST /api/firmalar — Yeni Butik / Firma Ekle (Mövcud Admin endpointi)
-router.post('/firmalar', (req, res) => {
+router.post('/firmalar', async (req, res) => {
   try {
     const {
       ad,
@@ -469,6 +498,27 @@ router.post('/firmalar', (req, res) => {
       },
     };
 
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('firmalar')
+        .insert({
+          id: yeniFirma.id,
+          ad: yeniFirma.ad,
+          sehir: yeniFirma.sehir,
+          varsayilan_para_birimi: yeniFirma.varsayilanParaBirimi,
+          varsayilan_komisyon_yuzdesi: yeniFirma.varsayilanKomisyonYuzdesi,
+          aciklama: yeniFirma.aciklama,
+          is_demo: false,
+          onay_durumu: 'AKTIF',
+          paket: yeniFirma.paket,
+          rol_limitleri: yeniFirma.rolLimitleri,
+          aktif_kullanici_sayilari: yeniFirma.aktifKullaniciSayilari,
+        })
+        .select('id')
+        .maybeSingle();
+      if (error || !data)
+        return res.status(503).json({ basarili: false, hata: 'Firma kaydedilemedi.' });
+    }
     firmalarVeritabani.push(yeniFirma);
     firmalariKaydetDosyaya(firmalarVeritabani);
 
@@ -483,18 +533,30 @@ router.post('/firmalar', (req, res) => {
 });
 
 // DELETE /api/firmalar/:id — Butik Sil
-router.delete('/firmalar/:id', (req, res) => {
+router.delete('/firmalar/:id', async (req, res) => {
   const { id } = req.params;
-  const index = firmalarVeritabani.findIndex((f) => f.id === id);
-  if (index === -1) {
-    return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
-  }
-  if (id === 'kanada_shopper_baku') {
+  if (id === 'kanada_shopper_baku')
     return res.status(400).json({ basarili: false, hata: 'Əsas canlı butik silinə bilməz.' });
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('firmalar')
+        .delete()
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+      if (error) return res.status(503).json({ basarili: false, hata: 'Firma silinemedi.' });
+      if (!data) return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
+    }
+    const index = firmalarVeritabani.findIndex((f) => f.id === id);
+    if (!supabase && index === -1)
+      return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
+    if (index !== -1) firmalarVeritabani.splice(index, 1);
+    firmalariKaydetDosyaya(firmalarVeritabani);
+    res.json({ basarili: true, mesaj: 'Butik uğurla silindi.' });
+  } catch {
+    res.status(503).json({ basarili: false, hata: 'Firma silinemedi.' });
   }
-  firmalarVeritabani.splice(index, 1);
-  firmalariKaydetDosyaya(firmalarVeritabani);
-  res.json({ basarili: true, mesaj: 'Butik uğurla silindi.' });
 });
 
 export default router;

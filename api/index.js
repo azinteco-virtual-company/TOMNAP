@@ -11,498 +11,31 @@ var PORT = Number(process.env.PORT) || 3e3;
 var NODE_ENV = process.env.NODE_ENV || "development";
 var IS_PRODUCTION = NODE_ENV === "production";
 var SUPABASE_URL = process.env.SUPABASE_URL || "";
-var SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
+var SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 var GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 var API_SECRET_KEY = process.env.API_SECRET_KEY || "";
 var CORS_ORIGIN = process.env.CORS_ORIGIN || "";
-var UPLOADS_DIR = process.env.UPLOADS_DIR || (process.env.NODE_ENV === "production" ? path.join(process.cwd(), "uploads") : path.join(process.cwd(), "public", "uploads"));
 var DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
+var UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(DATA_DIR, "uploads");
 var FIRMALAR_DOSYA_YOLU = path.join(DATA_DIR, "firmalar.json");
 var KULLANICILAR_DOSYA_YOLU = path.join(DATA_DIR, "kullanicilar.json");
 var RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 var EMAIL_FROM = process.env.EMAIL_FROM || "TOMNAP Platform <onboarding@resend.dev>";
 var APP_URL = process.env.APP_URL || (IS_PRODUCTION ? "https://tomnap.com" : `http://localhost:${PORT}`);
+if (SUPABASE_URL && !SUPABASE_KEY)
+  throw new Error("SUPABASE_SERVICE_ROLE_KEY gerekli; anonim anahtar sunucuda kullan\u0131lamaz.");
 
 // src/server/middleware/auth.ts
-import crypto from "crypto";
-var HERKESE_ACIK_ENDPOINTLER = [
-  "/api/sistem-durum",
-  "/sistem-durum",
-  "/api/sistem",
-  "/sistem",
-  "/api/health",
-  "/health",
-  "/api/ping",
-  "/ping",
-  "/api/firmalar",
-  "/firmalar",
-  "/api/tenant",
-  "/tenant",
-  "/api/kargo",
-  "/kargo",
-  "/api/demo",
-  "/demo",
-  "/api/auth",
-  "/auth",
-  "/api/ayristir-siparis",
-  "/ayristir-siparis",
-  "/api/gorselden-urun-ara",
-  "/gorselden-urun-ara",
-  "/api/urun-katalog-gorseli-ara",
-  "/urun-katalog-gorseli-ara",
-  "/api/katalog-gorseli-kaydet",
-  "/katalog-gorseli-kaydet",
-  "/api/urun-orijinal-gorsele-don",
-  "/urun-orijinal-gorsele-don",
-  "/api/upload-gorsel",
-  "/upload-gorsel",
-  "/api/proxy-gorsel",
-  "/proxy-gorsel"
-];
-var MUAF_METODLAR = /* @__PURE__ */ new Set(["OPTIONS"]);
-function apiKeyAuth() {
-  const apiSecretKey = process.env.API_SECRET_KEY;
-  const isProduction = process.env.NODE_ENV === "production";
-  if (!apiSecretKey) {
-    if (isProduction) {
-      console.warn("\u26A0\uFE0F  UYARI: API_SECRET_KEY t\u0259yin edilm\u0259yib. \u018Fsas ictimai v\u0259 demo API ax\u0131nlar\u0131 davam edir.");
-    } else {
-      console.warn("\u26A0\uFE0F  UYARI: API_SECRET_KEY tan\u0131ml\u0131 de\u011Fil. Geli\u015Ftirme ortam\u0131nda kimlik do\u011Frulama atlan\u0131yor.");
-    }
-  }
-  return (req, res, next) => {
-    if (MUAF_METODLAR.has(req.method)) {
-      next();
-      return;
-    }
-    const currentPath = req.path || "";
-    const currentUrl = req.originalUrl || "";
-    if (HERKESE_ACIK_ENDPOINTLER.some(
-      (ep) => currentPath === ep || currentPath.startsWith(ep + "/") || currentUrl === ep || currentUrl.startsWith(ep + "/") || currentUrl.startsWith(ep + "?")
-    )) {
-      next();
-      return;
-    }
-    if (!currentPath.startsWith("/api/") && !currentUrl.startsWith("/api/")) {
-      next();
-      return;
-    }
-    const gonderilen = extractApiKey(req);
-    if (gonderilen && apiSecretKey) {
-      if (timingSafeEqual(gonderilen, apiSecretKey)) {
-        next();
-        return;
-      }
-      res.status(401).json({
-        basarili: false,
-        hata: "Ge\xE7ersiz API anahtar\u0131. L\xFCtfen do\u011Fru anahtar\u0131 kullan\u0131n."
-      });
-      return;
-    }
-    const secFetchSite = req.headers["sec-fetch-site"];
-    const origin = req.headers["origin"] || "";
-    const referer = req.headers["referer"] || "";
-    const host = req.headers["host"] || "";
-    const isSameOrigin = secFetchSite === "same-origin" || secFetchSite === "same-site" || host && origin && origin.includes(host) || host && referer && referer.includes(host) || origin && (origin.includes("tomnap.com") || origin.includes("vercel.app") || origin.includes("localhost")) || referer && (referer.includes("tomnap.com") || referer.includes("vercel.app") || referer.includes("localhost"));
-    if (isSameOrigin) {
-      next();
-      return;
-    }
-    if (!apiSecretKey) {
-      if (isProduction) {
-        res.status(503).json({
-          basarili: false,
-          hata: "Sunucu kimlik do\u011Frulama yap\u0131land\u0131rmas\u0131 eksik. Y\xF6netici ile ileti\u015Fime ge\xE7in."
-        });
-        return;
-      }
-      next();
-      return;
-    }
-    res.status(401).json({
-      basarili: false,
-      hata: "Kimlik do\u011Frulama gerekli. \u0130stek ba\u015Fl\u0131\u011F\u0131na x-api-key ekleyin veya ?api_key= parametresi kullan\u0131n."
-    });
-  };
-}
-function extractApiKey(req) {
-  const headerKey = req.headers["x-api-key"];
-  if (typeof headerKey === "string" && headerKey.trim()) {
-    return headerKey.trim();
-  }
-  const authHeader = req.headers["authorization"];
-  if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice(7).trim();
-    if (token) return token;
-  }
-  const queryKey = req.query.api_key;
-  if (typeof queryKey === "string" && queryKey.trim()) {
-    return queryKey.trim();
-  }
-  return null;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) {
-    const dummyBuffer = Buffer.alloc(Math.max(a.length, b.length));
-    const aBuffer = Buffer.from(a.padEnd(dummyBuffer.length));
-    const bBuffer = Buffer.from(b.padEnd(dummyBuffer.length));
-    try {
-      return crypto.timingSafeEqual(aBuffer, bBuffer) && a.length === b.length;
-    } catch {
-      return false;
-    }
-  }
-  try {
-    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-  } catch {
-    return a === b;
-  }
-}
+import { timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 
-// src/server/middleware/rateLimiter.ts
-import rateLimit from "express-rate-limit";
-var genelApiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1e3,
-  // 15 dakika
-  max: 150,
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false },
-  message: {
-    basarili: false,
-    hata: "Bu IP adresinden \xE7ok fazla istek g\xF6nderildi. L\xFCtfen 15 dakika sonra tekrar deneyin."
-  }
-});
-var aiEndpointLimiter = rateLimit({
-  windowMs: 60 * 1e3,
-  // 1 dakika
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false },
-  message: {
-    basarili: false,
-    hata: "Yapay zeka i\u015Flem kotas\u0131 a\u015F\u0131ld\u0131. L\xFCtfen 1 dakika sonra tekrar deneyin."
-  }
-});
-var veritabaniYonetimLimiter = rateLimit({
-  windowMs: 60 * 1e3,
-  // 1 dakika
-  max: 3,
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false },
-  message: {
-    basarili: false,
-    hata: "Veritaban\u0131 y\xF6netim i\u015Flem limiti a\u015F\u0131ld\u0131. L\xFCtfen biraz bekleyin."
-  }
-});
-
-// src/server/middleware/security.ts
-import path2 from "path";
-import { URL as URL2 } from "url";
-import { BlockList, isIP } from "node:net";
-function sanitizeDosyaAdi(dosyaAdi) {
-  if (!dosyaAdi || typeof dosyaAdi !== "string") {
-    return `dosya_${Date.now()}`;
-  }
-  const normalized = dosyaAdi.replace(/\\/g, "/");
-  let temiz = path2.posix.basename(normalized);
-  temiz = temiz.replace(/\0/g, "");
-  temiz = temiz.replace(/[^a-zA-Z0-9_.-]/g, "_");
-  temiz = temiz.replace(/\.{2,}/g, ".");
-  temiz = temiz.replace(/^\.+/, "");
-  if (!temiz || temiz === ".") {
-    temiz = `dosya_${Date.now()}`;
-  }
-  return temiz;
-}
-function yolGuvenlimi(dosyaYolu, izinliDizin) {
-  if (!dosyaYolu || !izinliDizin || typeof dosyaYolu !== "string" || typeof izinliDizin !== "string") {
-    return false;
-  }
-  const pNorm = dosyaYolu.replace(/\\/g, "/");
-  const dNorm = izinliDizin.replace(/\\/g, "/");
-  const normalizedPath = path2.resolve(pNorm);
-  const normalizedDir = path2.resolve(dNorm);
-  const sep = path2.sep;
-  const dirPrefix = normalizedDir.endsWith(sep) ? normalizedDir : normalizedDir + sep;
-  return normalizedPath === normalizedDir || normalizedPath.startsWith(dirPrefix);
-}
-var blockedIpv4 = new BlockList();
-for (const [address, prefix] of [
-  ["0.0.0.0", 8],
-  ["10.0.0.0", 8],
-  ["100.64.0.0", 10],
-  ["127.0.0.0", 8],
-  ["169.254.0.0", 16],
-  ["172.16.0.0", 12],
-  ["192.0.0.0", 24],
-  ["192.0.2.0", 24],
-  ["192.88.99.0", 24],
-  ["192.168.0.0", 16],
-  ["198.18.0.0", 15],
-  ["198.51.100.0", 24],
-  ["203.0.113.0", 24],
-  ["224.0.0.0", 4],
-  ["240.0.0.0", 4]
-]) {
-  blockedIpv4.addSubnet(address, prefix, "ipv4");
-}
-var globalIpv6 = new BlockList();
-globalIpv6.addSubnet("2000::", 3, "ipv6");
-var blockedIpv6 = new BlockList();
-for (const [address, prefix] of [
-  ["2001::", 23],
-  ["2001:db8::", 32],
-  ["2002::", 16],
-  ["3fff::", 20]
-]) {
-  blockedIpv6.addSubnet(address, prefix, "ipv6");
-}
-function genelIpAdresiMi(address) {
-  const family = isIP(address);
-  if (family === 4) return !blockedIpv4.check(address, "ipv4");
-  if (family === 6) return globalIpv6.check(address, "ipv6") && !blockedIpv6.check(address, "ipv6");
-  return false;
-}
-var ENGELLI_HOSTLAR = /* @__PURE__ */ new Set([
-  "localhost",
-  "0.0.0.0",
-  "metadata.google.internal",
-  "metadata.google",
-  "metadata",
-  "instance-data"
-]);
-function urlGuvenlimi(url) {
-  if (!url || typeof url !== "string") {
-    return { guvenli: false, sebep: "Ge\xE7ersiz URL" };
-  }
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    return { guvenli: false, sebep: "Yaln\u0131zca http:// ve https:// protokolleri desteklenir." };
-  }
-  let parsed;
-  try {
-    parsed = new URL2(url);
-  } catch {
-    return { guvenli: false, sebep: "Ge\xE7ersiz URL format\u0131." };
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return { guvenli: false, sebep: `Desteklenmeyen protokol: ${parsed.protocol}` };
-  }
-  if (parsed.username || parsed.password) {
-    return { guvenli: false, sebep: "URL i\xE7inde kullan\u0131c\u0131 bilgisi desteklenmez." };
-  }
-  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
-  if (ENGELLI_HOSTLAR.has(hostname) || hostname.endsWith(".localhost") || !isIP(hostname) && !hostname.includes(".")) {
-    return { guvenli: false, sebep: `Engellenen sunucu adresi: ${hostname}` };
-  }
-  if (isIP(hostname) && !genelIpAdresiMi(hostname)) {
-    return { guvenli: false, sebep: `Dahili/\xF6zel a\u011F adresleri engellenmi\u015Ftir: ${hostname}` };
-  }
-  const port = parsed.port ? parseInt(parsed.port) : parsed.protocol === "https:" ? 443 : 80;
-  if (port !== 80 && port !== 443 && port !== 8080 && port !== 8443 && port !== 3e3) {
-    return { guvenli: false, sebep: `Standart d\u0131\u015F\u0131 port engellenmi\u015Ftir: ${port}` };
-  }
-  return { guvenli: true };
-}
-function corsMiddleware() {
-  const corsOrigin = process.env.CORS_ORIGIN || "*";
-  const izinliOriginler = corsOrigin === "*" ? null : corsOrigin.split(",").map((o) => o.trim());
-  return (req, res, next) => {
-    const origin = req.headers.origin;
-    if (izinliOriginler === null) {
-      if (origin) {
-        res.header("Access-Control-Allow-Origin", origin);
-        res.header("Access-Control-Allow-Credentials", "true");
-      } else {
-        res.header("Access-Control-Allow-Origin", "*");
-      }
-    } else if (origin && izinliOriginler.includes(origin)) {
-      res.header("Access-Control-Allow-Origin", origin);
-      res.header("Access-Control-Allow-Credentials", "true");
-    } else if (!origin) {
-      res.header("Access-Control-Allow-Origin", izinliOriginler[0] || "*");
-    }
-    res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key");
-    res.header("Access-Control-Max-Age", "86400");
-    if (req.method === "OPTIONS") {
-      res.status(204).end();
-      return;
-    }
-    next();
-  };
-}
-
-// src/server/middleware/errorHandler.ts
-function errorHandler(err, req, res, next) {
-  if (req.path.startsWith("/api/")) {
-    console.error("Express API Hatas\u0131:", err);
-    return res.status(err.status || 500).json({
-      basarili: false,
-      hata: err.type === "entity.too.large" ? "Y\xFCklenen g\xF6rsel boyutu sunucu s\u0131n\u0131r\u0131n\u0131 a\u015Ft\u0131. L\xFCtfen g\xF6rseli k\u0131rp\u0131n veya k\xFC\xE7\xFClt\xFCn." : err.message || "Sunucu i\u015Flemi s\u0131ras\u0131nda bir hata olu\u015Ftu."
-    });
-  }
-  next(err);
-}
-
-// src/server/logger.ts
-var LOG_LEVELS = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3
-};
-var CURRENT_LOG_LEVEL = process.env.LOG_LEVEL?.toLowerCase() || (IS_PRODUCTION ? "info" : "debug");
-function shouldLog(level) {
-  return LOG_LEVELS[level] >= LOG_LEVELS[CURRENT_LOG_LEVEL];
-}
-function formatTimestamp() {
-  return (/* @__PURE__ */ new Date()).toISOString();
-}
-var COLORS = {
-  reset: "\x1B[0m",
-  dim: "\x1B[2m",
-  cyan: "\x1B[36m",
-  green: "\x1B[32m",
-  yellow: "\x1B[33m",
-  red: "\x1B[31m",
-  magenta: "\x1B[35m"
-};
-var logger = {
-  debug(message, meta) {
-    if (!shouldLog("debug")) return;
-    if (IS_PRODUCTION) {
-      console.log(
-        JSON.stringify({ timestamp: formatTimestamp(), level: "DEBUG", message, ...meta })
-      );
-    } else {
-      console.log(
-        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.cyan}[DEBUG]${COLORS.reset} ${message}`,
-        meta ? meta : ""
-      );
-    }
-  },
-  info(message, meta) {
-    if (!shouldLog("info")) return;
-    if (IS_PRODUCTION) {
-      console.log(
-        JSON.stringify({ timestamp: formatTimestamp(), level: "INFO", message, ...meta })
-      );
-    } else {
-      console.log(
-        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.green}[INFO]${COLORS.reset}  ${message}`,
-        meta ? meta : ""
-      );
-    }
-  },
-  warn(message, meta) {
-    if (!shouldLog("warn")) return;
-    if (IS_PRODUCTION) {
-      console.warn(
-        JSON.stringify({ timestamp: formatTimestamp(), level: "WARN", message, ...meta })
-      );
-    } else {
-      console.warn(
-        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.yellow}[WARN]${COLORS.reset}  ${message}`,
-        meta ? meta : ""
-      );
-    }
-  },
-  error(message, error, meta) {
-    if (!shouldLog("error")) return;
-    const errObj = error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error ? { error } : {};
-    if (IS_PRODUCTION) {
-      console.error(
-        JSON.stringify({
-          timestamp: formatTimestamp(),
-          level: "ERROR",
-          message,
-          ...errObj,
-          ...meta
-        })
-      );
-    } else {
-      console.error(
-        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.red}[ERROR]${COLORS.reset} ${message}`,
-        error ? error : "",
-        meta ? meta : ""
-      );
-    }
-  }
-};
-function requestLogger(req, res, next) {
-  if (req.path.startsWith("/@") || req.path.startsWith("/src/") || req.path.startsWith("/node_modules/") || req.path.match(/\.(js|css|png|jpg|svg|ico|woff2?)$/)) {
-    return next();
-  }
-  const start = Date.now();
-  const { method, originalUrl, ip } = req;
-  const safeUrl = originalUrl.split("?")[0].replace(/(\/auth\/token-kontrol\/)[^/]+/i, "$1[REDACTED]").replace(/(\/firmalar\/davet\/)[^/]+/i, "$1[REDACTED]");
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    const statusCode = res.statusCode;
-    if (originalUrl.startsWith("/api")) {
-      const meta = { method, url: safeUrl, statusCode, durationMs: duration, ip };
-      if (statusCode >= 500) {
-        logger.error(`HTTP ${method} ${safeUrl} ${statusCode} - ${duration}ms`, void 0, meta);
-      } else if (statusCode >= 400) {
-        logger.warn(`HTTP ${method} ${safeUrl} ${statusCode} - ${duration}ms`, meta);
-      } else {
-        logger.info(`HTTP ${method} ${safeUrl} ${statusCode} - ${duration}ms`, meta);
-      }
-    }
-  });
-  next();
-}
-
-// src/server/routes/sistem.ts
-import { Router } from "express";
-
-// src/server/services/supabase.ts
-import { createClient } from "@supabase/supabase-js";
-if (typeof globalThis.WebSocket === "undefined") {
-  globalThis.WebSocket = class FallbackWebSocket {
-    constructor() {
-      this.readyState = 3;
-    }
-    static {
-      this.CONNECTING = 0;
-    }
-    static {
-      this.OPEN = 1;
-    }
-    static {
-      this.CLOSING = 2;
-    }
-    static {
-      this.CLOSED = 3;
-    }
-    addEventListener() {
-    }
-    removeEventListener() {
-    }
-    send() {
-    }
-    close() {
-    }
-  };
-}
-var supabase = null;
-if (SUPABASE_URL && SUPABASE_KEY) {
-  try {
-    supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: { persistSession: false }
-    });
-    console.log("\u2705 Supabase canl\u0131 PostgreSQL veritaban\u0131 ba\u011Fland\u0131:", SUPABASE_URL);
-  } catch (err) {
-    console.error("\u274C Supabase ba\u011Flant\u0131 hatas\u0131:", err);
-  }
-}
+// src/server/services/sessions.ts
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import fs2 from "node:fs";
+import path3 from "node:path";
 
 // src/server/services/state.ts
 import fs from "fs";
-import path3 from "path";
+import path2 from "path";
 
 // src/data/ornek-siparisler.ts
 var BASLANGIC_SIPARISLER = [
@@ -3947,9 +3480,6 @@ var GOLDEN_DEMO_SIPARISLER = JSON.parse(JSON.stringify(BASLANGIC_SIPARISLER)).ma
   is_demo: true
 }));
 var demoSiparislerVeritabani = JSON.parse(JSON.stringify(GOLDEN_DEMO_SIPARISLER));
-function setDemoSiparislerVeritabani(yeniListe) {
-  demoSiparislerVeritabani = yeniListe;
-}
 function sifirlaDemoVeritabani() {
   demoSiparislerVeritabani = JSON.parse(JSON.stringify(GOLDEN_DEMO_SIPARISLER));
   return demoSiparislerVeritabani.length;
@@ -4074,7 +3604,7 @@ function firmalariYukleDosyadan() {
 }
 function firmalariKaydetDosyaya(firmalar) {
   try {
-    const dir = path3.dirname(FIRMALAR_DOSYA_YOLU);
+    const dir = path2.dirname(FIRMALAR_DOSYA_YOLU);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -4100,7 +3630,7 @@ function kullanicilariYukleDosyadan() {
 }
 function kullanicilariKaydetDosyaya(kullanicilar) {
   try {
-    const dir = path3.dirname(KULLANICILAR_DOSYA_YOLU);
+    const dir = path2.dirname(KULLANICILAR_DOSYA_YOLU);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -4181,7 +3711,662 @@ Sat\u0131c\u0131: \xC7ox sa\u011F olun Leyla xan\u0131m, sifari\u015Finiz q\u025
   }
 ];
 
+// src/server/services/supabase.ts
+import { createClient } from "@supabase/supabase-js";
+if (typeof globalThis.WebSocket === "undefined") {
+  globalThis.WebSocket = class FallbackWebSocket {
+    constructor() {
+      this.readyState = 3;
+    }
+    static {
+      this.CONNECTING = 0;
+    }
+    static {
+      this.OPEN = 1;
+    }
+    static {
+      this.CLOSING = 2;
+    }
+    static {
+      this.CLOSED = 3;
+    }
+    addEventListener() {
+    }
+    removeEventListener() {
+    }
+    send() {
+    }
+    close() {
+    }
+  };
+}
+var supabase = null;
+if (SUPABASE_URL && SUPABASE_KEY) {
+  try {
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { persistSession: false }
+    });
+    console.log("Supabase istemcisi yap\u0131land\u0131r\u0131ld\u0131; ba\u011Flant\u0131 istek s\u0131ras\u0131nda do\u011Frulan\u0131r.");
+  } catch (err) {
+    throw new Error("Supabase istemcisi yap\u0131land\u0131r\u0131lamad\u0131.");
+  }
+}
+
+// src/server/services/sessions.ts
+var SESSION_COOKIE = "tomnap_session";
+var SESSION_DURATION_MS = 8 * 60 * 60 * 1e3;
+var SESSION_FILE = path3.join(DATA_DIR, "oturumlar.json");
+var ROLES = /* @__PURE__ */ new Set([
+  "SUPER_ADMIN",
+  "PATRON",
+  "KANADA_SATINALMA",
+  "SATIS_SORUMLUSU",
+  "BAKU_FINANS",
+  "BAKU_KURYE"
+]);
+var HEX_TOKEN = /^[a-f0-9]{64}$/;
+function digest(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+function fingerprint(user) {
+  return digest(JSON.stringify([user.id, user.sifre_hash, user.rol, user.tenant_id]));
+}
+function validUser(user) {
+  return !!user && user.durum === "AKTIF" && ROLES.has(user.rol) && typeof user.id === "string" && !!user.id && typeof user.tenant_id === "string" && !!user.tenant_id && (user.tenant_id !== "all" || user.rol === "SUPER_ADMIN") && typeof user.sifre_hash === "string" && /^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/.test(user.sifre_hash);
+}
+function assertStorageAvailable() {
+  if (!supabase && (IS_PRODUCTION || SUPABASE_URL)) {
+    throw new Error("Session database is unavailable");
+  }
+}
+function validRecord(value) {
+  const record = value;
+  return !!record && typeof record.user_id === "string" && !!record.user_id && HEX_TOKEN.test(record.token_hash) && HEX_TOKEN.test(record.csrf_token) && HEX_TOKEN.test(record.credential_fingerprint) && typeof record.expires_at === "string" && Number.isFinite(Date.parse(record.expires_at));
+}
+function readLocal() {
+  if (!fs2.existsSync(SESSION_FILE)) return [];
+  const records = JSON.parse(fs2.readFileSync(SESSION_FILE, "utf8"));
+  if (!Array.isArray(records) || !records.every(validRecord)) {
+    throw new Error("Session storage is invalid");
+  }
+  return records;
+}
+function saveLocal(records) {
+  fs2.mkdirSync(DATA_DIR, { recursive: true, mode: 448 });
+  const temporary = `${SESSION_FILE}.${randomBytes(12).toString("hex")}.tmp`;
+  try {
+    fs2.writeFileSync(temporary, JSON.stringify(records), {
+      encoding: "utf8",
+      mode: 384,
+      flag: "wx"
+    });
+    fs2.renameSync(temporary, SESSION_FILE);
+  } finally {
+    fs2.rmSync(temporary, { force: true });
+  }
+}
+function cookieToken(req) {
+  const cookies = req.headers.cookie;
+  if (typeof cookies !== "string") return null;
+  const matching = cookies.split(";").map((part) => part.trim()).filter((part) => part.startsWith(`${SESSION_COOKIE}=`));
+  if (matching.length !== 1) return null;
+  const value = matching[0].slice(SESSION_COOKIE.length + 1);
+  return HEX_TOKEN.test(value) ? value : null;
+}
+var cookieOptions = () => ({
+  httpOnly: true,
+  secure: IS_PRODUCTION,
+  sameSite: "lax",
+  path: "/"
+});
+async function currentUser(id) {
+  if (!supabase) {
+    const user = kullanicilarVeritabani.find((item) => item.id === id);
+    return user ? { ...user } : void 0;
+  }
+  const { data, error } = await supabase.from("kullanicilar").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data || void 0;
+}
+async function tenantEnabled(user) {
+  if (user.rol === "SUPER_ADMIN") return true;
+  if (!supabase) {
+    const company = firmalarVeritabani.find((item) => item.id === user.tenant_id);
+    return !!company && (!company.onayDurumu || company.onayDurumu === "AKTIF");
+  }
+  const { data, error } = await supabase.from("firmalar").select("id,onay_durumu").eq("id", user.tenant_id).maybeSingle();
+  if (error) throw error;
+  return !!data && (!data.onay_durumu || data.onay_durumu === "AKTIF");
+}
+async function createSession(user, res) {
+  assertStorageAvailable();
+  const verifiedFingerprint = fingerprint(user);
+  const fresh = await currentUser(user.id);
+  if (!validUser(fresh) || fingerprint(fresh) !== verifiedFingerprint || !await tenantEnabled(fresh)) {
+    throw new Error("Account changed during login");
+  }
+  const token = randomBytes(32).toString("hex");
+  const record = {
+    token_hash: digest(token),
+    user_id: fresh.id,
+    csrf_token: randomBytes(32).toString("hex"),
+    credential_fingerprint: fingerprint(fresh),
+    expires_at: new Date(Date.now() + SESSION_DURATION_MS).toISOString()
+  };
+  if (supabase) {
+    const { data, error } = await supabase.from("oturumlar").insert(record).select("token_hash").maybeSingle();
+    if (error) throw error;
+    if (!data || data.token_hash !== record.token_hash)
+      throw new Error("Session was not persisted");
+  } else {
+    const records = readLocal().filter((item) => Date.parse(item.expires_at) > Date.now());
+    records.push(record);
+    saveLocal(records);
+  }
+  res.cookie(SESSION_COOKIE, token, { ...cookieOptions(), maxAge: SESSION_DURATION_MS });
+  res.setHeader("Cache-Control", "no-store");
+  return { csrfToken: record.csrf_token, expiresAt: record.expires_at };
+}
+async function readSession(req) {
+  const token = cookieToken(req);
+  if (!token) return null;
+  assertStorageAvailable();
+  const hash = digest(token);
+  let record;
+  if (supabase) {
+    const { data, error } = await supabase.from("oturumlar").select("*").eq("token_hash", hash).maybeSingle();
+    if (error) throw error;
+    record = data || void 0;
+  } else {
+    record = readLocal().find((item) => item.token_hash === hash);
+  }
+  if (!validRecord(record) || record.token_hash !== hash || Date.parse(record.expires_at) <= Date.now())
+    return null;
+  const user = await currentUser(record.user_id);
+  if (!validUser(user) || !await tenantEnabled(user)) return null;
+  const expected = Buffer.from(fingerprint(user), "hex");
+  if (!timingSafeEqual(expected, Buffer.from(record.credential_fingerprint, "hex"))) return null;
+  if (Date.parse(record.expires_at) <= Date.now()) return null;
+  const tenantId = user.rol === "SUPER_ADMIN" ? "all" : user.tenant_id;
+  return {
+    userId: user.id,
+    tenantId,
+    role: user.rol,
+    csrfToken: record.csrf_token,
+    sessionHash: hash,
+    expiresAt: record.expires_at,
+    kullanici: { id: user.id, adSoyad: user.ad_soyad, email: user.email, rol: user.rol, tenantId }
+  };
+}
+async function revokeSession(req, res) {
+  const token = cookieToken(req);
+  try {
+    if (!token) return;
+    assertStorageAvailable();
+    const hash = digest(token);
+    if (supabase) {
+      const { error } = await supabase.from("oturumlar").delete().eq("token_hash", hash);
+      if (error) throw error;
+    } else {
+      saveLocal(readLocal().filter((item) => item.token_hash !== hash));
+    }
+  } finally {
+    res.clearCookie(SESSION_COOKIE, cookieOptions());
+    res.setHeader("Cache-Control", "no-store");
+  }
+}
+
+// src/server/middleware/security.ts
+import path4 from "path";
+import { URL as URL2 } from "url";
+import { BlockList, isIP } from "node:net";
+function sanitizeDosyaAdi(dosyaAdi) {
+  if (!dosyaAdi || typeof dosyaAdi !== "string") {
+    return `dosya_${Date.now()}`;
+  }
+  const normalized = dosyaAdi.replace(/\\/g, "/");
+  let temiz = path4.posix.basename(normalized);
+  temiz = temiz.replace(/\0/g, "");
+  temiz = temiz.replace(/[^a-zA-Z0-9_.-]/g, "_");
+  temiz = temiz.replace(/\.{2,}/g, ".");
+  temiz = temiz.replace(/^\.+/, "");
+  if (!temiz || temiz === ".") {
+    temiz = `dosya_${Date.now()}`;
+  }
+  return temiz;
+}
+function yolGuvenlimi(dosyaYolu, izinliDizin) {
+  if (!dosyaYolu || !izinliDizin || typeof dosyaYolu !== "string" || typeof izinliDizin !== "string") {
+    return false;
+  }
+  const pNorm = dosyaYolu.replace(/\\/g, "/");
+  const dNorm = izinliDizin.replace(/\\/g, "/");
+  const normalizedPath = path4.resolve(pNorm);
+  const normalizedDir = path4.resolve(dNorm);
+  const sep = path4.sep;
+  const dirPrefix = normalizedDir.endsWith(sep) ? normalizedDir : normalizedDir + sep;
+  return normalizedPath === normalizedDir || normalizedPath.startsWith(dirPrefix);
+}
+var blockedIpv4 = new BlockList();
+for (const [address, prefix] of [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.0.2.0", 24],
+  ["192.88.99.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["198.51.100.0", 24],
+  ["203.0.113.0", 24],
+  ["224.0.0.0", 4],
+  ["240.0.0.0", 4]
+]) {
+  blockedIpv4.addSubnet(address, prefix, "ipv4");
+}
+var globalIpv6 = new BlockList();
+globalIpv6.addSubnet("2000::", 3, "ipv6");
+var blockedIpv6 = new BlockList();
+for (const [address, prefix] of [
+  ["2001::", 23],
+  ["2001:db8::", 32],
+  ["2002::", 16],
+  ["3fff::", 20]
+]) {
+  blockedIpv6.addSubnet(address, prefix, "ipv6");
+}
+function genelIpAdresiMi(address) {
+  const family = isIP(address);
+  if (family === 4) return !blockedIpv4.check(address, "ipv4");
+  if (family === 6) return globalIpv6.check(address, "ipv6") && !blockedIpv6.check(address, "ipv6");
+  return false;
+}
+var ENGELLI_HOSTLAR = /* @__PURE__ */ new Set([
+  "localhost",
+  "0.0.0.0",
+  "metadata.google.internal",
+  "metadata.google",
+  "metadata",
+  "instance-data"
+]);
+function urlGuvenlimi(url) {
+  if (!url || typeof url !== "string") {
+    return { guvenli: false, sebep: "Ge\xE7ersiz URL" };
+  }
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    return { guvenli: false, sebep: "Yaln\u0131zca http:// ve https:// protokolleri desteklenir." };
+  }
+  let parsed;
+  try {
+    parsed = new URL2(url);
+  } catch {
+    return { guvenli: false, sebep: "Ge\xE7ersiz URL format\u0131." };
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { guvenli: false, sebep: `Desteklenmeyen protokol: ${parsed.protocol}` };
+  }
+  if (parsed.username || parsed.password) {
+    return { guvenli: false, sebep: "URL i\xE7inde kullan\u0131c\u0131 bilgisi desteklenmez." };
+  }
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (ENGELLI_HOSTLAR.has(hostname) || hostname.endsWith(".localhost") || !isIP(hostname) && !hostname.includes(".")) {
+    return { guvenli: false, sebep: `Engellenen sunucu adresi: ${hostname}` };
+  }
+  if (isIP(hostname) && !genelIpAdresiMi(hostname)) {
+    return { guvenli: false, sebep: `Dahili/\xF6zel a\u011F adresleri engellenmi\u015Ftir: ${hostname}` };
+  }
+  const port = parsed.port ? parseInt(parsed.port) : parsed.protocol === "https:" ? 443 : 80;
+  if (port !== 80 && port !== 443 && port !== 8080 && port !== 8443 && port !== 3e3) {
+    return { guvenli: false, sebep: `Standart d\u0131\u015F\u0131 port engellenmi\u015Ftir: ${port}` };
+  }
+  return { guvenli: true };
+}
+function allowedOrigins() {
+  const origins = /* @__PURE__ */ new Set();
+  const configured = [
+    process.env.APP_URL || APP_URL,
+    ...(process.env.CORS_ORIGIN || "").split(",")
+  ];
+  for (const value of configured) {
+    try {
+      const url = new URL2(value.trim());
+      if (["https:", "http:"].includes(url.protocol) && !url.username && !url.password)
+        origins.add(url.origin);
+    } catch {
+    }
+  }
+  return origins;
+}
+function corsMiddleware() {
+  return (req, res, next) => {
+    const origin = req.headers.origin;
+    res.vary("Origin");
+    if (origin && allowedOrigins().has(origin)) {
+      res.header("Access-Control-Allow-Origin", origin);
+      res.header("Access-Control-Allow-Credentials", "true");
+      res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
+      res.header("Access-Control-Allow-Headers", "Content-Type, x-csrf-token, x-tenant-id");
+      res.header("Access-Control-Max-Age", "600");
+    }
+    if (req.method === "OPTIONS") {
+      res.status(origin && !allowedOrigins().has(origin) ? 403 : 204).end();
+      return;
+    }
+    next();
+  };
+}
+
+// src/server/middleware/auth.ts
+var READ = /* @__PURE__ */ new Set(["GET", "HEAD", "OPTIONS"]);
+var STAFF = ["SUPER_ADMIN", "PATRON", "KANADA_SATINALMA", "SATIS_SORUMLUSU", "BAKU_FINANS"];
+var OWNERS = ["SUPER_ADMIN", "PATRON"];
+var SALES = [...OWNERS, "SATIS_SORUMLUSU"];
+var PURCHASING = [...SALES, "KANADA_SATINALMA"];
+var FINANCE = [...SALES, "BAKU_FINANS"];
+var SHIPPING = [...OWNERS, "KANADA_SATINALMA"];
+var ALL = [...STAFF, "BAKU_KURYE"];
+var rules = [
+  ["GET", /^\/api\/auth\/oturum$/, ALL],
+  ["POST", /^\/api\/auth\/cikis$/, ALL],
+  ["GET", /^\/api\/firmalar$/, ALL],
+  ["POST", /^\/api\/firmalar\/davet-olustur$/, OWNERS],
+  ["POST", /^\/api\/firmalar$/, ["SUPER_ADMIN"]],
+  ["PATCH", /^\/api\/firmalar\/[^/]+\/onay$/, ["SUPER_ADMIN"]],
+  ["DELETE", /^\/api\/firmalar\/[^/]+$/, ["SUPER_ADMIN"]],
+  [
+    "GET",
+    /^\/api\/(sistem-durum|tenant\/izolasyon-testi|veritabani\/(durum|yedek-al))$/,
+    ["SUPER_ADMIN"]
+  ],
+  [
+    "POST",
+    /^\/api\/(veritabani\/(temizle|demo-yukle|yedek-yukle)|ornek-verileri-yukle)$/,
+    ["SUPER_ADMIN"]
+  ],
+  ["GET", /^\/api\/siparisler$/, STAFF],
+  ["POST", /^\/api\/(siparisler|ayristir-siparis)$/, PURCHASING],
+  ["PATCH", /^\/api\/siparisler\/[^/]+$/, STAFF],
+  ["DELETE", /^\/api\/siparisler\/[^/]+$/, SALES],
+  ["POST", /^\/api\/siparisler\/tumunu-uluslararasi-kargo-yap$/, SHIPPING],
+  ["GET", /^\/api\/musteriler(?:\/[^/]+\/siparisler)?$/, FINANCE],
+  ["POST", /^\/api\/musteriler$/, SALES],
+  ["GET", /^\/api\/inbox$/, SALES],
+  ["POST", /^\/api\/(inbox\/[^/]+\/(onayla|reddet)|webhook\/siparis)$/, SALES],
+  ["GET", /^\/api\/kuryeler$/, [...SHIPPING, "BAKU_FINANS"]],
+  ["GET", /^\/api\/kargo\/ayarlar$/, SHIPPING],
+  ["POST", /^\/api\/kargo\/ayarlar$/, OWNERS],
+  ["POST", /^\/api\/kargo\/(test|takip|senkronize-et|manifesto-yukle)$/, SHIPPING],
+  ["GET", /^\/api\/proxy-gorsel$/, STAFF],
+  ["GET", /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
+  [
+    "POST",
+    /^\/api\/(upload-gorsel|urun-katalog-gorseli-ara|gorselden-urun-ara|katalog-gorseli-kaydet|urun-orijinal-gorsele-don)$/,
+    PURCHASING
+  ]
+];
+function isPublic(req) {
+  return req.method === "GET" && /^\/(?:api\/)?health$/.test(req.path) || req.method === "GET" && /^\/api\/(auth\/token-kontrol|firmalar\/davet)\/[^/]+$/.test(req.path) || req.method === "POST" && /^\/api\/(auth\/(giris|sifre-belirle)|firmalar\/(giris|kayit|davet\/katil))$/.test(req.path);
+}
+function equalToken(received, expected) {
+  if (typeof received !== "string" || !/^[a-f0-9]{64}$/.test(received)) return false;
+  return timingSafeEqual2(Buffer.from(received), Buffer.from(expected));
+}
+function setTenant(req) {
+  const values = [
+    req.headers["x-tenant-id"],
+    req.query.tenant_id,
+    req.query.tenantId,
+    req.body?.tenant_id,
+    req.body?.tenantId,
+    req.body?.duzeltilmis_siparis?.tenant_id,
+    req.body?.duzeltilmis_siparis?.tenantId,
+    req.body?.ayarlar?.tenantId
+  ];
+  const present = values.filter((v) => v !== void 0);
+  if (present.some((v) => typeof v !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(v)))
+    return "Ge\xE7ersiz firma kimli\u011Fi.";
+  if (new Set(present).size > 1) return "\xC7eli\u015Fen firma kimlikleri.";
+  const requested = present[0];
+  if (req.auth.role !== "SUPER_ADMIN" && requested && requested !== req.auth.tenantId)
+    return "Bu firmaya eri\u015Fim yetkiniz yok.";
+  req.tenantId = req.auth.role === "SUPER_ADMIN" ? requested || "all" : req.auth.tenantId;
+  const globalMutation = /^\/api\/(auth\/cikis|firmalar(?:\/[^/]+(?:\/onay)?)?|veritabani\/[^/]+|ornek-verileri-yukle)$/.test(
+    req.path
+  ) && req.path !== "/api/firmalar/davet-olustur";
+  if (!READ.has(req.method) && req.tenantId === "all" && !globalMutation)
+    return "Bu i\u015Flem i\xE7in bir firma se\xE7in.";
+  req.query.tenant_id = req.tenantId;
+  req.query.tenantId = req.tenantId;
+  if (!READ.has(req.method)) {
+    if (!req.body) req.body = {};
+    if (typeof req.body !== "object" || Array.isArray(req.body)) return "Ge\xE7ersiz istek g\xF6vdesi.";
+    req.body.tenant_id = req.tenantId;
+    req.body.tenantId = req.tenantId;
+  }
+  return null;
+}
+function sessionAuth() {
+  return async (req, res, next) => {
+    let normalizedPath;
+    try {
+      normalizedPath = decodeURIComponent(req.path).toLowerCase();
+    } catch {
+      res.status(400).json({ basarili: false, hata: "Ge\xE7ersiz istek yolu." });
+      return;
+    }
+    if (!normalizedPath.startsWith("/api/") && !normalizedPath.startsWith("/uploads/") && normalizedPath !== "/health")
+      return next();
+    res.setHeader("Cache-Control", "private, no-store");
+    res.vary("Cookie");
+    if (!READ.has(req.method) && req.headers.origin && !allowedOrigins().has(req.headers.origin)) {
+      res.status(403).json({ basarili: false, hata: "\u0130stek kayna\u011F\u0131na izin verilmiyor." });
+      return;
+    }
+    if (isPublic(req)) return next();
+    try {
+      const auth = await readSession(req);
+      if (!auth) {
+        res.status(401).json({ basarili: false, hata: "Oturum a\xE7man\u0131z gerekiyor." });
+        return;
+      }
+      req.auth = auth;
+      if (!READ.has(req.method) && !equalToken(req.headers["x-csrf-token"], auth.csrfToken)) {
+        res.status(403).json({ basarili: false, hata: "\u0130stek do\u011Frulamas\u0131 ge\xE7ersiz. Sayfay\u0131 yenileyin." });
+        return;
+      }
+      const method = req.method === "HEAD" ? "GET" : req.method;
+      if (!rules.some(
+        ([m, path7, roles]) => m === method && path7.test(req.path) && roles.includes(auth.role)
+      )) {
+        res.status(403).json({ basarili: false, hata: "Bu i\u015Flem i\xE7in yetkiniz yok." });
+        return;
+      }
+      const tenantError = setTenant(req);
+      if (tenantError) {
+        res.status(403).json({ basarili: false, hata: tenantError });
+        return;
+      }
+      next();
+    } catch {
+      res.status(503).json({ basarili: false, hata: "Oturum do\u011Frulama hizmeti kullan\u0131lam\u0131yor." });
+    }
+  };
+}
+var apiKeyAuth = sessionAuth;
+
+// src/server/middleware/rateLimiter.ts
+import rateLimit from "express-rate-limit";
+var genelApiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1e3,
+  // 15 dakika
+  max: 150,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  message: {
+    basarili: false,
+    hata: "Bu IP adresinden \xE7ok fazla istek g\xF6nderildi. L\xFCtfen 15 dakika sonra tekrar deneyin."
+  }
+});
+var aiEndpointLimiter = rateLimit({
+  windowMs: 60 * 1e3,
+  // 1 dakika
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  message: {
+    basarili: false,
+    hata: "Yapay zeka i\u015Flem kotas\u0131 a\u015F\u0131ld\u0131. L\xFCtfen 1 dakika sonra tekrar deneyin."
+  }
+});
+var veritabaniYonetimLimiter = rateLimit({
+  windowMs: 60 * 1e3,
+  // 1 dakika
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  message: {
+    basarili: false,
+    hata: "Veritaban\u0131 y\xF6netim i\u015Flem limiti a\u015F\u0131ld\u0131. L\xFCtfen biraz bekleyin."
+  }
+});
+var girisLimiter = rateLimit({
+  windowMs: 15 * 60 * 1e3,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  message: { basarili: false, hata: "\xC7ok fazla giri\u015F denemesi. 15 dakika sonra tekrar deneyin." }
+});
+
+// src/server/middleware/errorHandler.ts
+function errorHandler(err, req, res, next) {
+  if (req.path.startsWith("/api/")) {
+    console.error("Express API Hatas\u0131:", err);
+    return res.status(err.status || 500).json({
+      basarili: false,
+      hata: err.type === "entity.too.large" ? "Y\xFCklenen g\xF6rsel boyutu sunucu s\u0131n\u0131r\u0131n\u0131 a\u015Ft\u0131. L\xFCtfen g\xF6rseli k\u0131rp\u0131n veya k\xFC\xE7\xFClt\xFCn." : err.message || "Sunucu i\u015Flemi s\u0131ras\u0131nda bir hata olu\u015Ftu."
+    });
+  }
+  next(err);
+}
+
+// src/server/logger.ts
+var LOG_LEVELS = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3
+};
+var CURRENT_LOG_LEVEL = process.env.LOG_LEVEL?.toLowerCase() || (IS_PRODUCTION ? "info" : "debug");
+function shouldLog(level) {
+  return LOG_LEVELS[level] >= LOG_LEVELS[CURRENT_LOG_LEVEL];
+}
+function formatTimestamp() {
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
+var COLORS = {
+  reset: "\x1B[0m",
+  dim: "\x1B[2m",
+  cyan: "\x1B[36m",
+  green: "\x1B[32m",
+  yellow: "\x1B[33m",
+  red: "\x1B[31m",
+  magenta: "\x1B[35m"
+};
+var logger = {
+  debug(message, meta) {
+    if (!shouldLog("debug")) return;
+    if (IS_PRODUCTION) {
+      console.log(
+        JSON.stringify({ timestamp: formatTimestamp(), level: "DEBUG", message, ...meta })
+      );
+    } else {
+      console.log(
+        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.cyan}[DEBUG]${COLORS.reset} ${message}`,
+        meta ? meta : ""
+      );
+    }
+  },
+  info(message, meta) {
+    if (!shouldLog("info")) return;
+    if (IS_PRODUCTION) {
+      console.log(
+        JSON.stringify({ timestamp: formatTimestamp(), level: "INFO", message, ...meta })
+      );
+    } else {
+      console.log(
+        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.green}[INFO]${COLORS.reset}  ${message}`,
+        meta ? meta : ""
+      );
+    }
+  },
+  warn(message, meta) {
+    if (!shouldLog("warn")) return;
+    if (IS_PRODUCTION) {
+      console.warn(
+        JSON.stringify({ timestamp: formatTimestamp(), level: "WARN", message, ...meta })
+      );
+    } else {
+      console.warn(
+        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.yellow}[WARN]${COLORS.reset}  ${message}`,
+        meta ? meta : ""
+      );
+    }
+  },
+  error(message, error, meta) {
+    if (!shouldLog("error")) return;
+    const errObj = error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error ? { error } : {};
+    if (IS_PRODUCTION) {
+      console.error(
+        JSON.stringify({
+          timestamp: formatTimestamp(),
+          level: "ERROR",
+          message,
+          ...errObj,
+          ...meta
+        })
+      );
+    } else {
+      console.error(
+        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.red}[ERROR]${COLORS.reset} ${message}`,
+        error ? error : "",
+        meta ? meta : ""
+      );
+    }
+  }
+};
+function requestLogger(req, res, next) {
+  if (req.path.startsWith("/@") || req.path.startsWith("/src/") || req.path.startsWith("/node_modules/") || req.path.match(/\.(js|css|png|jpg|svg|ico|woff2?)$/)) {
+    return next();
+  }
+  const start = Date.now();
+  const { method, originalUrl, ip } = req;
+  const safeUrl = originalUrl.split("?")[0].replace(/(\/auth\/token-kontrol\/)[^/]+/i, "$1[REDACTED]").replace(/(\/firmalar\/davet\/)[^/]+/i, "$1[REDACTED]");
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    const statusCode = res.statusCode;
+    if (originalUrl.startsWith("/api")) {
+      const meta = { method, url: safeUrl, statusCode, durationMs: duration, ip };
+      if (statusCode >= 500) {
+        logger.error(`HTTP ${method} ${safeUrl} ${statusCode} - ${duration}ms`, void 0, meta);
+      } else if (statusCode >= 400) {
+        logger.warn(`HTTP ${method} ${safeUrl} ${statusCode} - ${duration}ms`, meta);
+      } else {
+        logger.info(`HTTP ${method} ${safeUrl} ${statusCode} - ${duration}ms`, meta);
+      }
+    }
+  });
+  next();
+}
+
 // src/server/routes/sistem.ts
+import { Router } from "express";
 var router = Router();
 router.get("/sistem-durum", async (req, res) => {
   let supabaseAktif = false;
@@ -4225,9 +4410,13 @@ router.get("/tenant/izolasyon-testi", async (req, res) => {
       const { data } = await supabase.from("siparisler").select("id, tenant_id, musteri_adi").eq("tenant_id", hedefTenant);
       if (data) siparislerTest = data;
     } else {
-      siparislerTest = siparislerVeritabani.filter((s) => (s.tenant_id || "kanada_shopper_baku") === hedefTenant);
+      siparislerTest = siparislerVeritabani.filter(
+        (s) => (s.tenant_id || "kanada_shopper_baku") === hedefTenant
+      );
     }
-    const siparisSizintilari = siparislerTest.filter((s) => (s.tenant_id || "kanada_shopper_baku") !== hedefTenant);
+    const siparisSizintilari = siparislerTest.filter(
+      (s) => (s.tenant_id || "kanada_shopper_baku") !== hedefTenant
+    );
     toplamSizinti += siparisSizintilari.length;
     testSonuclari.push({
       modul: "Sipari\u015Fler",
@@ -4241,9 +4430,13 @@ router.get("/tenant/izolasyon-testi", async (req, res) => {
       const { data } = await supabase.from("musteriler").select("id, tenant_id, ad_soyad").eq("tenant_id", hedefTenant);
       if (data) musterilerTest = data;
     } else {
-      musterilerTest = musterilerVeritabani.filter((m) => (m.tenant_id || "kanada_shopper_baku") === hedefTenant);
+      musterilerTest = musterilerVeritabani.filter(
+        (m) => (m.tenant_id || "kanada_shopper_baku") === hedefTenant
+      );
     }
-    const musteriSizintilari = musterilerTest.filter((m) => (m.tenant_id || "kanada_shopper_baku") !== hedefTenant);
+    const musteriSizintilari = musterilerTest.filter(
+      (m) => (m.tenant_id || "kanada_shopper_baku") !== hedefTenant
+    );
     toplamSizinti += musteriSizintilari.length;
     testSonuclari.push({
       modul: "M\xFC\u015Fteriler (CRM)",
@@ -4252,8 +4445,12 @@ router.get("/tenant/izolasyon-testi", async (req, res) => {
       durum: musteriSizintilari.length === 0 ? "GECTI" : "BASARISIZ",
       aciklama: musteriSizintilari.length === 0 ? `T\xFCm ${musterilerTest.length} m\xFC\u015Fteri kayd\u0131 kesin olarak "${hedefTenant}" tenant'\u0131na ait.` : `UYARI: ${musteriSizintilari.length} m\xFC\u015Fteri kayd\u0131 ba\u015Fka tenant'a ait!`
     });
-    const inboxTest = onayBekleyenler.filter((m) => (m.tenant_id || "kanada_shopper_baku") === hedefTenant);
-    const inboxSizintilari = inboxTest.filter((m) => (m.tenant_id || "kanada_shopper_baku") !== hedefTenant);
+    const inboxTest = onayBekleyenler.filter(
+      (m) => (m.tenant_id || "kanada_shopper_baku") === hedefTenant
+    );
+    const inboxSizintilari = inboxTest.filter(
+      (m) => (m.tenant_id || "kanada_shopper_baku") !== hedefTenant
+    );
     toplamSizinti += inboxSizintilari.length;
     testSonuclari.push({
       modul: "Gelen Kutusu (Inbox)",
@@ -4285,9 +4482,9 @@ router.get("/tenant/izolasyon-testi", async (req, res) => {
       tenant_id: hedefTenant,
       tum_testler_gecti: toplamSizinti === 0,
       toplam_sizinti_sayisi: toplamSizinti,
-      guvenlik_derecesi: toplamSizinti === 0 ? "100% G\xDCVENL\u0130 & \u0130ZOLE" : "R\u0130SKL\u0130",
+      guvenlik_derecesi: toplamSizinti === 0 ? "F\u0130LTREL\u0130 SORGU TUTARLI" : "R\u0130SKL\u0130",
       sonuclar: testSonuclari,
-      ozet: toplamSizinti === 0 ? `"${hedefTenant}" butikinin t\xFCm verileri veritaban\u0131 ve uygulama katman\u0131nda %100 izole edilmi\u015Ftir. Hi\xE7bir yabanc\u0131 tenant verisi kar\u0131\u015Fmamaktad\u0131r.` : `D\u0130KKAT: ${toplamSizinti} adet yabanc\u0131 kay\u0131t tespit edildi!`
+      ozet: toplamSizinti === 0 ? `"${hedefTenant}" i\xE7in filtreli sorgular tutarl\u0131. Bu tan\u0131lama yetkisiz eri\u015Fim veya RLS g\xFCvenli\u011Fini kan\u0131tlamaz.` : `D\u0130KKAT: ${toplamSizinti} adet yabanc\u0131 kay\u0131t tespit edildi!`
     });
   } catch (err) {
     res.status(500).json({ basarili: false, hata: "\u0130zolasyon testi s\u0131ras\u0131nda hata: " + err.message });
@@ -4296,10 +4493,15 @@ router.get("/tenant/izolasyon-testi", async (req, res) => {
 var sistem_default = router;
 
 // src/server/routes/siparisler.ts
-import { Router as Router2 } from "express";
-import path4 from "path";
-import fs2 from "fs";
+import { Router as Router3 } from "express";
+import { randomUUID } from "node:crypto";
 import { Type } from "@google/genai";
+
+// src/server/routes/gorsel.ts
+import { createHash as createHash2, randomBytes as randomBytes2 } from "node:crypto";
+import { Router as Router2 } from "express";
+import path5 from "path";
+import fs3 from "fs";
 
 // src/server/services/gemini.ts
 import { GoogleGenAI } from "@google/genai";
@@ -4592,56 +4794,874 @@ function formatlaSiparis(s) {
   };
 }
 
-// src/server/routes/siparisler.ts
-var router2 = Router2();
-router2.get("/siparisler", async (req, res) => {
-  const seciliTenant = req.query.tenant_id;
-  if (seciliTenant === "demo_sandbox") {
-    const formatli = demoSiparislerVeritabani.map((s) => formatlaSiparis(s));
-    return res.json({
-      basarili: true,
-      kaynak: "demo_sandbox",
-      toplam: formatli.length,
-      siparisler: formatli,
-      isDemo: true
-    });
+// src/server/services/publicFetch.ts
+import { lookup } from "node:dns/promises";
+import { isIP as isIP2 } from "node:net";
+import http from "node:http";
+import https from "node:https";
+var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+var PublicResourceError = class extends Error {
+  constructor(message, status = 403) {
+    super(message);
+    this.status = status;
+    this.name = "PublicResourceError";
   }
-  if (supabase) {
-    try {
-      let query = supabase.from("siparisler").select("*");
-      if (seciliTenant && seciliTenant !== "all") {
-        query = query.eq("tenant_id", seciliTenant);
-      }
-      const { data, error } = await query.order("olusturma_tarihi", { ascending: false });
-      if (error) {
-        console.error("Supabase okuma hatas\u0131:", error.message);
-      } else if (data) {
-        const formatli = data.map((s) => formatlaSiparis(s));
-        return res.json({
-          basarili: true,
-          kaynak: "supabase",
-          toplam: formatli.length,
-          siparisler: formatli
+};
+function beforeDeadline(promise, remainingMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new PublicResourceError("\u0130ndirme zaman a\u015F\u0131m\u0131na u\u011Frad\u0131.", 504)),
+      Math.max(0, remainingMs)
+    );
+    promise.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
+async function requestOnce(url, deadline, options) {
+  const check = urlGuvenlimi(url.href);
+  if (!check.guvenli) throw new PublicResourceError(check.sebep || "G\xFCvenli olmayan URL.");
+  const hostname = url.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  const family = isIP2(hostname);
+  const addresses = family ? [{ address: hostname, family }] : await beforeDeadline(lookup(hostname, { all: true, verbatim: true }), deadline - Date.now());
+  if (addresses.length === 0 || addresses.some(({ address }) => !genelIpAdresiMi(address))) {
+    throw new PublicResourceError("Hedef sunucu genel internet d\u0131\u015F\u0131nda bir adrese \xE7\xF6z\xFCmleniyor.");
+  }
+  if (Date.now() >= deadline) throw new PublicResourceError("\u0130ndirme zaman a\u015F\u0131m\u0131na u\u011Frad\u0131.", 504);
+  const pinned = addresses[0];
+  const maxBytes = options.maxBytes ?? MAX_IMAGE_BYTES;
+  return new Promise((resolve, reject) => {
+    const transport = url.protocol === "https:" ? https : http;
+    let response;
+    let timer;
+    const fail2 = (error) => {
+      clearTimeout(timer);
+      reject(error);
+    };
+    const request = transport.request(
+      url,
+      {
+        method: "GET",
+        agent: false,
+        family: pinned.family,
+        lookup: (_hostname, _options, callback) => callback(null, pinned.address, pinned.family),
+        headers: {
+          "User-Agent": "TOMNAP-ImageFetcher/1.0",
+          Accept: options.accept || "image/*",
+          "Accept-Encoding": "identity",
+          Referer: url.origin
+        }
+      },
+      (incoming) => {
+        response = incoming;
+        incoming.on("error", fail2);
+        const headers = new Headers();
+        for (const [key, value] of Object.entries(incoming.headers)) {
+          if (value !== void 0)
+            headers.set(key, Array.isArray(value) ? value.join(", ") : value);
+        }
+        const status = incoming.statusCode || 502;
+        if ([301, 302, 303, 307, 308].includes(status)) {
+          clearTimeout(timer);
+          incoming.destroy();
+          resolve({ status, headers, body: Buffer.alloc(0) });
+          return;
+        }
+        const length = Number(headers.get("content-length"));
+        if (Number.isFinite(length) && length > maxBytes) {
+          const error = new PublicResourceError("\u0130ndirilen dosya boyut s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor.", 413);
+          fail2(error);
+          incoming.destroy();
+          request.destroy();
+          return;
+        }
+        const encoding = headers.get("content-encoding");
+        if (encoding && encoding !== "identity") {
+          fail2(new PublicResourceError("S\u0131k\u0131\u015Ft\u0131r\u0131lm\u0131\u015F uzak yan\u0131t desteklenmiyor.", 502));
+          incoming.destroy();
+          request.destroy();
+          return;
+        }
+        const chunks = [];
+        let bytes = 0;
+        incoming.on("data", (chunk) => {
+          bytes += chunk.length;
+          if (bytes > maxBytes) {
+            fail2(new PublicResourceError("\u0130ndirilen dosya boyut s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor.", 413));
+            incoming.destroy();
+            request.destroy();
+            return;
+          }
+          chunks.push(chunk);
         });
+        incoming.on("end", () => {
+          clearTimeout(timer);
+          resolve({ status, headers, body: Buffer.concat(chunks) });
+        });
+        incoming.on(
+          "aborted",
+          () => fail2(new PublicResourceError("Uzak yan\u0131t tamamlanmad\u0131.", 502))
+        );
       }
-    } catch (errDb) {
-      console.error("Supabase ba\u011Flant\u0131 istisnas\u0131:", errDb);
+    );
+    timer = setTimeout(() => {
+      const error = new PublicResourceError("\u0130ndirme zaman a\u015F\u0131m\u0131na u\u011Frad\u0131.", 504);
+      request.destroy(error);
+      response?.destroy(error);
+    }, deadline - Date.now());
+    request.on("error", fail2);
+    try {
+      request.end();
+    } catch (error) {
+      clearTimeout(timer);
+      request.destroy();
+      reject(error);
+    }
+  });
+}
+async function fetchPublicResource(rawUrl, options = {}) {
+  const check = urlGuvenlimi(rawUrl);
+  if (!check.guvenli) throw new PublicResourceError(check.sebep || "G\xFCvenli olmayan URL.");
+  let url = new URL(rawUrl);
+  const deadline = Date.now() + (options.timeoutMs ?? 7e3);
+  for (let hop = 0; hop <= 4; hop++) {
+    const result = await requestOnce(url, deadline, options);
+    if ([301, 302, 303, 307, 308].includes(result.status)) {
+      const location = result.headers.get("location");
+      if (!location || hop === 4)
+        throw new PublicResourceError("Ge\xE7ersiz veya \xE7ok fazla y\xF6nlendirme.", 502);
+      url = new URL(location, url);
+      continue;
+    }
+    const body = [204, 205, 304].includes(result.status) ? null : new Uint8Array(result.body);
+    return new Response(body, { status: result.status, headers: result.headers });
+  }
+  throw new PublicResourceError("\xC7ok fazla y\xF6nlendirme.", 502);
+}
+
+// src/server/routes/gorsel.ts
+var router2 = Router2();
+async function fetchOgImageFromUrl(pageUrl) {
+  if (typeof pageUrl !== "string" || !pageUrl.startsWith("http")) return null;
+  const urlKontrol = urlGuvenlimi(pageUrl);
+  if (!urlKontrol.guvenli) {
+    console.warn(`[SSRF Engellendi] fetchOgImageFromUrl: ${pageUrl} \u2014 Sebep: ${urlKontrol.sebep}`);
+    return null;
+  }
+  try {
+    const resp = await fetchPublicResource(pageUrl, {
+      timeoutMs: 4500,
+      maxBytes: 2 * 1024 * 1024,
+      accept: "text/html,application/xhtml+xml"
+    });
+    if (!resp.ok) return null;
+    const html = await resp.text();
+    const ogMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i) || html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']twitter:image["']/i);
+    if (ogMatch && ogMatch[1]) {
+      let imgUrl = ogMatch[1].trim();
+      if (imgUrl.startsWith("//")) imgUrl = "https:" + imgUrl;
+      if (imgUrl.startsWith("http") && !imgUrl.includes("placeholder") && !imgUrl.includes("logo")) {
+        return imgUrl;
+      }
+    }
+  } catch (e) {
+  }
+  return null;
+}
+async function isValidImageUrl(url) {
+  if (typeof url !== "string" || !url.startsWith("http")) return false;
+  const urlKontrol = urlGuvenlimi(url);
+  if (!urlKontrol.guvenli) {
+    console.warn(`[SSRF Engellendi] isValidImageUrl: ${url} \u2014 Sebep: ${urlKontrol.sebep}`);
+    return false;
+  }
+  try {
+    const resp = await fetchPublicResource(url, { timeoutMs: 3500 });
+    if (!resp.ok) return false;
+    const contentType = resp.headers.get("content-type") || "";
+    if (!contentType.startsWith("image/")) return false;
+    inspectImage(Buffer.from(await resp.arrayBuffer()), contentType.split(";")[0]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function decodeImage(base64, declaredMime) {
+  const dataUrl = base64.match(/^data:([^;]+);base64,(.*)$/s);
+  const encoded = dataUrl ? dataUrl[2] : base64;
+  if (encoded.length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4) {
+    throw new PublicResourceError("G\xF6rsel en fazla 10 MB olabilir.", 413);
+  }
+  if (!encoded || encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
+    throw new PublicResourceError("Ge\xE7ersiz base64 g\xF6rsel verisi.", 400);
+  }
+  const buffer = Buffer.from(encoded, "base64");
+  return inspectImage(buffer, declaredMime, dataUrl?.[1]);
+}
+function inspectImage(buffer, ...declaredMimes) {
+  if (buffer.length > MAX_IMAGE_BYTES)
+    throw new PublicResourceError("G\xF6rsel en fazla 10 MB olabilir.", 413);
+  const png = buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  const jpeg = buffer.length >= 3 && buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255;
+  const webp = buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP";
+  const mimeType = png ? "image/png" : jpeg ? "image/jpeg" : webp ? "image/webp" : "";
+  if (!mimeType)
+    throw new PublicResourceError("Yaln\u0131zca PNG, JPEG veya WebP g\xF6rselleri desteklenir.", 415);
+  for (const claimed of declaredMimes) {
+    if (claimed !== void 0 && typeof claimed !== "string")
+      throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel t\xFCr\xFC.", 400);
+    if (claimed && claimed.trim().toLowerCase() !== mimeType && !(claimed === "image/jpg" && jpeg)) {
+      throw new PublicResourceError("G\xF6rsel t\xFCr\xFC dosya i\xE7eri\u011Fiyle e\u015Fle\u015Fmiyor.", 415);
     }
   }
-  let sonuc = siparislerVeritabani.map((s) => formatlaSiparis(s));
-  if (seciliTenant && seciliTenant !== "all") {
-    sonuc = sonuc.filter((s) => (s.tenant_id || "kanada_shopper_baku") === seciliTenant);
+  return { buffer, mimeType, ext: png ? "png" : jpeg ? "jpg" : "webp" };
+}
+function uploadPath(dosyaAdi) {
+  if (!dosyaAdi || sanitizeDosyaAdi(dosyaAdi) !== dosyaAdi) {
+    throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel dosya yolu.");
   }
-  res.json({
-    basarili: true,
-    kaynak: "bellek",
-    toplam: sonuc.length,
-    siparisler: sonuc
-  });
-});
-router2.post("/ayristir-siparis", async (req, res) => {
+  const candidate = path5.join(UPLOADS_DIR, dosyaAdi);
+  if (!yolGuvenlimi(candidate, UPLOADS_DIR)) {
+    throw new PublicResourceError("Eri\u015Fim reddedildi.");
+  }
+  if (fs3.existsSync(candidate)) {
+    const actual = fs3.realpathSync(candidate);
+    const root = fs3.realpathSync(UPLOADS_DIR);
+    if (!yolGuvenlimi(actual, root)) {
+      throw new PublicResourceError("Eri\u015Fim reddedildi.");
+    }
+    return actual;
+  }
+  return candidate;
+}
+function imagePrefix(tenantId) {
+  return `t_${createHash2("sha256").update(tenantId).digest("hex").slice(0, 24)}_`;
+}
+function ownedUploadPath(req, name) {
+  if (!req.auth || !req.tenantId) throw new PublicResourceError("Oturum gerekli.", 401);
+  const candidate = uploadPath(name);
+  if (!/^t_[a-f0-9]{24}_[a-f0-9]{32}\.(png|jpg|webp)$/.test(name) || !(req.auth.role === "SUPER_ADMIN" && req.tenantId === "all") && !name.startsWith(imagePrefix(req.tenantId))) {
+    throw new PublicResourceError("G\xF6rsel bulunamad\u0131.", 404);
+  }
+  return candidate;
+}
+function storeTenantImage(req, base64, declaredMime) {
+  if (!req.auth || !req.tenantId || req.tenantId === "all")
+    throw new PublicResourceError("G\xF6rsel i\xE7in bir firma se\xE7in.", 403);
+  if (typeof base64 !== "string") throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel.", 400);
+  const parsed = decodeImage(base64, declaredMime);
+  const name = `${imagePrefix(req.tenantId)}${randomBytes2(16).toString("hex")}.${parsed.ext}`;
+  fs3.mkdirSync(UPLOADS_DIR, { recursive: true, mode: 448 });
+  fs3.writeFileSync(uploadPath(name), parsed.buffer, { flag: "wx", mode: 384 });
+  return {
+    url: `/uploads/${name}`,
+    mimeType: parsed.mimeType,
+    base64: parsed.buffer.toString("base64")
+  };
+}
+async function assertTenantImageReferences(req, payload) {
+  const pending = [payload];
+  let count = 0;
+  while (pending.length) {
+    if (++count > 1e5) throw new PublicResourceError("\u0130stek \xE7ok karma\u015F\u0131k.", 413);
+    const value = pending.pop();
+    if (value && typeof value === "object") pending.push(...Object.values(value));
+    if (typeof value !== "string") continue;
+    const normalized = value.replace(/\\\//g, "/");
+    for (const match of normalized.matchAll(/(?:\/api)?\/uploads\/([^\s"'<>?#\\]+)/g)) {
+      let name;
+      try {
+        name = decodeURIComponent(match[1]);
+      } catch {
+        throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel.", 400);
+      }
+      const file = ownedUploadPath(req, name);
+      if (!fs3.existsSync(file) || !fs3.statSync(file).isFile())
+        throw new PublicResourceError("G\xF6rsel bulunamad\u0131.", 404);
+    }
+  }
+}
+function serveUploadedImage(req, res) {
   try {
-    const { ham_mesaj, musteri_adi_ipucu, siparis_kaynagi, otomatik_kaydet, gorsel_base64, gorsel_mime_type, gorseller } = req.body;
+    const file = ownedUploadPath(req, req.params.dosyaAdi);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.vary("Cookie");
+    if (!fs3.existsSync(file) || !fs3.statSync(file).isFile()) {
+      return res.status(404).send("G\xF6rsel bulunamad\u0131.");
+    }
+    return res.sendFile(file);
+  } catch (error) {
+    return res.status(error instanceof PublicResourceError ? error.status : 500).send("G\xF6rsele eri\u015Filemiyor.");
+  }
+}
+router2.get("/uploads/:dosyaAdi", serveUploadedImage);
+router2.post("/upload-gorsel", (req, res) => {
+  try {
+    const { base64, mimeType, dosyaAdi } = req.body;
+    if (!base64 || typeof base64 !== "string") {
+      return res.status(400).json({ basarili: false, hata: "Ge\xE7ersiz g\xF6rsel verisi" });
+    }
+    const stored = storeTenantImage(req, base64, mimeType);
+    const benzersizAd = path5.basename(stored.url);
+    res.json({
+      basarili: true,
+      url: `/uploads/${benzersizAd}`,
+      dosya_adi: dosyaAdi || benzersizAd
+    });
+  } catch (err) {
+    console.error("G\xF6rsel y\xFCkleme hatas\u0131:", err);
+    res.status(err instanceof PublicResourceError ? err.status : 500).json({ basarili: false, hata: "G\xF6rsel kaydedilemedi: " + err.message });
+  }
+});
+router2.get("/proxy-gorsel", async (req, res) => {
+  const gorselUrl = req.query.url;
+  if (typeof gorselUrl !== "string" || !gorselUrl.startsWith("http")) {
+    return res.status(400).send("Ge\xE7ersiz g\xF6rsel adresi");
+  }
+  const urlKontrol = urlGuvenlimi(gorselUrl);
+  if (!urlKontrol.guvenli) {
+    console.warn(`[SSRF Engellendi] ${gorselUrl} \u2014 Sebep: ${urlKontrol.sebep}`);
+    return res.status(403).json({ basarili: false, hata: urlKontrol.sebep });
+  }
+  try {
+    const resp = await fetchPublicResource(gorselUrl);
+    if (!resp.ok) {
+      return res.status(resp.status).send(`G\xF6rsel indirilemedi (${resp.status})`);
+    }
+    const contentType = resp.headers.get("content-type") || "image/jpeg";
+    if (!contentType.startsWith("image/")) {
+      return res.status(400).send("Hedef adres resim dosyas\u0131 de\u011Fil");
+    }
+    const image = inspectImage(Buffer.from(await resp.arrayBuffer()), contentType.split(";")[0]);
+    res.setHeader("Content-Type", image.mimeType);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(image.buffer);
+  } catch (err) {
+    res.status(err instanceof PublicResourceError ? err.status : 502).send("Vekil sunucu hatas\u0131: " + err.message);
+  }
+});
+router2.post("/urun-katalog-gorseli-ara", async (req, res) => {
+  try {
+    const { urun_adi, marka, renk } = req.body;
+    if (!urun_adi) {
+      return res.status(400).json({ basarili: false, hata: "\xDCr\xFCn ad\u0131 gereklidir." });
+    }
+    const ai = getGeminiClient();
+    const aramaPrompt = `Sen l\xFCks moda, ayakkab\u0131, \xE7anta ve giyim alan\u0131nda uzman bir \xFCr\xFCn katalog ara\u015Ft\u0131rmac\u0131s\u0131s\u0131n.
+A\u015Fa\u011F\u0131da bilgileri verilen \xFCr\xFCn i\xE7in internette resmi marka sitesinde (Karl Lagerfeld, On Running, Michael Kors, Tommy Hilfiger, Aldo, Coach, Zara vb.) ve yetkili l\xFCks sitelerde (Farfetch, Nordstrom, Saks Fifth Avenue, Bloomingdale's, Amazon vb.) orijinal st\xFCdyo/katalog \xE7ekimi foto\u011Fraf\u0131n\u0131 ve \xFCr\xFCn sat\u0131\u015F sayfas\u0131n\u0131 ara\u015Ft\u0131r:
+
+Aranan \xDCr\xFCn: "${urun_adi}"
+${marka ? `Marka: ${marka}` : ""}
+${renk ? `Renk: ${renk}` : ""}
+
+G\xD6REVLER\u0130N:
+1. \xDCr\xFCn\xFCn resmi e-ticaret sitelerindeki tam model ad\u0131n\u0131 belirle.
+2. \xDCr\xFCn\xFCn resmi sayfas\u0131ndaki y\xFCksek \xE7\xF6z\xFCn\xFCrl\xFCkl\xFC, beyaz/temiz arka planl\u0131 st\xFCdyo katalog foto\u011Fraf\u0131 linkini (do\u011Frudan CDN/image URL) veya \xFCr\xFCn sayfas\u0131n\u0131 bul.
+3. \xDCr\xFCn\xFCn resmi \xFCr\xFCn sayfas\u0131 linkini (URL) bul.
+4. \xDCr\xFCn\xFCn malzeme/koleksiyon \xF6zetini belirt.
+
+Yan\u0131t\u0131n\u0131 YALNIZCA a\u015Fa\u011F\u0131daki JSON format\u0131nda d\xF6nd\xFCr (ba\u015Fka a\xE7\u0131klama ekleme):
+{
+  "resmi_urun_adi": "\xDCr\xFCn\xFCn resmi tam ad\u0131 ve modeli",
+  "marka": "Marka",
+  "katalog_gorsel_url": "Do\u011Frudan g\xF6rsel CDN URL'si (varsa, \xF6rn: https://cdn...jpg veya https://images...)",
+  "urun_sayfasi_url": "Resmi \xFCr\xFCn sayfas\u0131 URL'si",
+  "aciklama": "\xDCr\xFCn\xFCn resmi katalog a\xE7\u0131klamas\u0131 veya materyali",
+  "tahmini_fiyat": "Resmi sat\u0131\u015F fiyat\u0131 (varsa)"
+}`;
+    const searchResponse = await generateContentWithRetryAndFallback(ai, {
+      contents: aramaPrompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        temperature: 0.2
+      }
+    });
+    const yanitMetni = searchResponse.text || "";
+    let sonuc = null;
+    try {
+      const jsonMatch = yanitMetni.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        sonuc = JSON.parse(jsonMatch[0]);
+      }
+    } catch (parseErr) {
+      console.warn("JSON parse hatas\u0131:", parseErr);
+    }
+    const groundingMetadata = searchResponse.candidates?.[0]?.groundingMetadata;
+    const webChunks = groundingMetadata?.groundingChunks || [];
+    const webLinkleri = webChunks.filter((c) => c.web?.uri).map((c) => ({
+      baslik: c.web.title || "Resmi \xDCr\xFCn Sayfas\u0131",
+      url: c.web.uri
+    }));
+    if (!sonuc) {
+      sonuc = {
+        resmi_urun_adi: urun_adi,
+        marka: marka || "",
+        katalog_gorsel_url: "",
+        urun_sayfasi_url: webLinkleri.length > 0 ? webLinkleri[0].url : "",
+        aciklama: yanitMetni.slice(0, 200)
+      };
+    } else if (!sonuc.urun_sayfasi_url && webLinkleri.length > 0) {
+      sonuc.urun_sayfasi_url = webLinkleri[0].url;
+    }
+    if (!sonuc.katalog_gorsel_url) {
+      const hedefLink = sonuc.urun_sayfasi_url || webLinkleri[0]?.url;
+      if (hedefLink) {
+        const ogResmi = await fetchOgImageFromUrl(hedefLink);
+        if (ogResmi) {
+          sonuc.katalog_gorsel_url = ogResmi;
+        }
+      }
+    }
+    res.json({
+      basarili: true,
+      sonuc,
+      web_linkleri: webLinkleri.slice(0, 4)
+    });
+  } catch (err) {
+    console.error("Katalog arama hatas\u0131:", err);
+    res.status(500).json({ basarili: false, hata: err.message || "\xDCr\xFCn g\xF6rsel aramas\u0131 ba\u015Far\u0131s\u0131z oldu." });
+  }
+});
+router2.post("/gorselden-urun-ara", async (req, res) => {
+  try {
+    const { gorsel, mevcut_urun_adi, ek_ipucu } = req.body;
+    await assertTenantImageReferences(req, gorsel);
+    if (!gorsel || typeof gorsel !== "string") {
+      return res.status(400).json({ basarili: false, hata: "Aranacak g\xF6rsel verisi bulunamad\u0131." });
+    }
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ basarili: false, hata: "Gemini API anahtar\u0131 yap\u0131land\u0131r\u0131lmam\u0131\u015F." });
+    }
+    let base64Data = "";
+    let mimeType = "image/jpeg";
+    if (gorsel.startsWith("data:")) {
+      const image = decodeImage(gorsel);
+      mimeType = image.mimeType;
+      base64Data = image.buffer.toString("base64");
+    } else if (gorsel.startsWith("/uploads/")) {
+      const dosyaAdi = gorsel.replace("/uploads/", "");
+      const dosyaYolu = ownedUploadPath(req, dosyaAdi);
+      if (fs3.existsSync(dosyaYolu)) {
+        const stat = fs3.statSync(dosyaYolu);
+        if (!stat.isFile()) throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel dosyas\u0131.");
+        if (stat.size > MAX_IMAGE_BYTES)
+          throw new PublicResourceError("G\xF6rsel boyut s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor.", 413);
+        const image = inspectImage(fs3.readFileSync(dosyaYolu));
+        base64Data = image.buffer.toString("base64");
+        mimeType = image.mimeType;
+      }
+    } else if (gorsel.startsWith("http")) {
+      try {
+        const fetchRes = await fetchPublicResource(gorsel);
+        if (fetchRes.ok) {
+          const image = inspectImage(
+            Buffer.from(await fetchRes.arrayBuffer()),
+            fetchRes.headers.get("content-type")?.split(";")[0]
+          );
+          base64Data = image.buffer.toString("base64");
+          mimeType = image.mimeType;
+        }
+      } catch (err) {
+        if (err instanceof PublicResourceError) throw err;
+        console.warn("G\xF6rsel URL indirilemedi:", err);
+      }
+    }
+    if (!base64Data) {
+      return res.status(400).json({ basarili: false, hata: "G\xF6rsel verisi okunamad\u0131 veya format desteklenmiyor." });
+    }
+    const ai = getGeminiClient();
+    const lensPrompt = `Sen profesyonel bir e-ticaret, l\xFCks marka ve \xFCr\xFCn tan\u0131ma uzman\u0131s\u0131n (Google Lens ve AliExpress Visual Search mant\u0131\u011F\u0131yla \xE7al\u0131\u015F\u0131yorsun).
+Ekli g\xF6rselde kullan\u0131c\u0131n\u0131n odaklad\u0131\u011F\u0131 veya se\xE7ti\u011Fi bir \xFCr\xFCn yer almaktad\u0131r.
+${mevcut_urun_adi ? `Sipari\u015F metnindeki \xFCr\xFCn ad\u0131/ipucu: "${mevcut_urun_adi}"` : ""}
+${ek_ipucu ? `Kullan\u0131c\u0131n\u0131n belirtti\u011Fi ek ipucu: "${ek_ipucu}"` : ""}
+
+L\xFCtfen \u015Fu ad\u0131mlar\u0131 eksiksiz uygula:
+1. G\xF6rseldeki \xFCr\xFCn\xFC titizlikle analiz et: Logo, marka amblemi, monogram desen, renk, taban, toka, materyal veya tipografik detaylar\u0131 belirle (\xD6rn: Karl Lagerfeld, Michael Kors, Gucci, Zara, Prada, Guess, Nike, Adidas, vb.).
+2. \xDCr\xFCn\xFCn tam resmi model ad\u0131n\u0131 ve koleksiyonunu tespit et (\xD6rn: "Karl Lagerfeld Kondo Monogram Slide Sandal", "Michael Kors Jet Set Crossbody Bag").
+3. Google Search arac\u0131 ile bu \xFCr\xFCn\xFCn orijinal st\xFCdyo foto\u011Fraf\u0131n\u0131 (.jpg veya .png format\u0131nda do\u011Frudan resim ba\u011Flant\u0131s\u0131) ve resmi sat\u0131\u015F/e-ticaret sayfalar\u0131n\u0131 (Trendyol, Beymen, Farfetch, Brandroom, Hepsiburada, Amazon veya resmi marka sitesi) bul.
+
+Cevab\u0131n\u0131 YALNIZCA ge\xE7erli bir JSON nesnesi format\u0131nda ver:
+{
+  "marka": "Tespit edilen marka ad\u0131",
+  "resmi_urun_adi": "\xDCr\xFCn\xFCn resmi model ve tam katalog ad\u0131",
+  "urun_tipi": "\xDCr\xFCn kategorisi (\xF6r: Terlik, \xC7anta, Ayakkab\u0131, Saat, Elbise)",
+  "renk": "Tespit edilen renk (\xF6r: Siyah, Beyaz-Siyah, Bej)",
+  "belirgin_ozellikler": "G\xF6rselden tespit edilen logo, desen, materyal vb. detaylar",
+  "katalog_gorsel_url": "Do\u011Frudan g\xF6rsel dosya linki (.jpg, .jpeg, .png, .webp) - web sayfas\u0131 linki OLMAYACAK",
+  "urun_sayfasi_url": "\xDCr\xFCn\xFCn resmi e-ticaret sat\u0131\u015F veya marka sayfas\u0131",
+  "aciklama": "\xDCr\xFCn\xFCn resmi katalog a\xE7\u0131klamas\u0131 ve \xF6zellikleri",
+  "google_arama_kelimeleri": "Google G\xF6rseller veya Google Lens'te tam bu \xFCr\xFCn\xFC bulmak i\xE7in en etkili 4-5 kelimelik arama terimi"
+}`;
+    const searchResponse = await generateContentWithRetryAndFallback(ai, {
+      contents: [
+        {
+          inlineData: {
+            mimeType,
+            data: base64Data
+          }
+        },
+        {
+          text: lensPrompt
+        }
+      ],
+      config: {
+        tools: [{ googleSearch: {} }],
+        temperature: 0.1
+      }
+    });
+    const yanitMetni = searchResponse.text || "";
+    let sonuc = null;
+    try {
+      const jsonMatch = yanitMetni.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        sonuc = JSON.parse(jsonMatch[0]);
+      }
+    } catch (parseErr) {
+      console.warn("G\xF6rsel arama JSON parse hatas\u0131:", parseErr);
+    }
+    const groundingMetadata = searchResponse.candidates?.[0]?.groundingMetadata;
+    const webChunks = groundingMetadata?.groundingChunks || [];
+    const webLinkleri = webChunks.filter((c) => c.web?.uri).map((c) => ({
+      baslik: c.web.title || "Resmi Sat\u0131\u015F Sayfas\u0131",
+      url: c.web.uri
+    }));
+    if (!sonuc) {
+      sonuc = {
+        marka: "",
+        resmi_urun_adi: mevcut_urun_adi || "Tespit Edilen \xDCr\xFCn",
+        urun_tipi: "",
+        renk: "",
+        belirgin_ozellikler: "",
+        katalog_gorsel_url: "",
+        urun_sayfasi_url: webLinkleri[0]?.url || "",
+        aciklama: yanitMetni.slice(0, 200),
+        google_arama_kelimeleri: mevcut_urun_adi || ""
+      };
+    } else if (!sonuc.urun_sayfasi_url && webLinkleri.length > 0) {
+      sonuc.urun_sayfasi_url = webLinkleri[0].url;
+    }
+    if (sonuc.katalog_gorsel_url) {
+      const gecerliMi = await isValidImageUrl(sonuc.katalog_gorsel_url);
+      if (!gecerliMi) {
+        console.log(
+          `[G\xF6rsel Do\u011Frulama] Modelin \xFCretti\u011Fi katalog URL ge\xE7ersiz \xE7\u0131kt\u0131, temizleniyor.`
+        );
+        sonuc.katalog_gorsel_url = "";
+      }
+    }
+    if (!sonuc.katalog_gorsel_url) {
+      const adayLinkler = [sonuc.urun_sayfasi_url, ...webLinkleri.map((w) => w.url)].filter(
+        Boolean
+      );
+      for (const link of adayLinkler) {
+        if (!link || link.includes("google.com") || link.includes("google.com.tr")) continue;
+        const ogResmi = await fetchOgImageFromUrl(link);
+        if (ogResmi && await isValidImageUrl(ogResmi)) {
+          sonuc.katalog_gorsel_url = ogResmi;
+          break;
+        }
+      }
+    }
+    const aramaKelimeleri = (sonuc.google_arama_kelimeleri || `${sonuc.marka || ""} ${sonuc.resmi_urun_adi || ""}`).trim() || "\xDCr\xFCn Ara";
+    const googleGorselAramaUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(aramaKelimeleri)}`;
+    const googleWebAramaUrl = `https://www.google.com/search?q=${encodeURIComponent(aramaKelimeleri)}`;
+    const googleAlisverisUrl = `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(aramaKelimeleri)}`;
+    if (!sonuc.urun_sayfasi_url) {
+      sonuc.urun_sayfasi_url = googleWebAramaUrl;
+    }
+    const sonWebLinkleri = webLinkleri.length > 0 ? webLinkleri.slice(0, 5) : [
+      {
+        baslik: `Google G\xF6rseller: ${aramaKelimeleri}`,
+        url: googleGorselAramaUrl
+      },
+      {
+        baslik: `Google Al\u0131\u015Fveri\u015F / Fiyatlar: ${aramaKelimeleri}`,
+        url: googleAlisverisUrl
+      },
+      {
+        baslik: `Google Web Arama: ${aramaKelimeleri}`,
+        url: googleWebAramaUrl
+      }
+    ];
+    res.json({
+      basarili: true,
+      sonuc,
+      web_linkleri: sonWebLinkleri,
+      google_gorsel_arama_url: googleGorselAramaUrl
+    });
+  } catch (err) {
+    console.error("G\xF6rselden arama hatas\u0131:", err);
+    res.status(err instanceof PublicResourceError ? err.status : 500).json({ basarili: false, hata: err.message || "G\xF6rsel \xFCzerinden arama yap\u0131lamad\u0131." });
+  }
+});
+router2.post("/katalog-gorseli-kaydet", async (req, res) => {
+  try {
+    const { siparis_id, urun_indeksi, katalog_gorsel_url, urun_sayfasi_url, resmi_urun_adi } = req.body;
+    if (!siparis_id || urun_indeksi === void 0 || !katalog_gorsel_url) {
+      return res.status(400).json({
+        basarili: false,
+        hata: "siparis_id, urun_indeksi ve katalog_gorsel_url gereklidir."
+      });
+    }
+    if (typeof katalog_gorsel_url === "string" && (katalog_gorsel_url.startsWith("http://") || katalog_gorsel_url.startsWith("https://"))) {
+      const urlKontrol = urlGuvenlimi(katalog_gorsel_url);
+      if (!urlKontrol.guvenli) {
+        return res.status(403).json({
+          basarili: false,
+          hata: `G\xFCvenlik engeli (SSRF): ${urlKontrol.sebep}`
+        });
+      }
+    }
+    if (!req.tenantId || req.tenantId === "all")
+      return res.status(403).json({ basarili: false, hata: "Firma se\xE7in." });
+    if (!Number.isInteger(urun_indeksi) || urun_indeksi < 0)
+      return res.status(400).json({ basarili: false, hata: "Ge\xE7ersiz \xFCr\xFCn indeksi." });
+    let mevcutSiparis = null;
+    if (supabase) {
+      const { data, error } = await supabase.from("siparisler").select("*").eq("id", siparis_id).eq("tenant_id", req.tenantId).maybeSingle();
+      if (error)
+        return res.status(503).json({ basarili: false, hata: "Veritaban\u0131 kullan\u0131lam\u0131yor." });
+      mevcutSiparis = data;
+    } else {
+      mevcutSiparis = siparislerVeritabani.find(
+        (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+      );
+    }
+    if (!mevcutSiparis) {
+      return res.status(404).json({ basarili: false, hata: "Sipari\u015F bulunamad\u0131." });
+    }
+    await assertTenantImageReferences(req, req.body);
+    const formatli = formatlaSiparis(mevcutSiparis);
+    await assertTenantImageReferences(req, formatli);
+    const guncelUrunler = [...formatli.urunler || []];
+    if (!guncelUrunler[urun_indeksi]) {
+      return res.status(400).json({ basarili: false, hata: "Belirtilen \xFCr\xFCn bulunamad\u0131." });
+    }
+    const mevcutUrun = guncelUrunler[urun_indeksi];
+    const korunanOrijinalGorsel = mevcutUrun.orijinal_gorsel_url || mevcutUrun.urun_gorseli || formatli.gorseller && formatli.gorseller[0] || "";
+    let kaydedilecekGorselUrl = katalog_gorsel_url;
+    if (kaydedilecekGorselUrl.includes("/api/proxy-gorsel?url=")) {
+      try {
+        const parsed = new URL(kaydedilecekGorselUrl, "http://localhost:3000");
+        const gercekUrl = parsed.searchParams.get("url");
+        if (gercekUrl) kaydedilecekGorselUrl = gercekUrl;
+      } catch {
+      }
+    }
+    if (kaydedilecekGorselUrl.startsWith("data:image/")) {
+      kaydedilecekGorselUrl = storeTenantImage(req, kaydedilecekGorselUrl).url;
+    } else if (kaydedilecekGorselUrl.startsWith("http://") || kaydedilecekGorselUrl.startsWith("https://")) {
+      const urlKontrol = urlGuvenlimi(kaydedilecekGorselUrl);
+      if (!urlKontrol.guvenli) {
+        return res.status(403).json({
+          basarili: false,
+          hata: `G\xFCvenlik engeli (SSRF): ${urlKontrol.sebep}`
+        });
+      }
+      try {
+        const response = await fetchPublicResource(kaydedilecekGorselUrl);
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("text/html")) {
+          return res.status(400).json({
+            basarili: false,
+            hata: "Belirtilen adres do\u011Frudan bir g\xF6rsel dosyas\u0131 de\u011Fil, web sayfas\u0131 linkidir. L\xFCtfen do\u011Frudan resim adresini (.jpg, .png vb.) girin."
+          });
+        }
+        if (response.ok && contentType.startsWith("image/")) {
+          const arrayBuffer = await response.arrayBuffer();
+          const image = inspectImage(Buffer.from(arrayBuffer), contentType.split(";")[0]);
+          kaydedilecekGorselUrl = storeTenantImage(
+            req,
+            image.buffer.toString("base64"),
+            image.mimeType
+          ).url;
+        }
+      } catch (fetchErr) {
+        if (fetchErr instanceof PublicResourceError) {
+          return res.status(fetchErr.status).json({ basarili: false, hata: fetchErr.message });
+        }
+        console.warn("G\xF6rsel yerel indirme uyar\u0131s\u0131 (URL do\u011Frudan kullan\u0131lacak):", fetchErr);
+      }
+    }
+    guncelUrunler[urun_indeksi] = {
+      ...mevcutUrun,
+      orijinal_gorsel_url: korunanOrijinalGorsel,
+      katalog_gorseli: kaydedilecekGorselUrl,
+      urun_gorseli: kaydedilecekGorselUrl,
+      urun_sayfasi_url: urun_sayfasi_url || mevcutUrun.urun_sayfasi_url,
+      resmi_urun_adi: resmi_urun_adi || mevcutUrun.resmi_urun_adi
+    };
+    const sbPayload = hazirlaSupabasePayload({
+      ...formatli,
+      urunler: guncelUrunler
+    });
+    if (supabase) {
+      const { data, error } = await supabase.from("siparisler").update(sbPayload).eq("id", siparis_id).eq("tenant_id", req.tenantId).select().single();
+      if (error || !data)
+        return res.status(503).json({ basarili: false, hata: "G\xF6rsel de\u011Fi\u015Fikli\u011Fi kaydedilemedi." });
+      if (data) {
+        return res.json({
+          basarili: true,
+          siparis: formatlaSiparis(data),
+          mesaj: "Orijinal web katalog g\xF6rseli kaydedildi!"
+        });
+      }
+    }
+    const idx = siparislerVeritabani.findIndex(
+      (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+    );
+    if (idx !== -1) {
+      siparislerVeritabani[idx].urunler = guncelUrunler;
+    }
+    res.json({
+      basarili: true,
+      siparis: { ...formatli, urunler: guncelUrunler },
+      mesaj: "Orijinal web katalog g\xF6rseli kaydedildi!"
+    });
+  } catch (err) {
+    console.error("Katalog g\xF6rseli kaydetme hatas\u0131:", err);
+    res.status(err instanceof PublicResourceError ? err.status : 500).json({ basarili: false, hata: err.message });
+  }
+});
+router2.post("/urun-orijinal-gorsele-don", async (req, res) => {
+  try {
+    const { siparis_id, urun_indeksi } = req.body;
+    if (!siparis_id || urun_indeksi === void 0) {
+      return res.status(400).json({ basarili: false, hata: "siparis_id ve urun_indeksi gereklidir." });
+    }
+    if (!req.tenantId || req.tenantId === "all")
+      return res.status(403).json({ basarili: false, hata: "Firma se\xE7in." });
+    if (!Number.isInteger(urun_indeksi) || urun_indeksi < 0)
+      return res.status(400).json({ basarili: false, hata: "Ge\xE7ersiz \xFCr\xFCn indeksi." });
+    let mevcutSiparis = null;
+    if (supabase) {
+      const { data, error } = await supabase.from("siparisler").select("*").eq("id", siparis_id).eq("tenant_id", req.tenantId).maybeSingle();
+      if (error)
+        return res.status(503).json({ basarili: false, hata: "Veritaban\u0131 kullan\u0131lam\u0131yor." });
+      mevcutSiparis = data;
+    } else {
+      mevcutSiparis = siparislerVeritabani.find(
+        (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+      );
+    }
+    if (!mevcutSiparis) {
+      return res.status(404).json({ basarili: false, hata: "Sipari\u015F bulunamad\u0131." });
+    }
+    await assertTenantImageReferences(req, req.body);
+    const formatli = formatlaSiparis(mevcutSiparis);
+    await assertTenantImageReferences(req, formatli);
+    const guncelUrunler = [...formatli.urunler || []];
+    if (!guncelUrunler[urun_indeksi]) {
+      return res.status(400).json({ basarili: false, hata: "Belirtilen \xFCr\xFCn bulunamad\u0131." });
+    }
+    const u = guncelUrunler[urun_indeksi];
+    const geriDonecekGorsel = u.orijinal_gorsel_url || formatli.gorseller && formatli.gorseller[0] || "";
+    guncelUrunler[urun_indeksi] = {
+      ...u,
+      urun_gorseli: geriDonecekGorsel,
+      katalog_gorseli: void 0,
+      urun_sayfasi_url: void 0,
+      resmi_urun_adi: void 0
+    };
+    const sbPayload = hazirlaSupabasePayload({
+      ...formatli,
+      urunler: guncelUrunler
+    });
+    if (supabase) {
+      const { data, error } = await supabase.from("siparisler").update(sbPayload).eq("id", siparis_id).eq("tenant_id", req.tenantId).select().single();
+      if (error || !data)
+        return res.status(503).json({ basarili: false, hata: "G\xF6rsel de\u011Fi\u015Fikli\u011Fi kaydedilemedi." });
+      if (data) {
+        return res.json({
+          basarili: true,
+          siparis: formatlaSiparis(data),
+          mesaj: "Orijinal ekran g\xF6r\xFCnt\xFCs\xFC ba\u015Far\u0131yla geri y\xFCklendi."
+        });
+      }
+    }
+    const idx = siparislerVeritabani.findIndex(
+      (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+    );
+    if (idx !== -1) {
+      siparislerVeritabani[idx].urunler = guncelUrunler;
+    }
+    res.json({
+      basarili: true,
+      siparis: { ...formatli, urunler: guncelUrunler },
+      mesaj: "Orijinal ekran g\xF6r\xFCnt\xFCs\xFC ba\u015Far\u0131yla geri y\xFCklendi."
+    });
+  } catch (err) {
+    console.error("Orijinal g\xF6rsele d\xF6nme hatas\u0131:", err);
+    res.status(err instanceof PublicResourceError ? err.status : 500).json({ basarili: false, hata: err.message });
+  }
+});
+var gorsel_default = router2;
+
+// src/server/routes/siparisler.ts
+var router3 = Router3();
+var rowTenant = (row) => {
+  if (row.tenant_id) return row.tenant_id;
+  const legacy = Array.isArray(row.eksik_bilgiler) ? row.eksik_bilgiler.filter((item) => typeof item === "string" && item.startsWith("META:tenant_id=")).at(-1) : void 0;
+  return legacy?.slice("META:tenant_id=".length) || "kanada_shopper_baku";
+};
+var belongs = (row, tenant) => tenant === "all" || rowTenant(row) === tenant;
+function tenantFor(req, mutation = false) {
+  const tenant = req.tenantId;
+  if (!tenant || mutation && tenant === "all")
+    throw new PublicResourceError("Bir butik se\xE7ilmelidir.", 400);
+  return tenant;
+}
+var dbActive = (tenant) => !!supabase && tenant !== "demo_sandbox";
+var memoryOrders = (tenant) => tenant === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+async function scopedCustomers(tenant) {
+  if (!dbActive(tenant)) return musterilerVeritabani.filter((m) => belongs(m, tenant));
+  const { data, error } = await supabase.from("musteriler").select("*").eq("tenant_id", tenant);
+  if (error) throw new PublicResourceError("M\xFC\u015Fteriler okunamad\u0131.", 503);
+  return (data || []).filter((m) => belongs(m, tenant));
+}
+async function validateCustomerReference(tenant, id) {
+  if (!id) return;
+  if (typeof id !== "string" || !(await scopedCustomers(tenant)).some((m) => m.id === id))
+    throw new PublicResourceError("M\xFC\u015Fteri bulunamad\u0131.", 404);
+}
+var orderFailure = (res, error) => res.status(error instanceof PublicResourceError ? error.status : 503).json({
+  basarili: false,
+  hata: error instanceof PublicResourceError ? error.message : "Sipari\u015F i\u015Flemi tamamlanamad\u0131."
+});
+router3.get("/siparisler", async (req, res) => {
+  try {
+    const tenant = tenantFor(req);
+    let orders;
+    if (dbActive(tenant)) {
+      let query = supabase.from("siparisler").select("*");
+      if (tenant !== "all") query = query.eq("tenant_id", tenant);
+      const { data, error } = await query.order("olusturma_tarihi", { ascending: false });
+      if (error) throw new PublicResourceError("Sipari\u015Fler okunamad\u0131.", 503);
+      orders = (data || []).filter((s) => belongs(s, tenant)).map(formatlaSiparis);
+    } else {
+      orders = memoryOrders(tenant).filter((s) => belongs(s, tenant)).map(formatlaSiparis);
+    }
+    res.json({
+      basarili: true,
+      kaynak: tenant === "demo_sandbox" ? "demo_sandbox" : dbActive(tenant) ? "supabase" : "bellek",
+      toplam: orders.length,
+      siparisler: orders,
+      ...tenant === "demo_sandbox" ? { isDemo: true } : {}
+    });
+  } catch (error) {
+    orderFailure(res, error);
+  }
+});
+router3.post("/ayristir-siparis", async (req, res) => {
+  try {
+    const hedefTenantId = tenantFor(req, true);
+    const {
+      ham_mesaj,
+      musteri_adi_ipucu,
+      siparis_kaynagi,
+      otomatik_kaydet,
+      gorsel_base64,
+      gorsel_mime_type,
+      gorseller
+    } = req.body;
     const hasGorseller = Array.isArray(gorseller) && gorseller.length > 0 || !!gorsel_base64;
     if ((!ham_mesaj || typeof ham_mesaj !== "string" || ham_mesaj.trim() === "") && !hasGorseller) {
       return res.status(400).json({
@@ -4658,7 +5678,8 @@ router2.post("/ayristir-siparis", async (req, res) => {
         hata: keyErr.message
       });
     }
-    const musterilerRehberi = musterilerVeritabani.map((m) => ({
+    const tenantCustomers = await scopedCustomers(hedefTenantId);
+    const musterilerRehberi = tenantCustomers.map((m) => ({
       id: m.id,
       ad_soyad: m.ad_soyad,
       telefon: m.telefon,
@@ -4714,34 +5735,17 @@ Mesaj Metni: "${(ham_mesaj || "").trim()}"${musteri_adi_ipucu ? ` (Kullan\u0131c
 
 G\xD6RSEL VE M\xDC\u015ETER\u0130 ADI TAL\u0130MATI:
 G\xF6rsel / ekran g\xF6r\xFCnt\xFCs\xFC ekliyse ki\u015Fi ad\u0131n\u0131, telefon numaras\u0131n\u0131, beden/fiyat bilgilerini tespit et ve genel toplam\u0131 hesapla.`;
+    const attachments = Array.isArray(gorseller) && gorseller.length ? gorseller : gorsel_base64 ? [{ base64: gorsel_base64, mimeType: gorsel_mime_type }] : [];
+    if (attachments.length > 10)
+      throw new PublicResourceError("En fazla 10 g\xF6rsel y\xFCklenebilir.", 413);
     const tumGorseller = [];
-    if (Array.isArray(gorseller) && gorseller.length > 0) {
-      for (const g of gorseller) {
-        if (g) {
-          const raw = g.gorsel_base64 || g.base64;
-          if (raw && typeof raw === "string") {
-            const clean = raw.replace(/^data:image\/\w+;base64,/, "");
-            const mime = g.gorsel_mime_type || g.mimeType || "image/jpeg";
-            tumGorseller.push({ data: clean, mimeType: mime, dosyaAdi: g.dosya_adi || g.dosyaAdi });
-          }
-        }
-      }
-    } else if (gorsel_base64 && typeof gorsel_base64 === "string") {
-      const clean = gorsel_base64.replace(/^data:image\/\w+;base64,/, "");
-      tumGorseller.push({ data: clean, mimeType: gorsel_mime_type || "image/jpeg" });
-    }
     const kaydedilenGorselUrlleri = [];
-    for (let i = 0; i < tumGorseller.length; i++) {
-      const g = tumGorseller[i];
-      const ext = g.mimeType.includes("png") ? "png" : g.mimeType.includes("webp") ? "webp" : "jpg";
-      const dosyaAdi = `gorsel_${Date.now()}_${i + 1}.${ext}`;
-      const hedefYol = path4.join(UPLOADS_DIR, dosyaAdi);
-      try {
-        fs2.writeFileSync(hedefYol, Buffer.from(g.data, "base64"));
-        kaydedilenGorselUrlleri.push(`/uploads/${dosyaAdi}`);
-      } catch (dosyaErr) {
-        console.error("G\xF6rsel dosyas\u0131 kaydedilemedi:", dosyaErr);
-      }
+    for (const attachment of attachments) {
+      const raw = attachment?.gorsel_base64 || attachment?.base64;
+      if (typeof raw !== "string") throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel verisi.", 400);
+      const saved = storeTenantImage(req, raw, attachment.gorsel_mime_type || attachment.mimeType);
+      tumGorseller.push({ data: saved.base64, mimeType: saved.mimeType });
+      kaydedilenGorselUrlleri.push(saved.url);
     }
     let contentsPayload = textPrompt;
     if (tumGorseller.length > 0) {
@@ -4766,7 +5770,10 @@ G\xF6rsel / ekran g\xF6r\xFCnt\xFCs\xFC ekliyse ki\u015Fi ad\u0131n\u0131, telef
           musteri_durumu: { type: Type.STRING, enum: ["MEVCUT_MUSTERI", "YENI_MUSTERI"] },
           eslesen_musteri_id: { type: Type.STRING },
           duzeltilen_yazim_hatasi: { type: Type.STRING },
-          musteri_tipi: { type: Type.STRING, enum: ["TANIMADIK", "SADIK_MUSTERI", "AKRABA_YAKIN", "VIP"] },
+          musteri_tipi: {
+            type: Type.STRING,
+            enum: ["TANIMADIK", "SADIK_MUSTERI", "AKRABA_YAKIN", "VIP"]
+          },
           instagram_kullanici_adi: { type: Type.STRING },
           telefon_numarasi: { type: Type.STRING },
           teslimat_sehri: { type: Type.STRING },
@@ -4846,10 +5853,11 @@ G\xF6rsel / ekran g\xF6r\xFCnt\xFCs\xFC ekliyse ki\u015Fi ad\u0131n\u0131, telef
     const alinan = Number(parsedJson.alinan_tutar || 0);
     const toplam = Number(parsedJson.toplam_tutar || alinan);
     const kalan = Math.max(0, toplam - alinan);
-    const hedefTenantId = req.body.tenant_id || "kanada_shopper_baku";
+    if (!Number.isFinite(toplam) || !Number.isFinite(alinan) || toplam < 0 || alinan < 0)
+      throw new PublicResourceError("Ge\xE7ersiz tutar.", 400);
     const dbPayload = {
       tenant_id: hedefTenantId,
-      is_demo: hedefTenantId === "kanada_shopper_baku" || hedefTenantId === "demo_sandbox",
+      is_demo: hedefTenantId === "demo_sandbox",
       ham_mesaj: (ham_mesaj || (tumGorseller.length > 0 ? `[${tumGorseller.length} Ekran G\xF6r\xFCnt\xFCs\xFC & WhatsApp Notu]` : "")).trim(),
       siparis_kaynagi: siparis_kaynagi || "INSTAGRAM_LIVE",
       musteri_adi: parsedJson.musteri_adi || "Bilinmeyen M\xFC\u015Fteri",
@@ -4870,33 +5878,37 @@ G\xF6rsel / ekran g\xF6r\xFCnt\xFCs\xFC ekliyse ki\u015Fi ad\u0131n\u0131, telef
       ozel_not: parsedJson.ozel_not || "",
       kanada_takip_kodu: uretKanadaTakipKodu(parsedJson.urun_aciklamasi),
       uluslararasi_kargo_kodu: uretUluslararasiKargoKodu(),
-      eksik_bilgiler: Array.isArray(parsedJson.eksik_bilgiler) ? parsedJson.eksik_bilgiler : [],
+      eksik_bilgiler: Array.isArray(parsedJson.eksik_bilgiler) ? parsedJson.eksik_bilgiler.filter(
+        (v) => typeof v === "string" && !v.startsWith("META:")
+      ) : [],
       ai_guven_skoru: Number(parsedJson.ai_guven_skoru || 0.95),
-      musteri_id: parsedJson.eslesen_musteri_id || "",
+      musteri_id: tenantCustomers.some((m) => m.id === parsedJson.eslesen_musteri_id) ? parsedJson.eslesen_musteri_id : "",
       musteri_tipi: parsedJson.musteri_tipi || "TANIMADIK",
       duzeltilen_yazim_hatasi: parsedJson.duzeltilen_yazim_hatasi || "",
       musteri_durumu: parsedJson.musteri_durumu || "YENI_MUSTERI",
       birden_fazla_urun: parsedJson.birden_fazla_urun || Array.isArray(parsedJson.urunler) && parsedJson.urunler.length > 1,
-      urunler: (Array.isArray(parsedJson.urunler) ? parsedJson.urunler : []).map((u, idx) => {
-        const uAdi = u.urun_adi || u.urun_aciklamasi || `\xDCr\xFCn #${idx + 1}`;
-        const uFiyat = u.tutar !== void 0 ? Number(u.tutar) : u.birim_fiyat !== void 0 ? Number(u.birim_fiyat) : void 0;
-        const gIdx = typeof u.gorsel_indeksi === "number" && u.gorsel_indeksi < kaydedilenGorselUrlleri.length ? u.gorsel_indeksi : 0;
-        return {
-          urun_adi: uAdi,
-          urun_aciklamasi: uAdi,
-          adet: Number(u.adet || 1),
-          tutar: uFiyat,
-          birim_fiyat: uFiyat,
-          beden_veya_olcu: u.beden_veya_olcu || "",
-          renk: u.renk || "",
-          orijinal_gorsel_url: kaydedilenGorselUrlleri[gIdx] || void 0,
-          urun_alani: u.urun_alani || void 0,
-          urun_gorseli: kaydedilenGorselUrlleri[gIdx] || void 0,
-          ilgili_telefon: u.ilgili_telefon || void 0,
-          odeme_notu: u.odeme_notu || void 0,
-          ozel_not: u.ozel_not || void 0
-        };
-      }),
+      urunler: (Array.isArray(parsedJson.urunler) ? parsedJson.urunler : []).map(
+        (u, idx) => {
+          const uAdi = u.urun_adi || u.urun_aciklamasi || `\xDCr\xFCn #${idx + 1}`;
+          const uFiyat = u.tutar !== void 0 ? Number(u.tutar) : u.birim_fiyat !== void 0 ? Number(u.birim_fiyat) : void 0;
+          const gIdx = typeof u.gorsel_indeksi === "number" && u.gorsel_indeksi < kaydedilenGorselUrlleri.length ? u.gorsel_indeksi : 0;
+          return {
+            urun_adi: uAdi,
+            urun_aciklamasi: uAdi,
+            adet: Number(u.adet || 1),
+            tutar: uFiyat,
+            birim_fiyat: uFiyat,
+            beden_veya_olcu: u.beden_veya_olcu || "",
+            renk: u.renk || "",
+            orijinal_gorsel_url: kaydedilenGorselUrlleri[gIdx] || void 0,
+            urun_alani: u.urun_alani || void 0,
+            urun_gorseli: kaydedilenGorselUrlleri[gIdx] || void 0,
+            ilgili_telefon: u.ilgili_telefon || void 0,
+            odeme_notu: u.odeme_notu || void 0,
+            ozel_not: u.ozel_not || void 0
+          };
+        }
+      ),
       gorsel_urlleri: kaydedilenGorselUrlleri.length > 0 ? kaydedilenGorselUrlleri : tumGorseller.map((g, i) => g.dosyaAdi || `Ekran_Goruntusu_${i + 1}.png`)
     };
     const urunNotlari = dbPayload.urunler.filter((u) => u.ilgili_telefon || u.odeme_notu).map((u) => {
@@ -4917,16 +5929,16 @@ ${urunNotOzeti}`;
       }
     }
     let nihaiSiparis = null;
-    if (otomatik_kaydet !== false && supabase) {
+    if (otomatik_kaydet !== false && dbActive(hedefTenantId)) {
       try {
         const sbPayload = hazirlaSupabasePayload(dbPayload);
         const { data, error } = await supabase.from("siparisler").insert(sbPayload).select().single();
-        if (error) {
-          console.error("Supabase kay\u0131t hatas\u0131:", error.message);
+        if (error || !data) {
+          throw new PublicResourceError("Sipari\u015F kaydedilemedi.", 503);
         } else if (data) {
           nihaiSiparis = {
             ...formatlaSiparis(data),
-            musteri_id: parsedJson.eslesen_musteri_id,
+            musteri_id: dbPayload.musteri_id,
             musteri_tipi: parsedJson.musteri_tipi,
             duzeltilen_yazim_hatasi: parsedJson.duzeltilen_yazim_hatasi,
             musteri_durumu: parsedJson.musteri_durumu,
@@ -4937,38 +5949,42 @@ ${urunNotOzeti}`;
           console.log("\u2705 Sipari\u015F Supabase veritaban\u0131na ba\u015Far\u0131yla yaz\u0131ld\u0131 ID:", nihaiSiparis.id);
         }
       } catch (errDb) {
-        console.error("Supabase istisnas\u0131:", errDb);
+        throw errDb instanceof PublicResourceError ? errDb : new PublicResourceError("Sipari\u015F kaydedilemedi.", 503);
       }
     }
     if (!nihaiSiparis) {
       nihaiSiparis = formatlaSiparis({
-        id: "sip-" + Date.now().toString(36),
+        id: "sip-" + randomUUID(),
         olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
         ...dbPayload,
         kalan_tutar: kalan
       });
       if (otomatik_kaydet !== false) {
-        siparislerVeritabani.unshift(nihaiSiparis);
+        memoryOrders(hedefTenantId).unshift(nihaiSiparis);
       }
     }
     const eslesenMusteriId = parsedJson.eslesen_musteri_id;
     const telNo = (parsedJson.telefon_numarasi || "").replace(/\s+/g, "");
-    let bulunanMusteri = musterilerVeritabani.find(
+    let bulunanMusteri = tenantCustomers.find(
       (m) => eslesenMusteriId && m.id === eslesenMusteriId || telNo && m.telefon && m.telefon.replace(/\s+/g, "") === telNo || m.ad_soyad.toLowerCase().trim() === (parsedJson.musteri_adi || "").toLowerCase().trim()
     );
-    if (bulunanMusteri) {
+    if (otomatik_kaydet !== false && !dbActive(hedefTenantId) && bulunanMusteri) {
       bulunanMusteri.toplam_siparis_sayisi += 1;
       bulunanMusteri.toplam_harcama += toplam;
       bulunanMusteri.kalan_toplam_borc += kalan;
       bulunanMusteri.son_siparis_tarihi = (/* @__PURE__ */ new Date()).toISOString();
-      if (!bulunanMusteri.adres && parsedJson.teslimat_adresi) bulunanMusteri.adres = parsedJson.teslimat_adresi;
-      if (!bulunanMusteri.sehir && parsedJson.teslimat_sehri) bulunanMusteri.sehir = parsedJson.teslimat_sehri;
-      if (!bulunanMusteri.telefon && parsedJson.telefon_numarasi) bulunanMusteri.telefon = parsedJson.telefon_numarasi;
+      if (!bulunanMusteri.adres && parsedJson.teslimat_adresi)
+        bulunanMusteri.adres = parsedJson.teslimat_adresi;
+      if (!bulunanMusteri.sehir && parsedJson.teslimat_sehri)
+        bulunanMusteri.sehir = parsedJson.teslimat_sehri;
+      if (!bulunanMusteri.telefon && parsedJson.telefon_numarasi)
+        bulunanMusteri.telefon = parsedJson.telefon_numarasi;
       nihaiSiparis.musteri_id = bulunanMusteri.id;
       nihaiSiparis.musteri_tipi = bulunanMusteri.musteri_tipi;
-    } else if (parsedJson.musteri_adi && parsedJson.musteri_adi !== "Bilinmeyen M\xFC\u015Fteri") {
+    } else if (otomatik_kaydet !== false && !dbActive(hedefTenantId) && !bulunanMusteri && parsedJson.musteri_adi && parsedJson.musteri_adi !== "Bilinmeyen M\xFC\u015Fteri") {
       const yeniMusteri = {
-        id: "mus-" + Date.now().toString(36),
+        id: "mus-" + randomUUID(),
+        tenant_id: hedefTenantId,
         ad_soyad: parsedJson.musteri_adi,
         telefon: parsedJson.telefon_numarasi || "",
         instagram_kullanici_adi: parsedJson.instagram_kullanici_adi || "",
@@ -4991,27 +6007,31 @@ ${urunNotOzeti}`;
       siparis: nihaiSiparis,
       ayristirilan_veri: nihaiSiparis,
       kaydedildi: otomatik_kaydet !== false,
-      kaynak: supabase ? "supabase" : "bellek"
+      kaynak: dbActive(hedefTenantId) ? "supabase" : hedefTenantId === "demo_sandbox" ? "demo_sandbox" : "bellek"
     });
   } catch (err) {
     console.error("Gemini Ayr\u0131\u015Ft\u0131rma Hatas\u0131:", err);
-    res.status(500).json({
-      basarili: false,
-      hata: "Yapay zeka ayr\u0131\u015Ft\u0131rmas\u0131 s\u0131ras\u0131nda bir hata olu\u015Ftu: " + (err?.message || "Bilinmeyen hata")
-    });
+    orderFailure(res, err);
   }
 });
-router2.post("/siparisler", async (req, res) => {
+router3.post("/siparisler", async (req, res) => {
   try {
+    const tenant = tenantFor(req, true);
     const yeniVeri = req.body;
+    await validateCustomerReference(tenant, yeniVeri.musteri_id);
+    await assertTenantImageReferences(req, yeniVeri);
     if (!yeniVeri || !yeniVeri.urun_aciklamasi || !yeniVeri.musteri_adi) {
       return res.status(400).json({ basarili: false, hata: "M\xFC\u015Fteri ad\u0131 ve \xFCr\xFCn a\xE7\u0131klamas\u0131 zorunludur." });
     }
     const toplam = Number(yeniVeri.toplam_tutar || 0);
     const alinan = Number(yeniVeri.alinan_tutar || 0);
     const kalan = Math.max(0, toplam - alinan);
+    if (!Number.isFinite(toplam) || !Number.isFinite(alinan) || toplam < 0 || alinan < 0)
+      throw new PublicResourceError("Ge\xE7ersiz tutar.", 400);
     const dbPayload = {
-      tenant_id: yeniVeri.tenant_id || req.query.tenant_id || "kanada_shopper_baku",
+      tenant_id: tenant,
+      is_demo: tenant === "demo_sandbox",
+      musteri_id: yeniVeri.musteri_id || "",
       baku_kurye_id: yeniVeri.baku_kurye_id || null,
       baku_kurye_adi: yeniVeri.baku_kurye_adi || null,
       baku_kurye_bolgesi: yeniVeri.baku_kurye_bolgesi || null,
@@ -5035,14 +6055,16 @@ router2.post("/siparisler", async (req, res) => {
       ozel_not: yeniVeri.ozel_not || "",
       kanada_takip_kodu: yeniVeri.kanada_takip_kodu || uretKanadaTakipKodu(yeniVeri.urun_aciklamasi),
       uluslararasi_kargo_kodu: yeniVeri.uluslararasi_kargo_kodu || uretUluslararasiKargoKodu(),
-      eksik_bilgiler: Array.isArray(yeniVeri.eksik_bilgiler) ? yeniVeri.eksik_bilgiler : [],
+      eksik_bilgiler: Array.isArray(yeniVeri.eksik_bilgiler) ? yeniVeri.eksik_bilgiler.filter(
+        (v) => typeof v === "string" && !v.startsWith("META:")
+      ) : [],
       ai_guven_skoru: Number(yeniVeri.ai_guven_skoru || 1),
       urunler: Array.isArray(yeniVeri.urunler) ? yeniVeri.urunler : [],
       gorsel_urlleri: Array.isArray(yeniVeri.gorsel_urlleri) ? yeniVeri.gorsel_urlleri : []
     };
-    if (dbPayload.tenant_id === "demo_sandbox" || req.query.tenant_id === "demo_sandbox") {
+    if (tenant === "demo_sandbox") {
       const demoSiparis = formatlaSiparis({
-        id: "sip-demo-" + Date.now().toString(36),
+        id: "sip-demo-" + randomUUID(),
         olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
         ...dbPayload,
         tenant_id: "demo_sandbox",
@@ -5052,12 +6074,12 @@ router2.post("/siparisler", async (req, res) => {
       demoSiparislerVeritabani.unshift(demoSiparis);
       return res.json({ basarili: true, kaynak: "demo_sandbox", siparis: demoSiparis });
     }
-    if (supabase) {
+    if (dbActive(tenant)) {
       try {
         const sbPayload = hazirlaSupabasePayload(dbPayload);
         const { data, error } = await supabase.from("siparisler").insert(sbPayload).select().single();
-        if (error) {
-          console.error("Supabase ekleme hatas\u0131:", error.message);
+        if (error || !data) {
+          throw new PublicResourceError("Sipari\u015F kaydedilemedi.", 503);
         } else if (data) {
           const formatli = formatlaSiparis({
             ...data,
@@ -5072,11 +6094,11 @@ router2.post("/siparisler", async (req, res) => {
           });
         }
       } catch (errDb) {
-        console.error("Supabase ekleme istisnas\u0131:", errDb?.message || errDb);
+        throw errDb instanceof PublicResourceError ? errDb : new PublicResourceError("Sipari\u015F kaydedilemedi.", 503);
       }
     }
     const yeniSiparis = formatlaSiparis({
-      id: "sip-" + Date.now().toString(36),
+      id: "sip-" + randomUUID(),
       olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
       ...dbPayload,
       kalan_tutar: kalan
@@ -5085,634 +6107,655 @@ router2.post("/siparisler", async (req, res) => {
     res.json({ basarili: true, kaynak: "bellek", siparis: yeniSiparis });
   } catch (genelHata) {
     console.error("Sipari\u015F ekleme genel hatas\u0131:", genelHata);
-    res.status(500).json({ basarili: false, hata: "Sipari\u015F eklenirken hata: " + (genelHata?.message || "Bilinmeyen hata") });
+    orderFailure(res, genelHata);
   }
 });
-router2.patch("/siparisler/:id", async (req, res) => {
-  const { id } = req.params;
-  const demoIndex = demoSiparislerVeritabani.findIndex((s) => s.id === id);
-  if (demoIndex !== -1 || req.body.tenant_id === "demo_sandbox") {
-    const targetIndex = demoIndex !== -1 ? demoIndex : 0;
-    const guncel2 = {
-      ...demoSiparislerVeritabani[targetIndex],
-      ...req.body,
+var generalFields = /* @__PURE__ */ new Set([
+  "ham_mesaj",
+  "musteri_id",
+  "musteri_adi",
+  "musteri_tipi",
+  "instagram_kullanici_adi",
+  "telefon_numarasi",
+  "teslimat_sehri",
+  "teslimat_adresi",
+  "urun_aciklamasi",
+  "beden_veya_olcu",
+  "renk",
+  "adet",
+  "toplam_tutar",
+  "alinan_tutar",
+  "para_birimi",
+  "finans_durumu",
+  "lojistik_durumu",
+  "baku_tahsilat_notu",
+  "ozel_not",
+  "kanada_takip_kodu",
+  "uluslararasi_kargo_kodu",
+  "eksik_bilgiler",
+  "siparis_kaynagi",
+  "urunler",
+  "gorsel_urlleri",
+  "gorseller",
+  "baku_kurye_id",
+  "baku_kurye_adi",
+  "baku_kurye_bolgesi",
+  "teslim_tarihi",
+  "teslim_eden_kisi",
+  "kargo_agirligi_kg"
+]);
+var salesFields = new Set(
+  [...generalFields].filter(
+    (field) => ![
+      "lojistik_durumu",
+      "baku_tahsilat_notu",
+      "kanada_takip_kodu",
+      "uluslararasi_kargo_kodu",
+      "baku_kurye_id",
+      "baku_kurye_adi",
+      "baku_kurye_bolgesi",
+      "teslim_tarihi",
+      "teslim_eden_kisi",
+      "kargo_agirligi_kg"
+    ].includes(field)
+  )
+);
+var financeFields = /* @__PURE__ */ new Set(["alinan_tutar", "finans_durumu", "baku_tahsilat_notu"]);
+var purchaseFields = /* @__PURE__ */ new Set([
+  "urun_aciklamasi",
+  "beden_veya_olcu",
+  "renk",
+  "adet",
+  "urunler",
+  "gorsel_urlleri",
+  "gorseller",
+  "ozel_not",
+  "lojistik_durumu",
+  "kanada_takip_kodu",
+  "uluslararasi_kargo_kodu",
+  "baku_kurye_id",
+  "baku_kurye_adi",
+  "baku_kurye_bolgesi",
+  "kargo_agirligi_kg"
+]);
+async function ownedOrder(tenant, id) {
+  if (dbActive(tenant)) {
+    const { data, error } = await supabase.from("siparisler").select("*").eq("id", id).eq("tenant_id", tenant).maybeSingle();
+    if (error) throw new PublicResourceError("Sipari\u015F okunamad\u0131.", 503);
+    return data && belongs(data, tenant) ? data : void 0;
+  }
+  return memoryOrders(tenant).find((s) => s.id === id && belongs(s, tenant));
+}
+router3.patch("/siparisler/:id", async (req, res) => {
+  try {
+    const tenant = tenantFor(req, true);
+    const existing = await ownedOrder(tenant, req.params.id);
+    if (!existing) return res.status(404).json({ basarili: false, hata: "Sipari\u015F bulunamad\u0131." });
+    const formatted = formatlaSiparis(existing);
+    const role = req.auth?.role;
+    const allowed = role === "BAKU_FINANS" ? financeFields : role === "KANADA_SATINALMA" ? purchaseFields : role === "SATIS_SORUMLUSU" ? salesFields : generalFields;
+    if (!role || role === "BAKU_KURYE")
+      throw new PublicResourceError("Bu i\u015Flem i\xE7in yetkiniz yok.", 403);
+    const updates = {};
+    for (const [key, value] of Object.entries(req.body)) {
+      if (key === "tenant_id" || key === "tenantId") {
+        if (value !== tenant) throw new PublicResourceError("Sipari\u015F ba\u015Fka butike ta\u015F\u0131namaz.", 403);
+        continue;
+      }
+      if (JSON.stringify(value) === JSON.stringify(formatted[key])) continue;
+      if (key === "kalan_tutar") continue;
+      if (!allowed.has(key))
+        throw new PublicResourceError("Bu alan\u0131 de\u011Fi\u015Ftirme yetkiniz yok: " + key, 403);
+      updates[key] = value;
+    }
+    if (updates.eksik_bilgiler !== void 0 && (!Array.isArray(updates.eksik_bilgiler) || updates.eksik_bilgiler.some((v) => typeof v !== "string" || v.startsWith("META:"))))
+      throw new PublicResourceError("Ge\xE7ersiz eksik bilgi listesi.", 400);
+    await validateCustomerReference(tenant, updates.musteri_id);
+    await assertTenantImageReferences(req, updates);
+    const changed = {
+      ...formatted,
+      ...updates,
+      id: existing.id,
+      tenant_id: tenant,
       guncellenme_tarihi: (/* @__PURE__ */ new Date()).toISOString()
     };
-    if (guncel2.toplam_tutar !== void 0 && guncel2.alinan_tutar !== void 0) {
-      guncel2.kalan_tutar = Math.max(0, Number(guncel2.toplam_tutar) - Number(guncel2.alinan_tutar));
-      if (guncel2.alinan_tutar >= guncel2.toplam_tutar && guncel2.toplam_tutar > 0) {
-        guncel2.finans_durumu = "ODENDI";
-      } else if (guncel2.alinan_tutar > 0) {
-        guncel2.finans_durumu = "KISMI_ODEME";
-      }
+    for (const key of ["toplam_tutar", "alinan_tutar", "adet"]) {
+      changed[key] = Number(changed[key]);
+      if (!Number.isFinite(changed[key]) || changed[key] < 0)
+        throw new PublicResourceError("Ge\xE7ersiz say\u0131sal de\u011Fer.", 400);
     }
-    demoSiparislerVeritabani[targetIndex] = formatlaSiparis(guncel2);
-    return res.json({ basarili: true, kaynak: "demo_sandbox", siparis: demoSiparislerVeritabani[targetIndex] });
-  }
-  if (supabase) {
-    try {
-      const { id: _id, kalan_tutar: _k, olusturma_tarihi: _o, guncellenme_tarihi: _g, ...guncellenecekAlanlar } = req.body;
-      if (guncellenecekAlanlar.toplam_tutar !== void 0) {
-        guncellenecekAlanlar.toplam_tutar = Number(guncellenecekAlanlar.toplam_tutar);
-      }
-      if (guncellenecekAlanlar.alinan_tutar !== void 0) {
-        guncellenecekAlanlar.alinan_tutar = Number(guncellenecekAlanlar.alinan_tutar);
-      }
-      const { data: mevcutData } = await supabase.from("siparisler").select("*").eq("id", id).single();
-      let mevcutUrunler = [];
-      let mevcutGorseller = [];
-      let mevcutTemizEksik = [];
-      if (mevcutData && Array.isArray(mevcutData.eksik_bilgiler)) {
-        for (const item of mevcutData.eksik_bilgiler) {
-          if (typeof item === "string") {
-            if (item.startsWith("META:urunler=")) {
-              try {
-                mevcutUrunler = JSON.parse(item.substring("META:urunler=".length));
-              } catch {
-              }
-            } else if (item.startsWith("META:gorseller=")) {
-              try {
-                mevcutGorseller = JSON.parse(item.substring("META:gorseller=".length));
-              } catch {
-              }
-            } else {
-              mevcutTemizEksik.push(item);
-            }
-          }
-        }
-      }
-      const sonUrunler = guncellenecekAlanlar.urunler !== void 0 ? guncellenecekAlanlar.urunler : mevcutUrunler;
-      const sonGorseller = guncellenecekAlanlar.gorsel_urlleri !== void 0 ? guncellenecekAlanlar.gorsel_urlleri : mevcutGorseller;
-      const sonEksik = guncellenecekAlanlar.eksik_bilgiler !== void 0 ? guncellenecekAlanlar.eksik_bilgiler.filter((b) => typeof b !== "string" || !b.startsWith("META:")) : mevcutTemizEksik;
-      const fullUpdateObj = {
-        ...mevcutData || {},
-        ...guncellenecekAlanlar,
-        urunler: sonUrunler,
-        gorsel_urlleri: sonGorseller,
-        eksik_bilgiler: sonEksik
-      };
-      const sbUpdatePayload = hazirlaSupabasePayload(fullUpdateObj);
-      const { data, error } = await supabase.from("siparisler").update(sbUpdatePayload).eq("id", id).select().single();
-      if (error) {
-        console.error("Supabase g\xFCncelleme hatas\u0131:", error.message);
-      } else if (data) {
-        const formatli = formatlaSiparis({
-          ...data,
-          ozel_not: fullUpdateObj.ozel_not !== void 0 ? fullUpdateObj.ozel_not : void 0
-        });
-        return res.json({
-          basarili: true,
-          kaynak: "supabase",
-          siparis: formatli
-        });
-      }
-    } catch (errDb) {
-      console.error("Supabase g\xFCncelleme istisnas\u0131:", errDb);
+    changed.kalan_tutar = Math.max(0, changed.toplam_tutar - changed.alinan_tutar);
+    changed.finans_durumu = changed.alinan_tutar >= changed.toplam_tutar && changed.toplam_tutar > 0 ? "ODENDI" : changed.alinan_tutar > 0 ? "KISMI_ODEME" : "BEKLIYOR";
+    if (dbActive(tenant)) {
+      const { data, error } = await supabase.from("siparisler").update(hazirlaSupabasePayload(changed)).eq("id", existing.id).eq("tenant_id", tenant).select("*").single();
+      if (error || !data) throw new PublicResourceError("Sipari\u015F g\xFCncellenemedi.", 503);
+      return res.json({ basarili: true, kaynak: "supabase", siparis: formatlaSiparis(data) });
     }
-  }
-  const index = siparislerVeritabani.findIndex((s) => s.id === id);
-  if (index === -1) {
-    return res.status(404).json({ basarili: false, hata: "Sipari\u015F bulunamad\u0131." });
-  }
-  const guncel = {
-    ...siparislerVeritabani[index],
-    ...req.body,
-    guncellenme_tarihi: (/* @__PURE__ */ new Date()).toISOString()
-  };
-  if (guncel.toplam_tutar !== void 0 && guncel.alinan_tutar !== void 0) {
-    guncel.kalan_tutar = Math.max(0, Number(guncel.toplam_tutar) - Number(guncel.alinan_tutar));
-    if (guncel.alinan_tutar >= guncel.toplam_tutar && guncel.toplam_tutar > 0) {
-      guncel.finans_durumu = "ODENDI";
-    } else if (guncel.alinan_tutar > 0) {
-      guncel.finans_durumu = "KISMI_ODEME";
-    }
-  }
-  siparislerVeritabani[index] = formatlaSiparis(guncel);
-  res.json({ basarili: true, kaynak: "bellek", siparis: siparislerVeritabani[index] });
-});
-router2.delete("/siparisler/:id", async (req, res) => {
-  const { id } = req.params;
-  const demoIndex = demoSiparislerVeritabani.findIndex((s) => s.id === id);
-  if (demoIndex !== -1 || req.query.tenant_id === "demo_sandbox") {
-    setDemoSiparislerVeritabani(demoSiparislerVeritabani.filter((s) => s.id !== id));
-    return res.json({
-      basarili: true,
-      kaynak: "demo_sandbox",
-      mesaj: "Sifari\u015F s\u0131naq m\xFChitind\u0259n silindi (\u018Fsas canl\u0131 baza zirehli qorunur)."
-    });
-  }
-  if (supabase) {
-    try {
-      const { error } = await supabase.from("siparisler").delete().eq("id", id);
-      if (error) {
-        console.error("Supabase silme hatas\u0131:", error.message);
-      } else {
-        return res.json({ basarili: true, kaynak: "supabase", mesaj: "Sipari\u015F Supabase veritaban\u0131ndan silindi." });
-      }
-    } catch (errDb) {
-      console.error("Supabase silme istisnas\u0131:", errDb);
-    }
-  }
-  setSiparislerVeritabani(siparislerVeritabani.filter((s) => s.id !== id));
-  res.json({ basarili: true, kaynak: "bellek", mesaj: "Sipari\u015F ba\u015Far\u0131yla silindi." });
-});
-router2.post("/demo/sifirla", (_req, res) => {
-  const sayi = sifirlaDemoVeritabani();
-  res.json({
-    basarili: true,
-    kaynak: "demo_sandbox",
-    mesaj: `Canl\u0131 demo m\xFChiti u\u011Furla s\u0131f\u0131rland\u0131! ${sayi} \u0259d\u0259d orijinal q\u0131z\u0131l sifari\u015F ilkin v\u0259ziyy\u0259tin\u0259 b\u0259rpa olundu.`,
-    toplam: sayi
-  });
-});
-router2.post("/siparisler/tumunu-uluslararasi-kargo-yap", async (_req, res) => {
-  try {
-    if (supabase) {
-      const { error } = await supabase.from("siparisler").update({ lojistik_durumu: "ULUSLARARASI_KARGO" }).neq("lojistik_durumu", "TESLIM_EDILDI");
-      if (error) console.error("Supabase toplu lojistik g\xFCncelleme hatas\u0131:", error.message);
-    }
-    setSiparislerVeritabani(
-      siparislerVeritabani.map(
-        (s) => s.lojistik_durumu !== "TESLIM_EDILDI" ? { ...s, lojistik_durumu: "ULUSLARARASI_KARGO" } : s
-      )
-    );
-    res.json({ basarili: true, mesaj: "T\xFCm sipari\u015Flerin lojistik a\u015Famas\u0131 ULUSLARARASI KARGO olarak g\xFCncellendi." });
-  } catch (err) {
-    res.status(500).json({ basarili: false, hata: err.message });
-  }
-});
-var siparisler_default = router2;
-
-// src/server/routes/musteriler.ts
-import { Router as Router3 } from "express";
-var router3 = Router3();
-router3.get("/musteriler", async (req, res) => {
-  try {
-    const seciliTenant = req.query.tenant_id;
-    let tumSiparisler = [];
-    let supabaseOkundu = false;
-    if (supabase) {
-      try {
-        let query = supabase.from("siparisler").select("*");
-        if (seciliTenant && seciliTenant !== "all") {
-          query = query.eq("tenant_id", seciliTenant);
-        }
-        const { data, error } = await query;
-        if (!error && data) {
-          tumSiparisler = data.map((s) => formatlaSiparis(s));
-          supabaseOkundu = true;
-        }
-      } catch (err) {
-        console.warn("Supabase sipari\u015Fleri okunamad\u0131:", err);
-      }
-    }
-    if (!supabaseOkundu) {
-      tumSiparisler = siparislerVeritabani.map((s) => formatlaSiparis(s));
-    }
-    const ilgiliSiparisler = seciliTenant && seciliTenant !== "all" ? tumSiparisler.filter((s) => (s.tenant_id || "kanada_shopper_baku") === seciliTenant) : tumSiparisler;
-    let tumMusteriler = [...musterilerVeritabani];
-    if (supabase) {
-      try {
-        const { data: dbMusteriler, error } = await supabase.from("musteriler").select("*");
-        if (!error && dbMusteriler && dbMusteriler.length > 0) {
-          for (const dbm of dbMusteriler) {
-            const idx = tumMusteriler.findIndex((m) => m.id === dbm.id);
-            if (idx !== -1) {
-              tumMusteriler[idx] = { ...tumMusteriler[idx], ...dbm };
-            } else {
-              tumMusteriler.push(dbm);
-            }
-          }
-        }
-      } catch (sbMusteriErr) {
-      }
-    }
-    let tenantMusteriListesi = [];
-    if (seciliTenant && seciliTenant !== "all") {
-      if (seciliTenant === "kanada_shopper_baku" || seciliTenant === "demo_sandbox") {
-        tenantMusteriListesi = tumMusteriler.filter((m) => !m.tenant_id || m.tenant_id === seciliTenant);
-      } else {
-        tenantMusteriListesi = tumMusteriler.filter((m) => m.tenant_id === seciliTenant);
-      }
-      for (const s of ilgiliSiparisler) {
-        if (!s.musteri_adi) continue;
-        const telNo = (s.telefon_numarasi || "").replace(/\s+/g, "");
-        const varMi = tenantMusteriListesi.some(
-          (m) => telNo && m.telefon && m.telefon.replace(/\s+/g, "") === telNo || m.ad_soyad.toLowerCase().trim() === s.musteri_adi.toLowerCase().trim()
-        );
-        if (!varMi) {
-          tenantMusteriListesi.push({
-            id: s.musteri_id || `mus-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-            ad_soyad: s.musteri_adi,
-            telefon: s.telefon_numarasi || "",
-            instagram_kullanici_adi: s.instagram_kullanici_adi || "",
-            sehir: s.teslimat_sehri || "Bak\u0131",
-            adres: s.teslimat_adresi || "",
-            musteri_tipi: s.musteri_tipi || "TANIMADIK",
-            toplam_siparis_sayisi: 0,
-            toplam_harcama: 0,
-            kalan_toplam_borc: 0,
-            olusturma_tarihi: s.olusturma_tarihi || (/* @__PURE__ */ new Date()).toISOString(),
-            son_siparis_tarihi: s.olusturma_tarihi || (/* @__PURE__ */ new Date()).toISOString(),
-            son_urun_aciklamasi: s.urun_aciklamasi,
-            son_siparis_tutari: s.toplam_tutar,
-            tenant_id: seciliTenant
-          });
-        }
-      }
-    } else {
-      tenantMusteriListesi = [...musterilerVeritabani];
-    }
-    const zenginlestirilmis = tenantMusteriListesi.map((m) => {
-      const telNo = (m.telefon || "").replace(/\s+/g, "");
-      const eslesenSiparisler = ilgiliSiparisler.filter(
-        (s) => s.musteri_id === m.id || telNo && s.telefon_numarasi && s.telefon_numarasi.replace(/\s+/g, "") === telNo || s.musteri_adi.toLowerCase().trim() === m.ad_soyad.toLowerCase().trim()
-      ).sort((a, b) => new Date(b.olusturma_tarihi).getTime() - new Date(a.olusturma_tarihi).getTime());
-      const sonSiparis = eslesenSiparisler[0];
-      const toplamHarcama = eslesenSiparisler.reduce((toplam, s) => toplam + (Number(s.toplam_tutar) || 0), 0);
-      const toplamBorc = eslesenSiparisler.reduce((toplam, s) => toplam + (Number(s.kalan_tutar) || 0), 0);
-      return {
-        ...m,
-        toplam_siparis_sayisi: eslesenSiparisler.length > 0 ? eslesenSiparisler.length : seciliTenant && seciliTenant !== "all" ? 0 : m.toplam_siparis_sayisi,
-        toplam_harcama: eslesenSiparisler.length > 0 ? toplamHarcama : seciliTenant && seciliTenant !== "all" ? 0 : m.toplam_harcama,
-        kalan_toplam_borc: toplamBorc,
-        son_urun_aciklamasi: sonSiparis ? sonSiparis.urun_aciklamasi : seciliTenant && seciliTenant !== "all" ? "Bu butikd\u0259 sifari\u015F yoxdur" : m.son_urun_aciklamasi || "Sipari\u015F yoxdur",
-        son_siparis_tutari: sonSiparis ? sonSiparis.toplam_tutar : seciliTenant && seciliTenant !== "all" ? 0 : m.son_siparis_tutari || 0,
-        son_siparis_tarihi: sonSiparis ? sonSiparis.olusturma_tarihi : seciliTenant && seciliTenant !== "all" ? m.olusturma_tarihi : m.son_siparis_tarihi
-      };
-    });
-    const filtrelenmis = zenginlestirilmis.filter((m) => {
-      if (seciliTenant && seciliTenant !== "all" && seciliTenant !== "kanada_shopper_baku" && seciliTenant !== "demo_sandbox") {
-        return m.tenant_id === seciliTenant || m.toplam_siparis_sayisi > 0;
-      }
-      return true;
-    });
-    filtrelenmis.sort((a, b) => new Date(b.son_siparis_tarihi || 0).getTime() - new Date(a.son_siparis_tarihi || 0).getTime());
+    const pool = memoryOrders(tenant);
+    const index = pool.findIndex((s) => s.id === existing.id && belongs(s, tenant));
+    pool[index] = formatlaSiparis(changed);
     res.json({
       basarili: true,
-      toplam: filtrelenmis.length,
-      musteriler: filtrelenmis
+      kaynak: tenant === "demo_sandbox" ? "demo_sandbox" : "bellek",
+      siparis: pool[index]
     });
-  } catch (err) {
-    res.status(500).json({ basarili: false, hata: err.message });
+  } catch (error) {
+    orderFailure(res, error);
   }
 });
-router3.get("/musteriler/:id/siparisler", async (req, res) => {
-  const { id } = req.params;
-  const seciliTenant = req.query.tenant_id;
-  let tumSiparisler = [];
-  if (supabase) {
-    try {
-      let query = supabase.from("siparisler").select("*");
-      if (seciliTenant && seciliTenant !== "all") {
-        query = query.eq("tenant_id", seciliTenant);
-      }
-      const { data } = await query;
-      if (data && data.length > 0) {
-        tumSiparisler = data.map((s) => formatlaSiparis(s));
-      }
-    } catch {
+router3.delete("/siparisler/:id", async (req, res) => {
+  try {
+    const tenant = tenantFor(req, true);
+    const existing = await ownedOrder(tenant, req.params.id);
+    if (!existing) return res.status(404).json({ basarili: false, hata: "Sipari\u015F bulunamad\u0131." });
+    if (dbActive(tenant)) {
+      const { error } = await supabase.from("siparisler").delete().eq("id", existing.id).eq("tenant_id", tenant);
+      if (error) throw new PublicResourceError("Sipari\u015F silinemedi.", 503);
+    } else {
+      const pool = memoryOrders(tenant);
+      pool.splice(
+        pool.findIndex((s) => s.id === existing.id && belongs(s, tenant)),
+        1
+      );
     }
+    res.json({ basarili: true, mesaj: "Sipari\u015F silindi." });
+  } catch (error) {
+    orderFailure(res, error);
   }
-  if (tumSiparisler.length === 0) {
-    tumSiparisler = siparislerVeritabani.map((s) => formatlaSiparis(s));
-  }
-  const musteri = musterilerVeritabani.find((m) => m.id === id);
-  const telNo = musteri ? (musteri.telefon || "").replace(/\s+/g, "") : "";
-  const musteriAdi = musteri ? musteri.ad_soyad.toLowerCase().trim() : "";
-  let musteriSiparisleri = tumSiparisler.filter(
-    (s) => s.musteri_id === id || telNo && s.telefon_numarasi && s.telefon_numarasi.replace(/\s+/g, "") === telNo || musteriAdi && s.musteri_adi.toLowerCase().trim() === musteriAdi
-  );
-  if (seciliTenant && seciliTenant !== "all") {
-    musteriSiparisleri = musteriSiparisleri.filter((s) => (s.tenant_id || "kanada_shopper_baku") === seciliTenant);
-  }
-  musteriSiparisleri.sort((a, b) => new Date(b.olusturma_tarihi).getTime() - new Date(a.olusturma_tarihi).getTime());
-  res.json({
-    basarili: true,
-    musteri: musteri || { id, ad_soyad: "M\xFC\u015Ft\u0259ri" },
-    siparisler: musteriSiparisleri
-  });
 });
-router3.post("/musteriler", async (req, res) => {
-  const { id, ad_soyad, telefon, instagram_kullanici_adi, sehir, adres, musteri_tipi, notlar, tenant_id } = req.body;
-  if (!ad_soyad) {
-    return res.status(400).json({ basarili: false, hata: "M\xFC\u015Fteri ad\u0131 zorunludur." });
+router3.post("/demo/sifirla", (req, res) => {
+  try {
+    if (tenantFor(req, true) !== "demo_sandbox")
+      throw new PublicResourceError("Demo alan\u0131 se\xE7ilmelidir.", 403);
+    const toplam = sifirlaDemoVeritabani();
+    res.json({
+      basarili: true,
+      kaynak: "demo_sandbox",
+      mesaj: "Demo sipari\u015Fleri s\u0131f\u0131rland\u0131.",
+      toplam
+    });
+  } catch (error) {
+    orderFailure(res, error);
   }
-  let musteri = id ? musterilerVeritabani.find((m) => m.id === id) : null;
-  if (musteri) {
-    musteri.ad_soyad = ad_soyad;
-    if (telefon !== void 0) musteri.telefon = telefon;
-    if (instagram_kullanici_adi !== void 0) musteri.instagram_kullanici_adi = instagram_kullanici_adi;
-    if (sehir !== void 0) musteri.sehir = sehir;
-    if (adres !== void 0) musteri.adres = adres;
-    if (musteri_tipi !== void 0) musteri.musteri_tipi = musteri_tipi;
-    if (notlar !== void 0) musteri.notlar = notlar;
-    if (tenant_id !== void 0) musteri.tenant_id = tenant_id;
-  } else {
-    musteri = {
-      id: "mus-" + Date.now().toString(36),
-      ad_soyad,
-      telefon: telefon || "",
-      instagram_kullanici_adi: instagram_kullanici_adi || "",
-      sehir: sehir || "Bak\u0131",
-      adres: adres || "",
-      musteri_tipi: musteri_tipi || "TANIMADIK",
-      toplam_siparis_sayisi: 0,
-      toplam_harcama: 0,
-      kalan_toplam_borc: 0,
-      notlar: notlar || "",
-      olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
-      son_siparis_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
-      tenant_id: tenant_id || "kanada_shopper_baku"
-    };
-    musterilerVeritabani.unshift(musteri);
+});
+router3.post("/siparisler/tumunu-uluslararasi-kargo-yap", async (req, res) => {
+  try {
+    const tenant = tenantFor(req, true);
+    if (dbActive(tenant)) {
+      const { error } = await supabase.from("siparisler").update({ lojistik_durumu: "ULUSLARARASI_KARGO" }).eq("tenant_id", tenant).neq("lojistik_durumu", "TESLIM_EDILDI");
+      if (error) throw new PublicResourceError("Sipari\u015Fler g\xFCncellenemedi.", 503);
+    } else {
+      const pool = memoryOrders(tenant);
+      for (let index = 0; index < pool.length; index++)
+        if (belongs(pool[index], tenant) && pool[index].lojistik_durumu !== "TESLIM_EDILDI")
+          pool[index] = { ...pool[index], lojistik_durumu: "ULUSLARARASI_KARGO" };
+    }
+    res.json({ basarili: true, mesaj: "Se\xE7ili butikin sipari\u015Fleri g\xFCncellendi." });
+  } catch (error) {
+    orderFailure(res, error);
   }
+});
+var siparisler_default = router3;
+
+// src/server/routes/musteriler.ts
+import { Router as Router4 } from "express";
+import { randomUUID as randomUUID2 } from "node:crypto";
+var router4 = Router4();
+var rowTenant2 = (row) => {
+  if (row.tenant_id) return row.tenant_id;
+  const legacy = Array.isArray(row.eksik_bilgiler) ? row.eksik_bilgiler.filter((item) => typeof item === "string" && item.startsWith("META:tenant_id=")).at(-1) : void 0;
+  return legacy?.slice("META:tenant_id=".length) || "kanada_shopper_baku";
+};
+var belongs2 = (row, tenant) => tenant === "all" || rowTenant2(row) === tenant;
+function tenantFor2(req, mutation = false) {
+  const tenant = req.tenantId;
+  if (!tenant || mutation && tenant === "all")
+    throw Object.assign(new Error("Bir butik se\xE7ilmelidir."), { status: 400 });
+  return tenant;
+}
+async function rows(table, tenant) {
+  if (tenant === "demo_sandbox")
+    return table === "siparisler" ? demoSiparislerVeritabani.map(formatlaSiparis) : musterilerVeritabani.filter((r) => r.tenant_id === tenant);
   if (supabase) {
-    try {
-      await supabase.from("musteriler").upsert({
-        id: musteri.id,
-        ad_soyad: musteri.ad_soyad,
-        telefon: musteri.telefon,
-        instagram_kullanici_adi: musteri.instagram_kullanici_adi,
-        sehir: musteri.sehir,
-        adres: musteri.adres,
-        musteri_tipi: musteri.musteri_tipi,
-        notlar: musteri.notlar,
-        tenant_id: musteri.tenant_id,
-        toplam_siparis_sayisi: musteri.toplam_siparis_sayisi,
-        toplam_harcama: musteri.toplam_harcama,
-        kalan_toplam_borc: musteri.kalan_toplam_borc
+    let query = supabase.from(table).select("*");
+    if (tenant !== "all") query = query.eq("tenant_id", tenant);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).filter((r) => belongs2(r, tenant)).map((r) => table === "siparisler" ? formatlaSiparis(r) : r);
+  }
+  return (table === "musteriler" ? musterilerVeritabani : siparislerVeritabani).filter((r) => belongs2(r, tenant)).map((r) => table === "siparisler" ? formatlaSiparis(r) : r);
+}
+var phone = (value) => String(value || "").replace(/\s+/g, "");
+function matches(customer, order) {
+  if (rowTenant2(customer) !== rowTenant2(order)) return false;
+  return order.musteri_id === customer.id || phone(customer.telefon) && phone(customer.telefon) === phone(order.telefon_numarasi) || String(order.musteri_adi || "").toLowerCase().trim() === String(customer.ad_soyad || "").toLowerCase().trim();
+}
+var fail = (res, error) => res.status(error.status || 503).json({
+  basarili: false,
+  hata: error.status ? error.message : "M\xFC\u015Fteri verilerine eri\u015Filemedi."
+});
+router4.get("/musteriler", async (req, res) => {
+  try {
+    const tenant = tenantFor2(req);
+    const [customers, orders] = await Promise.all([
+      rows("musteriler", tenant),
+      rows("siparisler", tenant)
+    ]);
+    for (const order of orders) {
+      if (!order.musteri_adi || customers.some((c) => matches(c, order))) continue;
+      customers.push({
+        id: order.musteri_id || `order:${order.id}`,
+        ad_soyad: order.musteri_adi,
+        telefon: order.telefon_numarasi || "",
+        instagram_kullanici_adi: order.instagram_kullanici_adi || "",
+        sehir: order.teslimat_sehri || "",
+        adres: order.teslimat_adresi || "",
+        musteri_tipi: order.musteri_tipi || "TANIMADIK",
+        tenant_id: rowTenant2(order),
+        olusturma_tarihi: order.olusturma_tarihi
       });
-    } catch (errDb) {
-      console.warn("M\xFC\u015Fteri Supabase kaydetme uyar\u0131s\u0131:", errDb);
     }
+    const enriched = customers.map((customer) => {
+      const history = orders.filter((order) => matches(customer, order)).sort((a, b) => Date.parse(b.olusturma_tarihi) - Date.parse(a.olusturma_tarihi));
+      const latest = history[0];
+      return {
+        ...customer,
+        toplam_siparis_sayisi: history.length,
+        toplam_harcama: history.reduce((sum, order) => sum + Number(order.toplam_tutar || 0), 0),
+        kalan_toplam_borc: history.reduce(
+          (sum, order) => sum + Number(order.kalan_tutar || 0),
+          0
+        ),
+        son_siparis_tarihi: latest?.olusturma_tarihi || customer.olusturma_tarihi,
+        son_urun_aciklamasi: latest?.urun_aciklamasi || "Sipari\u015F yoxdur",
+        son_siparis_tutari: latest?.toplam_tutar || 0
+      };
+    }).sort((a, b) => Date.parse(b.son_siparis_tarihi) - Date.parse(a.son_siparis_tarihi));
+    res.json({ basarili: true, toplam: enriched.length, musteriler: enriched });
+  } catch (error) {
+    fail(res, error);
   }
-  res.json({ basarili: true, musteri });
 });
-var musteriler_default = router3;
+router4.get("/musteriler/:id/siparisler", async (req, res) => {
+  try {
+    const tenant = tenantFor2(req);
+    const [customers, orders] = await Promise.all([
+      rows("musteriler", tenant),
+      rows("siparisler", tenant)
+    ]);
+    let customer = customers.find((c) => c.id === req.params.id);
+    if (!customer) {
+      const order = orders.find(
+        (o) => o.musteri_id === req.params.id || `order:${o.id}` === req.params.id
+      );
+      if (order)
+        customer = {
+          id: req.params.id,
+          ad_soyad: order.musteri_adi,
+          telefon: order.telefon_numarasi,
+          tenant_id: rowTenant2(order)
+        };
+    }
+    if (!customer) return res.status(404).json({ basarili: false, hata: "M\xFC\u015Fteri bulunamad\u0131." });
+    res.json({
+      basarili: true,
+      musteri: customer,
+      siparisler: orders.filter((o) => matches(customer, o)).sort((a, b) => Date.parse(b.olusturma_tarihi) - Date.parse(a.olusturma_tarihi))
+    });
+  } catch (error) {
+    fail(res, error);
+  }
+});
+router4.post("/musteriler", async (req, res) => {
+  try {
+    const tenant = tenantFor2(req, true);
+    const { id, ad_soyad, telefon, instagram_kullanici_adi, sehir, adres, musteri_tipi, notlar } = req.body;
+    if (typeof ad_soyad !== "string" || !ad_soyad.trim())
+      return res.status(400).json({ basarili: false, hata: "M\xFC\u015Fteri ad\u0131 zorunludur." });
+    const existing = id ? (await rows("musteriler", tenant)).find((c) => c.id === id) : void 0;
+    if (id && !existing)
+      return res.status(404).json({ basarili: false, hata: "M\xFC\u015Fteri bulunamad\u0131." });
+    const customer = {
+      ...existing || {
+        id: "mus-" + randomUUID2(),
+        toplam_siparis_sayisi: 0,
+        toplam_harcama: 0,
+        kalan_toplam_borc: 0,
+        olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
+        son_siparis_tarihi: (/* @__PURE__ */ new Date()).toISOString()
+      },
+      ad_soyad: ad_soyad.trim(),
+      tenant_id: tenant,
+      musteri_tipi: musteri_tipi || existing?.musteri_tipi || "TANIMADIK"
+    };
+    for (const [key, value] of Object.entries({
+      telefon,
+      instagram_kullanici_adi,
+      sehir,
+      adres,
+      notlar
+    }))
+      if (value !== void 0) customer[key] = value;
+    if (supabase && tenant !== "demo_sandbox") {
+      const query = existing ? supabase.from("musteriler").update(customer).eq("id", existing.id).eq("tenant_id", tenant) : supabase.from("musteriler").insert(customer);
+      const { data, error } = await query.select("*").single();
+      if (error || !data) throw error || new Error("M\xFC\u015Fteri kaydedilmedi.");
+      return res.json({ basarili: true, musteri: data });
+    }
+    const index = musterilerVeritabani.findIndex((c) => c.id === customer.id && belongs2(c, tenant));
+    if (index >= 0) musterilerVeritabani[index] = customer;
+    else musterilerVeritabani.unshift(customer);
+    res.json({ basarili: true, musteri: customer });
+  } catch (error) {
+    fail(res, error);
+  }
+});
+var musteriler_default = router4;
 
 // src/server/routes/inbox.ts
-import { Router as Router4 } from "express";
+import { Router as Router5 } from "express";
+import { randomUUID as randomUUID3, createHash as createHash3 } from "node:crypto";
 import { Type as Type2 } from "@google/genai";
-var router4 = Router4();
-router4.get("/inbox", async (req, res) => {
-  const seciliTenant = req.query.tenant_id;
-  let mesajlar = [...onayBekleyenler];
-  if (supabase) {
-    try {
+var router5 = Router5();
+var rowTenant3 = (row) => {
+  if (row.tenant_id) return row.tenant_id;
+  const legacy = Array.isArray(row.eksik_bilgiler) ? row.eksik_bilgiler.filter((item) => typeof item === "string" && item.startsWith("META:tenant_id=")).at(-1) : void 0;
+  return legacy?.slice("META:tenant_id=".length) || "kanada_shopper_baku";
+};
+var belongs3 = (row, tenant) => tenant === "all" || rowTenant3(row) === tenant;
+function tenantFor3(req, mutation = false) {
+  const tenant = req.tenantId;
+  if (!tenant || mutation && tenant === "all")
+    throw new PublicResourceError("Bir butik se\xE7ilmelidir.", 400);
+  return tenant;
+}
+var dbActive2 = (tenant) => !!supabase && tenant !== "demo_sandbox";
+var inboxFailure = (res, error) => res.status(error instanceof PublicResourceError ? error.status : 503).json({
+  basarili: false,
+  hata: error instanceof PublicResourceError ? error.message : "Gelen kutusu i\u015Flemi tamamlanamad\u0131."
+});
+var mappedInbox = (row) => ({
+  ...row,
+  gelis_tarihi: row.gelis_tarihi || row.olusturma_tarihi,
+  oneri_siparis: { ...row.oneri_siparis || {}, tenant_id: rowTenant3(row) }
+});
+async function ownedInbox(tenant, id) {
+  if (dbActive2(tenant)) {
+    const { data, error } = await supabase.from("inbox_mesajlar").select("*").eq("id", id).eq("tenant_id", tenant).maybeSingle();
+    if (error) throw new PublicResourceError("Mesaj okunamad\u0131.", 503);
+    return data && belongs3(data, tenant) ? mappedInbox(data) : void 0;
+  }
+  return onayBekleyenler.find((m) => m.id === id && belongs3(m, tenant));
+}
+router5.get("/inbox", async (req, res) => {
+  try {
+    const tenant = tenantFor3(req);
+    let messages;
+    if (dbActive2(tenant)) {
       let query = supabase.from("inbox_mesajlar").select("*");
-      if (seciliTenant && seciliTenant !== "all") {
-        query = query.eq("tenant_id", seciliTenant);
-      }
+      if (tenant !== "all") query = query.eq("tenant_id", tenant);
       const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        for (const item of data) {
-          const idx = mesajlar.findIndex((m) => m.id === item.id);
-          const mapped = {
-            id: item.id,
-            gelis_tarihi: item.olusturma_tarihi || (/* @__PURE__ */ new Date()).toISOString(),
-            kaynak: item.kaynak || "INSTAGRAM_DM",
-            gonderen_kullanici: item.gonderen_kullanici,
-            konusma_gecmisi: item.konusma_gecmisi,
-            tetikleyici_kod: item.durum || "#S\u0130PAR\u0130\u015E",
-            oneri_siparis: item.oneri_siparis || {},
-            durum: item.durum || "BEKLEMEDE",
-            tenant_id: item.tenant_id
-          };
-          if (idx !== -1) {
-            mesajlar[idx] = mapped;
-          } else {
-            mesajlar.unshift(mapped);
-          }
-        }
-      }
-    } catch (e) {
-    }
+      if (error) throw new PublicResourceError("Gelen kutusu okunamad\u0131.", 503);
+      messages = (data || []).filter((m) => belongs3(m, tenant)).map(mappedInbox);
+    } else messages = onayBekleyenler.filter((m) => belongs3(m, tenant)).map(mappedInbox);
+    res.json({
+      basarili: true,
+      toplam: messages.filter((m) => m.durum === "BEKLEMEDE").length,
+      mesajlar: messages
+    });
+  } catch (error) {
+    inboxFailure(res, error);
   }
-  if (seciliTenant && seciliTenant !== "all") {
-    mesajlar = mesajlar.filter((m) => (m.tenant_id || "kanada_shopper_baku") === seciliTenant);
-  }
-  res.json({
-    basarili: true,
-    toplam: mesajlar.filter((m) => m.durum === "BEKLEMEDE").length,
-    mesajlar
-  });
 });
-router4.post("/webhook/siparis", async (req, res) => {
-  const { mesaj, gonderen, kaynak, tetikleyici_kod } = req.body;
-  if (!mesaj || typeof mesaj !== "string") {
-    return res.status(400).json({ basarili: false, hata: "Mesaj metni zorunludur." });
-  }
-  const metin = mesaj.toUpperCase();
-  const bulunanKod = tetikleyici_kod || (metin.includes("#S\u0130PAR\u0130\u015E") || metin.includes("#SIPARIS") ? "#S\u0130PAR\u0130\u015E" : metin.includes("#ONAY") ? "#ONAY" : metin.includes("#KNB") ? "#KNB" : "MANUEL");
-  let aiSonuc = null;
-  if (GEMINI_API_KEY) {
-    try {
-      const ai = getGeminiClient();
-      const prompt = `A\u015Fa\u011F\u0131daki m\xFC\u015Fteri ile sat\u0131c\u0131 aras\u0131ndaki sohbet ge\xE7mi\u015Fini oku. Konu\u015Fmadaki pazarl\u0131k veya alternatif konu\u015Fmalar\u0131 eleyerek EN SON \xDCZER\u0130NDE ANLA\u015EILAN nihai sipari\u015Fi \xE7\u0131kar.
+router5.post("/webhook/siparis", async (req, res) => {
+  try {
+    const hedefTenantId = tenantFor3(req, true);
+    const { mesaj, gonderen, kaynak, tetikleyici_kod } = req.body;
+    if (!mesaj || typeof mesaj !== "string") {
+      return res.status(400).json({ basarili: false, hata: "Mesaj metni zorunludur." });
+    }
+    const metin = mesaj.toUpperCase();
+    const bulunanKod = tetikleyici_kod || (metin.includes("#S\u0130PAR\u0130\u015E") || metin.includes("#SIPARIS") ? "#S\u0130PAR\u0130\u015E" : metin.includes("#ONAY") ? "#ONAY" : metin.includes("#KNB") ? "#KNB" : "MANUEL");
+    let aiSonuc = null;
+    if (GEMINI_API_KEY) {
+      try {
+        const ai = getGeminiClient();
+        const prompt = `A\u015Fa\u011F\u0131daki m\xFC\u015Fteri ile sat\u0131c\u0131 aras\u0131ndaki sohbet ge\xE7mi\u015Fini oku. Konu\u015Fmadaki pazarl\u0131k veya alternatif konu\u015Fmalar\u0131 eleyerek EN SON \xDCZER\u0130NDE ANLA\u015EILAN nihai sipari\u015Fi \xE7\u0131kar.
 Sohbet: "${mesaj}"`;
-      const resp = await generateContentWithRetryAndFallback(ai, {
-        contents: prompt,
-        config: {
-          temperature: 0.1,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type2.OBJECT,
-            properties: {
-              musteri_adi: { type: Type2.STRING },
-              instagram_kullanici_adi: { type: Type2.STRING },
-              telefon_numarasi: { type: Type2.STRING },
-              teslimat_sehri: { type: Type2.STRING },
-              teslimat_adresi: { type: Type2.STRING },
-              urun_aciklamasi: { type: Type2.STRING },
-              beden_veya_olcu: { type: Type2.STRING },
-              renk: { type: Type2.STRING },
-              adet: { type: Type2.NUMBER },
-              toplam_tutar: { type: Type2.NUMBER },
-              alinan_tutar: { type: Type2.NUMBER },
-              para_birimi: { type: Type2.STRING },
-              baku_tahsilat_notu: { type: Type2.STRING },
-              eksik_bilgiler: { type: Type2.ARRAY, items: { type: Type2.STRING } },
-              ai_guven_skoru: { type: Type2.NUMBER }
-            },
-            required: ["musteri_adi", "urun_aciklamasi", "toplam_tutar"]
+        const resp = await generateContentWithRetryAndFallback(ai, {
+          contents: prompt,
+          config: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type2.OBJECT,
+              properties: {
+                musteri_adi: { type: Type2.STRING },
+                instagram_kullanici_adi: { type: Type2.STRING },
+                telefon_numarasi: { type: Type2.STRING },
+                teslimat_sehri: { type: Type2.STRING },
+                teslimat_adresi: { type: Type2.STRING },
+                urun_aciklamasi: { type: Type2.STRING },
+                beden_veya_olcu: { type: Type2.STRING },
+                renk: { type: Type2.STRING },
+                adet: { type: Type2.NUMBER },
+                toplam_tutar: { type: Type2.NUMBER },
+                alinan_tutar: { type: Type2.NUMBER },
+                para_birimi: { type: Type2.STRING },
+                baku_tahsilat_notu: { type: Type2.STRING },
+                eksik_bilgiler: { type: Type2.ARRAY, items: { type: Type2.STRING } },
+                ai_guven_skoru: { type: Type2.NUMBER }
+              },
+              required: ["musteri_adi", "urun_aciklamasi", "toplam_tutar"]
+            }
           }
-        }
-      });
-      aiSonuc = JSON.parse(resp.text || "{}");
-    } catch (e) {
-      console.warn("Webhook AI hatas\u0131:", e.message);
+        });
+        aiSonuc = JSON.parse(resp.text || "{}");
+      } catch (e) {
+        console.warn("Webhook AI hatas\u0131:", e.message);
+      }
     }
-  }
-  if (!aiSonuc || !aiSonuc.urun_aciklamasi) {
-    aiSonuc = {
-      musteri_adi: gonderen || "Yeni M\xFC\u015Fteri",
-      instagram_kullanici_adi: gonderen?.startsWith("@") ? gonderen : "",
-      telefon_numarasi: gonderen?.includes("+") ? gonderen : "",
-      teslimat_sehri: "Bak\xFC",
-      teslimat_adresi: "",
-      urun_aciklamasi: "Sohbetten gelen sipari\u015F",
-      beden_veya_olcu: "",
-      renk: "",
-      adet: 1,
-      toplam_tutar: 0,
-      alinan_tutar: 0,
-      kalan_tutar: 0,
-      para_birimi: "AZN",
-      finans_durumu: "BEKLIYOR",
-      lojistik_durumu: "KANADA_SATINALIM_BEKLIYOR",
-      baku_tahsilat_notu: "",
-      eksik_bilgiler: ["toplam_tutar"],
-      ai_guven_skoru: 0.85
-    };
-  } else {
-    const alinan = Number(aiSonuc.alinan_tutar || 0);
-    const toplam = Number(aiSonuc.toplam_tutar || alinan);
-    aiSonuc.alinan_tutar = alinan;
-    aiSonuc.toplam_tutar = toplam;
-    aiSonuc.kalan_tutar = Math.max(0, toplam - alinan);
-    aiSonuc.para_birimi = aiSonuc.para_birimi || "AZN";
-    aiSonuc.finans_durumu = alinan >= toplam && toplam > 0 ? "ODENDI" : alinan > 0 ? "KISMI_ODEME" : "BEKLIYOR";
-    aiSonuc.lojistik_durumu = "KANADA_SATINALIM_BEKLIYOR";
-  }
-  const hedefTenantId = req.body.tenant_id || "kanada_shopper_baku";
-  const yeniInbox = {
-    id: "inbox-" + Date.now().toString(36),
-    gelis_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
-    kaynak: kaynak || "INSTAGRAM_DM",
-    gonderen_kullanici: gonderen || aiSonuc.instagram_kullanici_adi || aiSonuc.musteri_adi || "@musteri",
-    konusma_gecmisi: mesaj,
-    tetikleyici_kod: bulunanKod,
-    oneri_siparis: {
-      ...aiSonuc,
+    if (!aiSonuc || !aiSonuc.urun_aciklamasi) {
+      aiSonuc = {
+        musteri_adi: gonderen || "Yeni M\xFC\u015Fteri",
+        instagram_kullanici_adi: gonderen?.startsWith("@") ? gonderen : "",
+        telefon_numarasi: gonderen?.includes("+") ? gonderen : "",
+        teslimat_sehri: "Bak\xFC",
+        teslimat_adresi: "",
+        urun_aciklamasi: "Sohbetten gelen sipari\u015F",
+        beden_veya_olcu: "",
+        renk: "",
+        adet: 1,
+        toplam_tutar: 0,
+        alinan_tutar: 0,
+        kalan_tutar: 0,
+        para_birimi: "AZN",
+        finans_durumu: "BEKLIYOR",
+        lojistik_durumu: "KANADA_SATINALIM_BEKLIYOR",
+        baku_tahsilat_notu: "",
+        eksik_bilgiler: ["toplam_tutar"],
+        ai_guven_skoru: 0.85
+      };
+    } else {
+      const alinan = Number(aiSonuc.alinan_tutar || 0);
+      const toplam = Number(aiSonuc.toplam_tutar || alinan);
+      aiSonuc.alinan_tutar = alinan;
+      aiSonuc.toplam_tutar = toplam;
+      aiSonuc.kalan_tutar = Math.max(0, toplam - alinan);
+      aiSonuc.para_birimi = aiSonuc.para_birimi || "AZN";
+      aiSonuc.finans_durumu = alinan >= toplam && toplam > 0 ? "ODENDI" : alinan > 0 ? "KISMI_ODEME" : "BEKLIYOR";
+      aiSonuc.lojistik_durumu = "KANADA_SATINALIM_BEKLIYOR";
+    }
+    const yeniInbox = {
+      id: "inbox-" + randomUUID3(),
+      gelis_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
+      kaynak: kaynak || "INSTAGRAM_DM",
+      gonderen_kullanici: gonderen || aiSonuc.instagram_kullanici_adi || aiSonuc.musteri_adi || "@musteri",
+      konusma_gecmisi: mesaj,
+      tetikleyici_kod: bulunanKod,
+      oneri_siparis: {
+        ...aiSonuc,
+        tenant_id: hedefTenantId
+      },
+      durum: "BEKLEMEDE",
       tenant_id: hedefTenantId
-    },
-    durum: "BEKLEMEDE",
-    tenant_id: hedefTenantId
-  };
-  onayBekleyenler.unshift(yeniInbox);
-  if (supabase) {
-    try {
-      await supabase.from("inbox_mesajlar").insert({
-        id: yeniInbox.id,
-        tenant_id: hedefTenantId,
-        gonderen_kullanici: yeniInbox.gonderen_kullanici,
-        kaynak: yeniInbox.kaynak,
-        konusma_gecmisi: yeniInbox.konusma_gecmisi,
-        durum: yeniInbox.durum,
-        oneri_siparis: yeniInbox.oneri_siparis
-      });
-    } catch (sbErr) {
-      console.warn("Webhook inbox Supabase kaydetme uyar\u0131s\u0131:", sbErr);
+    };
+    if (dbActive2(hedefTenantId)) {
+      try {
+        const { error } = await supabase.from("inbox_mesajlar").insert({
+          id: yeniInbox.id,
+          tenant_id: hedefTenantId,
+          gonderen_kullanici: yeniInbox.gonderen_kullanici,
+          kaynak: yeniInbox.kaynak,
+          konusma_gecmisi: yeniInbox.konusma_gecmisi,
+          durum: yeniInbox.durum,
+          oneri_siparis: yeniInbox.oneri_siparis
+        });
+        if (error) throw error;
+      } catch (sbErr) {
+        throw new PublicResourceError("Mesaj kaydedilemedi.", 503);
+      }
     }
+    if (!dbActive2(hedefTenantId)) onayBekleyenler.unshift(yeniInbox);
+    res.json({
+      basarili: true,
+      mesaj: "Mesaj tetikleyici ile yakaland\u0131 ve onay bekleyenler havuzuna eklendi.",
+      inbox: yeniInbox
+    });
+  } catch (error) {
+    inboxFailure(res, error);
   }
-  res.json({
-    basarili: true,
-    mesaj: "Mesaj tetikleyici ile yakaland\u0131 ve onay bekleyenler havuzuna eklendi.",
-    inbox: yeniInbox
-  });
 });
-router4.post("/inbox/:id/onayla", async (req, res) => {
-  const { id } = req.params;
-  const duzeltilmisSiparis = req.body.duzeltilmis_siparis;
-  const istekTenantId = req.body.tenant_id;
-  const bulunanIndex = onayBekleyenler.findIndex((m) => m.id === id);
-  if (bulunanIndex === -1) {
-    return res.status(404).json({ basarili: false, hata: "Inbox mesaj\u0131 bulunamad\u0131." });
-  }
-  const inboxItem = onayBekleyenler[bulunanIndex];
-  const siparisVerisi = duzeltilmisSiparis || inboxItem.oneri_siparis;
-  const tenantId = istekTenantId || siparisVerisi.tenant_id || inboxItem.tenant_id || "kanada_shopper_baku";
-  const alinan = Number(siparisVerisi.alinan_tutar || 0);
-  const toplam = Number(siparisVerisi.toplam_tutar || alinan);
-  const kalan = Math.max(0, toplam - alinan);
-  const dbPayload = {
-    tenant_id: tenantId,
-    is_demo: tenantId === "kanada_shopper_baku" || tenantId === "demo_sandbox",
-    ham_mesaj: inboxItem.konusma_gecmisi,
-    siparis_kaynagi: inboxItem.kaynak,
-    musteri_adi: siparisVerisi.musteri_adi || "M\xFC\u015Fteri",
-    instagram_kullanici_adi: siparisVerisi.instagram_kullanici_adi || "",
-    telefon_numarasi: siparisVerisi.telefon_numarasi || "",
-    teslimat_sehri: siparisVerisi.teslimat_sehri || "Bak\xFC",
-    teslimat_adresi: siparisVerisi.teslimat_adresi || "",
-    urun_aciklamasi: siparisVerisi.urun_aciklamasi || "\xDCr\xFCn",
-    beden_veya_olcu: siparisVerisi.beden_veya_olcu || "",
-    renk: siparisVerisi.renk || "",
-    adet: Number(siparisVerisi.adet || 1),
-    toplam_tutar: toplam,
-    alinan_tutar: alinan,
-    para_birimi: siparisVerisi.para_birimi || "AZN",
-    finans_durumu: siparisVerisi.finans_durumu || (alinan >= toplam && toplam > 0 ? "ODENDI" : alinan > 0 ? "KISMI_ODEME" : "BEKLIYOR"),
-    lojistik_durumu: siparisVerisi.lojistik_durumu || "KANADA_SATINALIM_BEKLIYOR",
-    baku_tahsilat_notu: siparisVerisi.baku_tahsilat_notu || "",
-    eksik_bilgiler: Array.isArray(siparisVerisi.eksik_bilgiler) ? siparisVerisi.eksik_bilgiler : [],
-    ai_guven_skoru: Number(siparisVerisi.ai_guven_skoru || 0.98)
-  };
-  let kesinSiparis = null;
-  if (supabase) {
-    try {
-      const sbPayload = hazirlaSupabasePayload(dbPayload);
-      const { data, error } = await supabase.from("siparisler").insert(sbPayload).select().single();
-      if (!error && data) {
+router5.post("/inbox/:id/onayla", async (req, res) => {
+  try {
+    const tenantId = tenantFor3(req, true);
+    const { id } = req.params;
+    const inboxItem = await ownedInbox(tenantId, id);
+    if (!inboxItem)
+      return res.status(404).json({ basarili: false, hata: "Inbox mesaj\u0131 bulunamad\u0131." });
+    if (inboxItem.durum !== "BEKLEMEDE")
+      return res.status(409).json({ basarili: false, hata: "Mesaj daha \xF6nce i\u015Flendi." });
+    const siparisVerisi = req.body.duzeltilmis_siparis || inboxItem.oneri_siparis;
+    if (siparisVerisi.tenant_id && siparisVerisi.tenant_id !== tenantId || siparisVerisi.tenantId && siparisVerisi.tenantId !== tenantId)
+      throw new PublicResourceError("Sipari\u015F ba\u015Fka butike ta\u015F\u0131namaz.", 403);
+    await assertTenantImageReferences(req, siparisVerisi);
+    if (siparisVerisi.musteri_id) {
+      let customer;
+      if (dbActive2(tenantId)) {
+        const { data, error } = await supabase.from("musteriler").select("id").eq("id", siparisVerisi.musteri_id).eq("tenant_id", tenantId).maybeSingle();
+        if (error) throw new PublicResourceError("M\xFC\u015Fteri do\u011Frulanamad\u0131.", 503);
+        customer = data;
+      } else
+        customer = musterilerVeritabani.find(
+          (m) => m.id === siparisVerisi.musteri_id && belongs3(m, tenantId)
+        );
+      if (!customer) throw new PublicResourceError("M\xFC\u015Fteri bulunamad\u0131.", 404);
+    }
+    const alinan = Number(siparisVerisi.alinan_tutar || 0);
+    const toplam = Number(siparisVerisi.toplam_tutar || alinan);
+    const kalan = Math.max(0, toplam - alinan);
+    if (!Number.isFinite(toplam) || !Number.isFinite(alinan) || toplam < 0 || alinan < 0)
+      throw new PublicResourceError("Ge\xE7ersiz tutar.", 400);
+    const dbPayload = {
+      tenant_id: tenantId,
+      is_demo: tenantId === "demo_sandbox",
+      ham_mesaj: inboxItem.konusma_gecmisi,
+      siparis_kaynagi: inboxItem.kaynak,
+      musteri_adi: siparisVerisi.musteri_adi || "M\xFC\u015Fteri",
+      instagram_kullanici_adi: siparisVerisi.instagram_kullanici_adi || "",
+      telefon_numarasi: siparisVerisi.telefon_numarasi || "",
+      teslimat_sehri: siparisVerisi.teslimat_sehri || "Bak\xFC",
+      teslimat_adresi: siparisVerisi.teslimat_adresi || "",
+      urun_aciklamasi: siparisVerisi.urun_aciklamasi || "\xDCr\xFCn",
+      beden_veya_olcu: siparisVerisi.beden_veya_olcu || "",
+      renk: siparisVerisi.renk || "",
+      adet: Number(siparisVerisi.adet || 1),
+      toplam_tutar: toplam,
+      alinan_tutar: alinan,
+      para_birimi: siparisVerisi.para_birimi || "AZN",
+      finans_durumu: siparisVerisi.finans_durumu || (alinan >= toplam && toplam > 0 ? "ODENDI" : alinan > 0 ? "KISMI_ODEME" : "BEKLIYOR"),
+      lojistik_durumu: siparisVerisi.lojistik_durumu || "KANADA_SATINALIM_BEKLIYOR",
+      baku_tahsilat_notu: siparisVerisi.baku_tahsilat_notu || "",
+      eksik_bilgiler: Array.isArray(siparisVerisi.eksik_bilgiler) ? siparisVerisi.eksik_bilgiler.filter(
+        (v) => typeof v === "string" && !v.startsWith("META:")
+      ) : [],
+      ai_guven_skoru: Number(siparisVerisi.ai_guven_skoru || 0.98)
+    };
+    const hash = createHash3("sha256").update(tenantId + ":" + id).digest("hex");
+    const orderId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+    let kesinSiparis;
+    if (dbActive2(tenantId)) {
+      const { data: prior, error: lookupError } = await supabase.from("siparisler").select("*").eq("id", orderId).eq("tenant_id", tenantId).maybeSingle();
+      if (lookupError) throw new PublicResourceError("Sipari\u015F do\u011Frulanamad\u0131.", 503);
+      if (prior) kesinSiparis = formatlaSiparis(prior);
+      else {
+        const { data, error: error2 } = await supabase.from("siparisler").insert({ ...hazirlaSupabasePayload(dbPayload), id: orderId }).select("*").single();
+        if (error2 || !data) throw new PublicResourceError("Sipari\u015F kaydedilemedi.", 503);
         kesinSiparis = formatlaSiparis(data);
       }
-    } catch (err) {
-      console.error("Inbox onay\u0131 Supabase hatas\u0131:", err);
+      const { data: marked, error } = await supabase.from("inbox_mesajlar").update({ durum: "ONAYLANDI" }).eq("id", id).eq("tenant_id", tenantId).eq("durum", "BEKLEMEDE").select("id").maybeSingle();
+      if (error || !marked)
+        throw new PublicResourceError("Sipari\u015F kaydedildi ancak mesaj durumu g\xFCncellenemedi.", 503);
+    } else {
+      const pool = tenantId === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+      kesinSiparis = pool.find((s) => s.id === orderId && belongs3(s, tenantId));
+      if (!kesinSiparis) {
+        kesinSiparis = formatlaSiparis({
+          id: orderId,
+          olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
+          ...dbPayload,
+          kalan_tutar: kalan
+        });
+        pool.unshift(kesinSiparis);
+      }
+      inboxItem.durum = "ONAYLANDI";
     }
-  }
-  if (!kesinSiparis) {
-    kesinSiparis = formatlaSiparis({
-      id: "sip-" + Date.now().toString(36),
-      olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
-      ...dbPayload,
-      kalan_tutar: kalan
+    res.json({
+      basarili: true,
+      mesaj: "Sipari\u015F onayland\u0131 ve resmi sipari\u015F tablosuna aktar\u0131ld\u0131.",
+      siparis: kesinSiparis
     });
-    siparislerVeritabani.unshift(kesinSiparis);
+  } catch (error) {
+    inboxFailure(res, error);
   }
-  onayBekleyenler[bulunanIndex].durum = "ONAYLANDI";
-  if (supabase) {
-    supabase.from("inbox_mesajlar").update({ durum: "ONAYLANDI" }).eq("id", id).then();
-  }
-  res.json({
-    basarili: true,
-    mesaj: "Sipari\u015F onayland\u0131 ve resmi sipari\u015F tablosuna aktar\u0131ld\u0131.",
-    siparis: kesinSiparis
-  });
 });
-router4.post("/inbox/:id/reddet", (req, res) => {
-  const { id } = req.params;
-  const bulunanIndex = onayBekleyenler.findIndex((m) => m.id === id);
-  if (bulunanIndex !== -1) {
-    onayBekleyenler[bulunanIndex].durum = "REDDEDILDI";
-    if (supabase) {
-      supabase.from("inbox_mesajlar").update({ durum: "REDDEDILDI" }).eq("id", id).then();
-    }
-    return res.json({ basarili: true, mesaj: "Mesaj reddedildi/ar\u015Fivlendi." });
+router5.post("/inbox/:id/reddet", async (req, res) => {
+  try {
+    const tenant = tenantFor3(req, true);
+    const inbox = await ownedInbox(tenant, req.params.id);
+    if (!inbox) return res.status(404).json({ basarili: false, hata: "Mesaj bulunamad\u0131." });
+    if (inbox.durum !== "BEKLEMEDE")
+      return res.status(409).json({ basarili: false, hata: "Mesaj daha \xF6nce i\u015Flendi." });
+    if (dbActive2(tenant)) {
+      const { data, error } = await supabase.from("inbox_mesajlar").update({ durum: "REDDEDILDI" }).eq("id", inbox.id).eq("tenant_id", tenant).eq("durum", "BEKLEMEDE").select("id").maybeSingle();
+      if (error || !data) throw new PublicResourceError("Mesaj g\xFCncellenemedi.", 503);
+    } else inbox.durum = "REDDEDILDI";
+    res.json({ basarili: true, mesaj: "Mesaj reddedildi/ar\u015Fivlendi." });
+  } catch (error) {
+    inboxFailure(res, error);
   }
-  res.status(404).json({ basarili: false, hata: "Mesaj bulunamad\u0131." });
 });
-var inbox_default = router4;
+var inbox_default = router5;
 
 // src/server/routes/firmalar.ts
-import { Router as Router5 } from "express";
+import { Router as Router6 } from "express";
 
 // src/server/services/crypto.ts
-import crypto2 from "crypto";
+import crypto from "crypto";
 var ALGORITHM = "aes-256-gcm";
 var IV_LENGTH = 12;
 var PREFIX = "enc:";
 function getKey() {
   const secret = API_SECRET_KEY || "tomnap_default_internal_secure_key_2026";
-  return crypto2.createHash("sha256").update(secret).digest();
+  return crypto.createHash("sha256").update(secret).digest();
 }
 function sifreleMetin(metin) {
   if (!metin || typeof metin !== "string") return "";
   if (metin.startsWith(PREFIX)) return metin;
   try {
-    const iv = crypto2.randomBytes(IV_LENGTH);
+    const iv = crypto.randomBytes(IV_LENGTH);
     const key = getKey();
-    const cipher = crypto2.createCipheriv(ALGORITHM, key, iv);
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
     let encrypted = cipher.update(metin, "utf-8", "hex");
     encrypted += cipher.final("hex");
     const authTag = cipher.getAuthTag().toString("hex");
@@ -5732,7 +6775,7 @@ function cozMetin(sifreliMetin) {
     const iv = Buffer.from(ivHex, "hex");
     const authTag = Buffer.from(tagHex, "hex");
     const key = getKey();
-    const decipher = crypto2.createDecipheriv(ALGORITHM, key, iv);
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     decipher.setAuthTag(authTag);
     let decrypted = decipher.update(encryptedHex, "hex", "utf-8");
     decrypted += decipher.final("utf-8");
@@ -5746,8 +6789,8 @@ function sifreHashle(sifre) {
   if (!sifre || typeof sifre !== "string") {
     throw new Error("Ge\xE7ersiz \u015Fifre format\u0131");
   }
-  const salt = crypto2.randomBytes(16);
-  const derivedKey = crypto2.scryptSync(sifre, salt, 64);
+  const salt = crypto.randomBytes(16);
+  const derivedKey = crypto.scryptSync(sifre, salt, 64);
   return `scrypt:${salt.toString("hex")}:${derivedKey.toString("hex")}`;
 }
 function sifreDogrula(sifre, saklananHash) {
@@ -5761,15 +6804,15 @@ function sifreDogrula(sifre, saklananHash) {
     }
     const salt = Buffer.from(parts[1], "hex");
     const hash = Buffer.from(parts[2], "hex");
-    const derivedKey = crypto2.scryptSync(sifre, salt, 64);
-    return crypto2.timingSafeEqual(hash, derivedKey);
+    const derivedKey = crypto.scryptSync(sifre, salt, 64);
+    return crypto.timingSafeEqual(hash, derivedKey);
   } catch (err) {
     console.error("\u015Eifre do\u011Frulama hatas\u0131:", err);
     return false;
   }
 }
 function tokenUret(baytSayisi = 32) {
-  return crypto2.randomBytes(baytSayisi).toString("hex");
+  return crypto.randomBytes(baytSayisi).toString("hex");
 }
 
 // src/server/services/emailService.ts
@@ -5968,17 +7011,22 @@ TOMNAP D\u0259st\u0259k Komandas\u0131
 }
 
 // src/server/routes/firmalar.ts
-var router5 = Router5();
-router5.get("/firmalar", async (req, res) => {
+var router6 = Router6();
+router6.get("/firmalar", async (req, res) => {
   const sayilar = {};
   for (const s of siparislerVeritabani) {
-    const tid = s.tenant_id || "kanada_shopper_baku";
+    const tid = s.tenant_id;
+    if (!tid || req.tenantId !== "all" && tid !== req.tenantId) continue;
     sayilar[tid] = (sayilar[tid] || 0) + 1;
   }
   if (supabase) {
     try {
-      const { data, error } = await supabase.from("firmalar").select("*");
-      if (!error && data && data.length > 0) {
+      let query = supabase.from("firmalar").select("*");
+      if (req.auth?.role !== "SUPER_ADMIN") query = query.eq("id", req.tenantId);
+      const { data, error } = await query;
+      if (error)
+        return res.status(503).json({ basarili: false, hata: "Firma bilgileri okunamad\u0131." });
+      if (data) {
         const sbFirmalar = data.map((d) => ({
           id: d.id,
           ad: d.ad,
@@ -6017,17 +7065,20 @@ router5.get("/firmalar", async (req, res) => {
         });
       }
     } catch (sbErr) {
+      return res.status(503).json({ basarili: false, hata: "Firma bilgileri okunamad\u0131." });
     }
   }
   res.json({
     basarili: true,
     kaynak: "bellek",
-    firmalar: firmalarVeritabani,
+    firmalar: firmalarVeritabani.filter(
+      (f) => req.auth?.role === "SUPER_ADMIN" || f.id === req.tenantId
+    ),
     siparis_sayilari: sayilar
   });
 });
 var davetlerVeritabani = [];
-router5.post("/firmalar/kayit", async (req, res) => {
+router6.post("/firmalar/kayit", async (req, res) => {
   try {
     const body = req.body || {};
     const ad = String(body.ad || "").trim();
@@ -6188,37 +7239,57 @@ router5.post("/firmalar/kayit", async (req, res) => {
     res.status(500).json({ basarili: false, hata: err.message });
   }
 });
-router5.patch("/firmalar/:id/onay", async (req, res) => {
+router6.patch("/firmalar/:id/onay", async (req, res) => {
   const { id } = req.params;
   const { onayDurumu } = req.body;
-  const firma = firmalarVeritabani.find((f) => f.id === id);
-  if (!firma) {
-    return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
-  }
-  firma.onayDurumu = onayDurumu || "AKTIF";
-  firmalariKaydetDosyaya(firmalarVeritabani);
-  if (supabase) {
-    try {
-      await supabase.from("firmalar").update({ onay_durumu: firma.onayDurumu }).eq("id", id);
-    } catch (errDb) {
+  if (!["AKTIF", "REDDEDILDI", "BEKLEMEDE", "DONDURULMUS"].includes(onayDurumu))
+    return res.status(400).json({ basarili: false, hata: "Ge\xE7ersiz firma durumu." });
+  try {
+    if (supabase) {
+      const { data, error } = await supabase.from("firmalar").update({ onay_durumu: onayDurumu }).eq("id", id).select("id,ad,onay_durumu").maybeSingle();
+      if (error)
+        return res.status(503).json({ basarili: false, hata: "Firma durumu kaydedilemedi." });
+      if (!data) return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
+      const local = firmalarVeritabani.find((f) => f.id === id);
+      if (local) local.onayDurumu = onayDurumu;
+      return res.json({
+        basarili: true,
+        firma: { ...data, onayDurumu },
+        mesaj: "Firma durumu g\xFCncellendi."
+      });
     }
+    const firma = firmalarVeritabani.find((f) => f.id === id);
+    if (!firma) return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
+    firma.onayDurumu = onayDurumu;
+    firmalariKaydetDosyaya(firmalarVeritabani);
+    return res.json({ basarili: true, firma, mesaj: "Firma durumu g\xFCncellendi." });
+  } catch {
+    return res.status(503).json({ basarili: false, hata: "Firma durumu kaydedilemedi." });
   }
-  res.json({
-    basarili: true,
-    mesaj: `"${firma.ad}" butikinin statusu "${firma.onayDurumu}" olaraq yenil\u0259ndi.`,
-    firma
-  });
 });
-router5.post("/firmalar/davet-olustur", async (req, res) => {
+router6.post("/firmalar/davet-olustur", async (req, res) => {
   try {
     const { tenantId, rol, olusturanKisi = "Butik Patronu", email, adSoyad } = req.body;
-    const firma = firmalarVeritabani.find((f) => f.id === tenantId);
+    let firma = firmalarVeritabani.find((f) => f.id === tenantId);
+    if (supabase) {
+      const { data, error } = await supabase.from("firmalar").select("*").eq("id", tenantId).maybeSingle();
+      if (error)
+        return res.status(503).json({ basarili: false, hata: "Firma bilgileri okunamad\u0131." });
+      firma = data ? {
+        ...data,
+        onayDurumu: data.onay_durumu,
+        rolLimitleri: data.rol_limitleri,
+        aktifKullaniciSayilari: data.aktif_kullanici_sayilari
+      } : void 0;
+    }
     if (!firma) {
       return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
     }
     if (!["PATRON", "KANADA_SATINALMA", "SATIS_SORUMLUSU", "BAKU_FINANS", "BAKU_KURYE"].includes(rol)) {
       return res.status(400).json({ basarili: false, hata: "Etibars\u0131z komanda rolu." });
     }
+    if (firma.onayDurumu && firma.onayDurumu !== "AKTIF")
+      return res.status(403).json({ basarili: false, hata: "Firma aktif de\u011Fil." });
     const limit = firma.rolLimitleri?.[rol] ?? 5;
     const movcud = firma.aktifKullaniciSayilari?.[rol] ?? 0;
     if (movcud >= limit) {
@@ -6248,7 +7319,7 @@ router5.post("/firmalar/davet-olustur", async (req, res) => {
           token: davet.token,
           firma_id: davet.tenantId,
           rol: davet.rol,
-          olusturan_rol: davet.olusturanKisi,
+          olusturan_rol: req.auth?.role || "PATRON",
           durum: "AKTIF",
           son_kullanma_tarihi: davet.gecerlilikTarihi
         }).select("token").maybeSingle();
@@ -6289,7 +7360,7 @@ router5.post("/firmalar/davet-olustur", async (req, res) => {
     res.status(500).json({ basarili: false, hata: err.message });
   }
 });
-router5.post("/firmalar", (req, res) => {
+router6.post("/firmalar", async (req, res) => {
   try {
     const {
       ad,
@@ -6327,6 +7398,23 @@ router5.post("/firmalar", (req, res) => {
         BAKU_KURYE: 0
       }
     };
+    if (supabase) {
+      const { data, error } = await supabase.from("firmalar").insert({
+        id: yeniFirma.id,
+        ad: yeniFirma.ad,
+        sehir: yeniFirma.sehir,
+        varsayilan_para_birimi: yeniFirma.varsayilanParaBirimi,
+        varsayilan_komisyon_yuzdesi: yeniFirma.varsayilanKomisyonYuzdesi,
+        aciklama: yeniFirma.aciklama,
+        is_demo: false,
+        onay_durumu: "AKTIF",
+        paket: yeniFirma.paket,
+        rol_limitleri: yeniFirma.rolLimitleri,
+        aktif_kullanici_sayilari: yeniFirma.aktifKullaniciSayilari
+      }).select("id").maybeSingle();
+      if (error || !data)
+        return res.status(503).json({ basarili: false, hata: "Firma kaydedilemedi." });
+    }
     firmalarVeritabani.push(yeniFirma);
     firmalariKaydetDosyaya(firmalarVeritabani);
     res.json({
@@ -6338,816 +7426,105 @@ router5.post("/firmalar", (req, res) => {
     res.status(500).json({ basarili: false, hata: err.message });
   }
 });
-router5.delete("/firmalar/:id", (req, res) => {
+router6.delete("/firmalar/:id", async (req, res) => {
   const { id } = req.params;
-  const index = firmalarVeritabani.findIndex((f) => f.id === id);
-  if (index === -1) {
-    return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
-  }
-  if (id === "kanada_shopper_baku") {
+  if (id === "kanada_shopper_baku")
     return res.status(400).json({ basarili: false, hata: "\u018Fsas canl\u0131 butik silin\u0259 bilm\u0259z." });
+  try {
+    if (supabase) {
+      const { data, error } = await supabase.from("firmalar").delete().eq("id", id).select("id").maybeSingle();
+      if (error) return res.status(503).json({ basarili: false, hata: "Firma silinemedi." });
+      if (!data) return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
+    }
+    const index = firmalarVeritabani.findIndex((f) => f.id === id);
+    if (!supabase && index === -1)
+      return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
+    if (index !== -1) firmalarVeritabani.splice(index, 1);
+    firmalariKaydetDosyaya(firmalarVeritabani);
+    res.json({ basarili: true, mesaj: "Butik u\u011Furla silindi." });
+  } catch {
+    res.status(503).json({ basarili: false, hata: "Firma silinemedi." });
   }
-  firmalarVeritabani.splice(index, 1);
-  firmalariKaydetDosyaya(firmalarVeritabani);
-  res.json({ basarili: true, mesaj: "Butik u\u011Furla silindi." });
 });
-var firmalar_default = router5;
+var firmalar_default = router6;
 
 // src/server/routes/kuryeler.ts
-import { Router as Router6 } from "express";
-var router6 = Router6();
-router6.get("/kuryeler", (req, res) => {
-  const seciliTenant = req.query.tenant_id;
-  const ilgiliSiparisler = seciliTenant && seciliTenant !== "all" ? siparislerVeritabani.filter((s) => (s.tenant_id || "kanada_shopper_baku") === seciliTenant) : siparislerVeritabani;
-  const kuryeler = [
-    {
-      id: "kurye-elvin",
-      ad_soyad: "Elvin M\u0259mm\u0259dli",
-      telefon: "+994 50 411 22 33",
-      bolge: "N\u0259rimanov & G\u0259nclik & M\u0259rk\u0259z"
-    },
-    {
-      id: "kurye-resad",
-      ad_soyad: "R\u0259\u015Fad K\u0259rimov",
-      telefon: "+994 55 622 33 44",
-      bolge: "Yasamal & Elml\u0259r & 28 May"
-    },
-    {
-      id: "kurye-vuqar",
-      ad_soyad: "V\xFCqar Ta\u011F\u0131yev",
-      telefon: "+994 70 833 44 55",
-      bolge: "G\u0259nc\u0259 & Q\u0259rb Rayonlar\u0131 (Po\xE7t/Avtova\u011Fzal)"
-    },
-    {
-      id: "ofis-tehvil",
-      ad_soyad: "Ofis / M\u0259rk\u0259zi Evd\u0259n T\u0259hvil",
-      telefon: "+994 50 111 22 33",
-      bolge: "N\u0259simi r., 28 May"
-    }
-  ];
-  const zenginKuryeler = kuryeler.map((k) => {
-    const kuryeSiparisleri = ilgiliSiparisler.filter((s) => {
-      if (s.baku_kurye_id === k.id) return true;
-      const adresVeSehir = `${s.teslimat_sehri || ""} ${s.teslimat_adresi || ""}`.toLowerCase();
-      if (k.id === "kurye-elvin" && (adresVeSehir.includes("n\u0259rimanov") || adresVeSehir.includes("g\u0259nclik") || adresVeSehir.includes("t\u0259briz"))) return true;
-      if (k.id === "kurye-resad" && (adresVeSehir.includes("yasamal") || adresVeSehir.includes("elml\u0259r") || adresVeSehir.includes("28 may") || adresVeSehir.includes("i\xE7\u0259ri\u015F\u0259h\u0259r"))) return true;
-      if (k.id === "kurye-vuqar" && (adresVeSehir.includes("g\u0259nc\u0259") || adresVeSehir.includes("sumqay\u0131t") || adresVeSehir.includes("rayon"))) return true;
-      if (k.id === "ofis-tehvil" && (s.ozel_not?.toLowerCase().includes("s\xFCr\xFCc\xFC") || s.ozel_not?.toLowerCase().includes("\xF6z\xFC") || s.ham_mesaj?.toLowerCase().includes("\xF6z\xFC"))) return true;
-      return false;
-    });
-    const bekleyenler = kuryeSiparisleri.filter((s) => s.lojistik_durumu !== "TESLIM_EDILDI");
-    const toplanacakBorc = bekleyenler.reduce((acc, s) => acc + (s.kalan_tutar || 0), 0);
-    return {
-      ...k,
-      tenant_id: seciliTenant || "all",
-      aktif_paket_sayisi: bekleyenler.length,
-      toplam_tahsilat_bekleyen: toplanacakBorc,
-      toplam_paket_sayisi: kuryeSiparisleri.length
-    };
-  });
-  res.json({
-    basarili: true,
-    kuryeler: zenginKuryeler
-  });
-});
-var kuryeler_default = router6;
-
-// src/server/routes/gorsel.ts
 import { Router as Router7 } from "express";
-import path5 from "path";
-import fs3 from "fs";
-
-// src/server/services/publicFetch.ts
-import { lookup } from "node:dns/promises";
-import { isIP as isIP2 } from "node:net";
-import http from "node:http";
-import https from "node:https";
-var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-var PublicResourceError = class extends Error {
-  constructor(message, status = 403) {
-    super(message);
-    this.status = status;
-    this.name = "PublicResourceError";
-  }
-};
-function beforeDeadline(promise, remainingMs) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new PublicResourceError("\u0130ndirme zaman a\u015F\u0131m\u0131na u\u011Frad\u0131.", 504)),
-      Math.max(0, remainingMs)
-    );
-    promise.then(resolve, reject).finally(() => clearTimeout(timer));
-  });
-}
-async function requestOnce(url, deadline, options) {
-  const check = urlGuvenlimi(url.href);
-  if (!check.guvenli) throw new PublicResourceError(check.sebep || "G\xFCvenli olmayan URL.");
-  const hostname = url.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
-  const family = isIP2(hostname);
-  const addresses = family ? [{ address: hostname, family }] : await beforeDeadline(lookup(hostname, { all: true, verbatim: true }), deadline - Date.now());
-  if (addresses.length === 0 || addresses.some(({ address }) => !genelIpAdresiMi(address))) {
-    throw new PublicResourceError("Hedef sunucu genel internet d\u0131\u015F\u0131nda bir adrese \xE7\xF6z\xFCmleniyor.");
-  }
-  if (Date.now() >= deadline) throw new PublicResourceError("\u0130ndirme zaman a\u015F\u0131m\u0131na u\u011Frad\u0131.", 504);
-  const pinned = addresses[0];
-  const maxBytes = options.maxBytes ?? MAX_IMAGE_BYTES;
-  return new Promise((resolve, reject) => {
-    const transport = url.protocol === "https:" ? https : http;
-    let response;
-    let timer;
-    const fail = (error) => {
-      clearTimeout(timer);
-      reject(error);
-    };
-    const request = transport.request(
-      url,
-      {
-        method: "GET",
-        agent: false,
-        family: pinned.family,
-        lookup: (_hostname, _options, callback) => callback(null, pinned.address, pinned.family),
-        headers: {
-          "User-Agent": "TOMNAP-ImageFetcher/1.0",
-          Accept: options.accept || "image/*",
-          "Accept-Encoding": "identity",
-          Referer: url.origin
-        }
-      },
-      (incoming) => {
-        response = incoming;
-        incoming.on("error", fail);
-        const headers = new Headers();
-        for (const [key, value] of Object.entries(incoming.headers)) {
-          if (value !== void 0)
-            headers.set(key, Array.isArray(value) ? value.join(", ") : value);
-        }
-        const status = incoming.statusCode || 502;
-        if ([301, 302, 303, 307, 308].includes(status)) {
-          clearTimeout(timer);
-          incoming.destroy();
-          resolve({ status, headers, body: Buffer.alloc(0) });
-          return;
-        }
-        const length = Number(headers.get("content-length"));
-        if (Number.isFinite(length) && length > maxBytes) {
-          const error = new PublicResourceError("\u0130ndirilen dosya boyut s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor.", 413);
-          fail(error);
-          incoming.destroy();
-          request.destroy();
-          return;
-        }
-        const encoding = headers.get("content-encoding");
-        if (encoding && encoding !== "identity") {
-          fail(new PublicResourceError("S\u0131k\u0131\u015Ft\u0131r\u0131lm\u0131\u015F uzak yan\u0131t desteklenmiyor.", 502));
-          incoming.destroy();
-          request.destroy();
-          return;
-        }
-        const chunks = [];
-        let bytes = 0;
-        incoming.on("data", (chunk) => {
-          bytes += chunk.length;
-          if (bytes > maxBytes) {
-            fail(new PublicResourceError("\u0130ndirilen dosya boyut s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor.", 413));
-            incoming.destroy();
-            request.destroy();
-            return;
-          }
-          chunks.push(chunk);
-        });
-        incoming.on("end", () => {
-          clearTimeout(timer);
-          resolve({ status, headers, body: Buffer.concat(chunks) });
-        });
-        incoming.on(
-          "aborted",
-          () => fail(new PublicResourceError("Uzak yan\u0131t tamamlanmad\u0131.", 502))
-        );
-      }
-    );
-    timer = setTimeout(() => {
-      const error = new PublicResourceError("\u0130ndirme zaman a\u015F\u0131m\u0131na u\u011Frad\u0131.", 504);
-      request.destroy(error);
-      response?.destroy(error);
-    }, deadline - Date.now());
-    request.on("error", fail);
-    try {
-      request.end();
-    } catch (error) {
-      clearTimeout(timer);
-      request.destroy();
-      reject(error);
-    }
-  });
-}
-async function fetchPublicResource(rawUrl, options = {}) {
-  const check = urlGuvenlimi(rawUrl);
-  if (!check.guvenli) throw new PublicResourceError(check.sebep || "G\xFCvenli olmayan URL.");
-  let url = new URL(rawUrl);
-  const deadline = Date.now() + (options.timeoutMs ?? 7e3);
-  for (let hop = 0; hop <= 4; hop++) {
-    const result = await requestOnce(url, deadline, options);
-    if ([301, 302, 303, 307, 308].includes(result.status)) {
-      const location = result.headers.get("location");
-      if (!location || hop === 4)
-        throw new PublicResourceError("Ge\xE7ersiz veya \xE7ok fazla y\xF6nlendirme.", 502);
-      url = new URL(location, url);
-      continue;
-    }
-    const body = [204, 205, 304].includes(result.status) ? null : new Uint8Array(result.body);
-    return new Response(body, { status: result.status, headers: result.headers });
-  }
-  throw new PublicResourceError("\xC7ok fazla y\xF6nlendirme.", 502);
-}
-
-// src/server/routes/gorsel.ts
 var router7 = Router7();
-async function fetchOgImageFromUrl(pageUrl) {
-  if (typeof pageUrl !== "string" || !pageUrl.startsWith("http")) return null;
-  const urlKontrol = urlGuvenlimi(pageUrl);
-  if (!urlKontrol.guvenli) {
-    console.warn(`[SSRF Engellendi] fetchOgImageFromUrl: ${pageUrl} \u2014 Sebep: ${urlKontrol.sebep}`);
-    return null;
-  }
+router7.get("/kuryeler", async (req, res) => {
   try {
-    const resp = await fetchPublicResource(pageUrl, {
-      timeoutMs: 4500,
-      maxBytes: 2 * 1024 * 1024,
-      accept: "text/html,application/xhtml+xml"
-    });
-    if (!resp.ok) return null;
-    const html = await resp.text();
-    const ogMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i) || html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']twitter:image["']/i);
-    if (ogMatch && ogMatch[1]) {
-      let imgUrl = ogMatch[1].trim();
-      if (imgUrl.startsWith("//")) imgUrl = "https:" + imgUrl;
-      if (imgUrl.startsWith("http") && !imgUrl.includes("placeholder") && !imgUrl.includes("logo")) {
-        return imgUrl;
-      }
+    const seciliTenant = req.tenantId;
+    if (!seciliTenant)
+      return res.status(401).json({ basarili: false, hata: "Oturum a\xE7\u0131lmal\u0131d\u0131r." });
+    let source = seciliTenant === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+    if (supabase && seciliTenant !== "demo_sandbox") {
+      let query = supabase.from("siparisler").select("*");
+      if (seciliTenant !== "all") query = query.eq("tenant_id", seciliTenant);
+      const { data, error } = await query;
+      if (error)
+        return res.status(503).json({ basarili: false, hata: "Kurye sipari\u015Fleri okunamad\u0131." });
+      source = data || [];
     }
-  } catch (e) {
-  }
-  return null;
-}
-async function isValidImageUrl(url) {
-  if (typeof url !== "string" || !url.startsWith("http")) return false;
-  const urlKontrol = urlGuvenlimi(url);
-  if (!urlKontrol.guvenli) {
-    console.warn(`[SSRF Engellendi] isValidImageUrl: ${url} \u2014 Sebep: ${urlKontrol.sebep}`);
-    return false;
-  }
-  try {
-    const resp = await fetchPublicResource(url, { timeoutMs: 3500 });
-    if (!resp.ok) return false;
-    const contentType = resp.headers.get("content-type") || "";
-    if (!contentType.startsWith("image/")) return false;
-    inspectImage(Buffer.from(await resp.arrayBuffer()), contentType.split(";")[0]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function decodeImage(base64, declaredMime) {
-  const dataUrl = base64.match(/^data:([^;]+);base64,(.*)$/s);
-  const encoded = dataUrl ? dataUrl[2] : base64;
-  if (encoded.length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4) {
-    throw new PublicResourceError("G\xF6rsel en fazla 10 MB olabilir.", 413);
-  }
-  if (!encoded || encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
-    throw new PublicResourceError("Ge\xE7ersiz base64 g\xF6rsel verisi.", 400);
-  }
-  const buffer = Buffer.from(encoded, "base64");
-  return inspectImage(buffer, declaredMime, dataUrl?.[1]);
-}
-function inspectImage(buffer, ...declaredMimes) {
-  if (buffer.length > MAX_IMAGE_BYTES)
-    throw new PublicResourceError("G\xF6rsel en fazla 10 MB olabilir.", 413);
-  const png = buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-  const jpeg = buffer.length >= 3 && buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255;
-  const webp = buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP";
-  const mimeType = png ? "image/png" : jpeg ? "image/jpeg" : webp ? "image/webp" : "";
-  if (!mimeType)
-    throw new PublicResourceError("Yaln\u0131zca PNG, JPEG veya WebP g\xF6rselleri desteklenir.", 415);
-  for (const claimed of declaredMimes) {
-    if (claimed !== void 0 && typeof claimed !== "string")
-      throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel t\xFCr\xFC.", 400);
-    if (claimed && claimed.trim().toLowerCase() !== mimeType && !(claimed === "image/jpg" && jpeg)) {
-      throw new PublicResourceError("G\xF6rsel t\xFCr\xFC dosya i\xE7eri\u011Fiyle e\u015Fle\u015Fmiyor.", 415);
-    }
-  }
-  return { buffer, mimeType, ext: png ? "png" : jpeg ? "jpg" : "webp" };
-}
-function uploadPath(dosyaAdi) {
-  if (!dosyaAdi || sanitizeDosyaAdi(dosyaAdi) !== dosyaAdi) {
-    throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel dosya yolu.");
-  }
-  const candidate = path5.join(UPLOADS_DIR, dosyaAdi);
-  if (!yolGuvenlimi(candidate, UPLOADS_DIR)) {
-    throw new PublicResourceError("Eri\u015Fim reddedildi.");
-  }
-  if (fs3.existsSync(candidate)) {
-    const actual = fs3.realpathSync(candidate);
-    const root = fs3.realpathSync(UPLOADS_DIR);
-    if (!yolGuvenlimi(actual, root)) {
-      throw new PublicResourceError("Eri\u015Fim reddedildi.");
-    }
-    return actual;
-  }
-  return candidate;
-}
-function serveUploadedImage(req, res) {
-  try {
-    const file = uploadPath(req.params.dosyaAdi);
-    if (!fs3.existsSync(file) || !fs3.statSync(file).isFile()) {
-      return res.status(404).send("G\xF6rsel bulunamad\u0131.");
-    }
-    return res.sendFile(file);
-  } catch (error) {
-    return res.status(error instanceof PublicResourceError ? error.status : 500).send("G\xF6rsele eri\u015Filemiyor.");
-  }
-}
-router7.get("/uploads/:dosyaAdi", serveUploadedImage);
-router7.post("/upload-gorsel", (req, res) => {
-  try {
-    const { base64, mimeType, dosyaAdi } = req.body;
-    if (!base64 || typeof base64 !== "string") {
-      return res.status(400).json({ basarili: false, hata: "Ge\xE7ersiz g\xF6rsel verisi" });
-    }
-    const image = decodeImage(base64, mimeType);
-    const benzersizAd = `urun_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${image.ext}`;
-    const dosyaYolu = path5.join(UPLOADS_DIR, benzersizAd);
-    fs3.writeFileSync(dosyaYolu, image.buffer);
-    res.json({
-      basarili: true,
-      url: `/uploads/${benzersizAd}`,
-      dosya_adi: dosyaAdi || benzersizAd
-    });
-  } catch (err) {
-    console.error("G\xF6rsel y\xFCkleme hatas\u0131:", err);
-    res.status(err instanceof PublicResourceError ? err.status : 500).json({ basarili: false, hata: "G\xF6rsel kaydedilemedi: " + err.message });
-  }
-});
-router7.get("/proxy-gorsel", async (req, res) => {
-  const gorselUrl = req.query.url;
-  if (typeof gorselUrl !== "string" || !gorselUrl.startsWith("http")) {
-    return res.status(400).send("Ge\xE7ersiz g\xF6rsel adresi");
-  }
-  const urlKontrol = urlGuvenlimi(gorselUrl);
-  if (!urlKontrol.guvenli) {
-    console.warn(`[SSRF Engellendi] ${gorselUrl} \u2014 Sebep: ${urlKontrol.sebep}`);
-    return res.status(403).json({ basarili: false, hata: urlKontrol.sebep });
-  }
-  try {
-    const resp = await fetchPublicResource(gorselUrl);
-    if (!resp.ok) {
-      return res.status(resp.status).send(`G\xF6rsel indirilemedi (${resp.status})`);
-    }
-    const contentType = resp.headers.get("content-type") || "image/jpeg";
-    if (!contentType.startsWith("image/")) {
-      return res.status(400).send("Hedef adres resim dosyas\u0131 de\u011Fil");
-    }
-    const image = inspectImage(Buffer.from(await resp.arrayBuffer()), contentType.split(";")[0]);
-    res.setHeader("Content-Type", image.mimeType);
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    res.send(image.buffer);
-  } catch (err) {
-    res.status(err instanceof PublicResourceError ? err.status : 502).send("Vekil sunucu hatas\u0131: " + err.message);
-  }
-});
-router7.post("/urun-katalog-gorseli-ara", async (req, res) => {
-  try {
-    const { urun_adi, marka, renk } = req.body;
-    if (!urun_adi) {
-      return res.status(400).json({ basarili: false, hata: "\xDCr\xFCn ad\u0131 gereklidir." });
-    }
-    const ai = getGeminiClient();
-    const aramaPrompt = `Sen l\xFCks moda, ayakkab\u0131, \xE7anta ve giyim alan\u0131nda uzman bir \xFCr\xFCn katalog ara\u015Ft\u0131rmac\u0131s\u0131s\u0131n.
-A\u015Fa\u011F\u0131da bilgileri verilen \xFCr\xFCn i\xE7in internette resmi marka sitesinde (Karl Lagerfeld, On Running, Michael Kors, Tommy Hilfiger, Aldo, Coach, Zara vb.) ve yetkili l\xFCks sitelerde (Farfetch, Nordstrom, Saks Fifth Avenue, Bloomingdale's, Amazon vb.) orijinal st\xFCdyo/katalog \xE7ekimi foto\u011Fraf\u0131n\u0131 ve \xFCr\xFCn sat\u0131\u015F sayfas\u0131n\u0131 ara\u015Ft\u0131r:
-
-Aranan \xDCr\xFCn: "${urun_adi}"
-${marka ? `Marka: ${marka}` : ""}
-${renk ? `Renk: ${renk}` : ""}
-
-G\xD6REVLER\u0130N:
-1. \xDCr\xFCn\xFCn resmi e-ticaret sitelerindeki tam model ad\u0131n\u0131 belirle.
-2. \xDCr\xFCn\xFCn resmi sayfas\u0131ndaki y\xFCksek \xE7\xF6z\xFCn\xFCrl\xFCkl\xFC, beyaz/temiz arka planl\u0131 st\xFCdyo katalog foto\u011Fraf\u0131 linkini (do\u011Frudan CDN/image URL) veya \xFCr\xFCn sayfas\u0131n\u0131 bul.
-3. \xDCr\xFCn\xFCn resmi \xFCr\xFCn sayfas\u0131 linkini (URL) bul.
-4. \xDCr\xFCn\xFCn malzeme/koleksiyon \xF6zetini belirt.
-
-Yan\u0131t\u0131n\u0131 YALNIZCA a\u015Fa\u011F\u0131daki JSON format\u0131nda d\xF6nd\xFCr (ba\u015Fka a\xE7\u0131klama ekleme):
-{
-  "resmi_urun_adi": "\xDCr\xFCn\xFCn resmi tam ad\u0131 ve modeli",
-  "marka": "Marka",
-  "katalog_gorsel_url": "Do\u011Frudan g\xF6rsel CDN URL'si (varsa, \xF6rn: https://cdn...jpg veya https://images...)",
-  "urun_sayfasi_url": "Resmi \xFCr\xFCn sayfas\u0131 URL'si",
-  "aciklama": "\xDCr\xFCn\xFCn resmi katalog a\xE7\u0131klamas\u0131 veya materyali",
-  "tahmini_fiyat": "Resmi sat\u0131\u015F fiyat\u0131 (varsa)"
-}`;
-    const searchResponse = await generateContentWithRetryAndFallback(ai, {
-      contents: aramaPrompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        temperature: 0.2
-      }
-    });
-    const yanitMetni = searchResponse.text || "";
-    let sonuc = null;
-    try {
-      const jsonMatch = yanitMetni.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        sonuc = JSON.parse(jsonMatch[0]);
-      }
-    } catch (parseErr) {
-      console.warn("JSON parse hatas\u0131:", parseErr);
-    }
-    const groundingMetadata = searchResponse.candidates?.[0]?.groundingMetadata;
-    const webChunks = groundingMetadata?.groundingChunks || [];
-    const webLinkleri = webChunks.filter((c) => c.web?.uri).map((c) => ({
-      baslik: c.web.title || "Resmi \xDCr\xFCn Sayfas\u0131",
-      url: c.web.uri
-    }));
-    if (!sonuc) {
-      sonuc = {
-        resmi_urun_adi: urun_adi,
-        marka: marka || "",
-        katalog_gorsel_url: "",
-        urun_sayfasi_url: webLinkleri.length > 0 ? webLinkleri[0].url : "",
-        aciklama: yanitMetni.slice(0, 200)
-      };
-    } else if (!sonuc.urun_sayfasi_url && webLinkleri.length > 0) {
-      sonuc.urun_sayfasi_url = webLinkleri[0].url;
-    }
-    if (!sonuc.katalog_gorsel_url) {
-      const hedefLink = sonuc.urun_sayfasi_url || webLinkleri[0]?.url;
-      if (hedefLink) {
-        const ogResmi = await fetchOgImageFromUrl(hedefLink);
-        if (ogResmi) {
-          sonuc.katalog_gorsel_url = ogResmi;
-        }
-      }
-    }
-    res.json({
-      basarili: true,
-      sonuc,
-      web_linkleri: webLinkleri.slice(0, 4)
-    });
-  } catch (err) {
-    console.error("Katalog arama hatas\u0131:", err);
-    res.status(500).json({ basarili: false, hata: err.message || "\xDCr\xFCn g\xF6rsel aramas\u0131 ba\u015Far\u0131s\u0131z oldu." });
-  }
-});
-router7.post("/gorselden-urun-ara", async (req, res) => {
-  try {
-    const { gorsel, mevcut_urun_adi, ek_ipucu } = req.body;
-    if (!gorsel || typeof gorsel !== "string") {
-      return res.status(400).json({ basarili: false, hata: "Aranacak g\xF6rsel verisi bulunamad\u0131." });
-    }
-    if (!GEMINI_API_KEY) {
-      return res.status(500).json({ basarili: false, hata: "Gemini API anahtar\u0131 yap\u0131land\u0131r\u0131lmam\u0131\u015F." });
-    }
-    let base64Data = "";
-    let mimeType = "image/jpeg";
-    if (gorsel.startsWith("data:")) {
-      const image = decodeImage(gorsel);
-      mimeType = image.mimeType;
-      base64Data = image.buffer.toString("base64");
-    } else if (gorsel.startsWith("/uploads/")) {
-      const dosyaAdi = gorsel.replace("/uploads/", "");
-      const dosyaYolu = uploadPath(dosyaAdi);
-      if (fs3.existsSync(dosyaYolu)) {
-        const stat = fs3.statSync(dosyaYolu);
-        if (!stat.isFile()) throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel dosyas\u0131.");
-        if (stat.size > MAX_IMAGE_BYTES)
-          throw new PublicResourceError("G\xF6rsel boyut s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor.", 413);
-        const image = inspectImage(fs3.readFileSync(dosyaYolu));
-        base64Data = image.buffer.toString("base64");
-        mimeType = image.mimeType;
-      }
-    } else if (gorsel.startsWith("http")) {
-      try {
-        const fetchRes = await fetchPublicResource(gorsel);
-        if (fetchRes.ok) {
-          const image = inspectImage(
-            Buffer.from(await fetchRes.arrayBuffer()),
-            fetchRes.headers.get("content-type")?.split(";")[0]
-          );
-          base64Data = image.buffer.toString("base64");
-          mimeType = image.mimeType;
-        }
-      } catch (err) {
-        if (err instanceof PublicResourceError) throw err;
-        console.warn("G\xF6rsel URL indirilemedi:", err);
-      }
-    }
-    if (!base64Data) {
-      return res.status(400).json({ basarili: false, hata: "G\xF6rsel verisi okunamad\u0131 veya format desteklenmiyor." });
-    }
-    const ai = getGeminiClient();
-    const lensPrompt = `Sen profesyonel bir e-ticaret, l\xFCks marka ve \xFCr\xFCn tan\u0131ma uzman\u0131s\u0131n (Google Lens ve AliExpress Visual Search mant\u0131\u011F\u0131yla \xE7al\u0131\u015F\u0131yorsun).
-Ekli g\xF6rselde kullan\u0131c\u0131n\u0131n odaklad\u0131\u011F\u0131 veya se\xE7ti\u011Fi bir \xFCr\xFCn yer almaktad\u0131r.
-${mevcut_urun_adi ? `Sipari\u015F metnindeki \xFCr\xFCn ad\u0131/ipucu: "${mevcut_urun_adi}"` : ""}
-${ek_ipucu ? `Kullan\u0131c\u0131n\u0131n belirtti\u011Fi ek ipucu: "${ek_ipucu}"` : ""}
-
-L\xFCtfen \u015Fu ad\u0131mlar\u0131 eksiksiz uygula:
-1. G\xF6rseldeki \xFCr\xFCn\xFC titizlikle analiz et: Logo, marka amblemi, monogram desen, renk, taban, toka, materyal veya tipografik detaylar\u0131 belirle (\xD6rn: Karl Lagerfeld, Michael Kors, Gucci, Zara, Prada, Guess, Nike, Adidas, vb.).
-2. \xDCr\xFCn\xFCn tam resmi model ad\u0131n\u0131 ve koleksiyonunu tespit et (\xD6rn: "Karl Lagerfeld Kondo Monogram Slide Sandal", "Michael Kors Jet Set Crossbody Bag").
-3. Google Search arac\u0131 ile bu \xFCr\xFCn\xFCn orijinal st\xFCdyo foto\u011Fraf\u0131n\u0131 (.jpg veya .png format\u0131nda do\u011Frudan resim ba\u011Flant\u0131s\u0131) ve resmi sat\u0131\u015F/e-ticaret sayfalar\u0131n\u0131 (Trendyol, Beymen, Farfetch, Brandroom, Hepsiburada, Amazon veya resmi marka sitesi) bul.
-
-Cevab\u0131n\u0131 YALNIZCA ge\xE7erli bir JSON nesnesi format\u0131nda ver:
-{
-  "marka": "Tespit edilen marka ad\u0131",
-  "resmi_urun_adi": "\xDCr\xFCn\xFCn resmi model ve tam katalog ad\u0131",
-  "urun_tipi": "\xDCr\xFCn kategorisi (\xF6r: Terlik, \xC7anta, Ayakkab\u0131, Saat, Elbise)",
-  "renk": "Tespit edilen renk (\xF6r: Siyah, Beyaz-Siyah, Bej)",
-  "belirgin_ozellikler": "G\xF6rselden tespit edilen logo, desen, materyal vb. detaylar",
-  "katalog_gorsel_url": "Do\u011Frudan g\xF6rsel dosya linki (.jpg, .jpeg, .png, .webp) - web sayfas\u0131 linki OLMAYACAK",
-  "urun_sayfasi_url": "\xDCr\xFCn\xFCn resmi e-ticaret sat\u0131\u015F veya marka sayfas\u0131",
-  "aciklama": "\xDCr\xFCn\xFCn resmi katalog a\xE7\u0131klamas\u0131 ve \xF6zellikleri",
-  "google_arama_kelimeleri": "Google G\xF6rseller veya Google Lens'te tam bu \xFCr\xFCn\xFC bulmak i\xE7in en etkili 4-5 kelimelik arama terimi"
-}`;
-    const searchResponse = await generateContentWithRetryAndFallback(ai, {
-      contents: [
-        {
-          inlineData: {
-            mimeType,
-            data: base64Data
-          }
-        },
-        {
-          text: lensPrompt
-        }
-      ],
-      config: {
-        tools: [{ googleSearch: {} }],
-        temperature: 0.1
-      }
-    });
-    const yanitMetni = searchResponse.text || "";
-    let sonuc = null;
-    try {
-      const jsonMatch = yanitMetni.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        sonuc = JSON.parse(jsonMatch[0]);
-      }
-    } catch (parseErr) {
-      console.warn("G\xF6rsel arama JSON parse hatas\u0131:", parseErr);
-    }
-    const groundingMetadata = searchResponse.candidates?.[0]?.groundingMetadata;
-    const webChunks = groundingMetadata?.groundingChunks || [];
-    const webLinkleri = webChunks.filter((c) => c.web?.uri).map((c) => ({
-      baslik: c.web.title || "Resmi Sat\u0131\u015F Sayfas\u0131",
-      url: c.web.uri
-    }));
-    if (!sonuc) {
-      sonuc = {
-        marka: "",
-        resmi_urun_adi: mevcut_urun_adi || "Tespit Edilen \xDCr\xFCn",
-        urun_tipi: "",
-        renk: "",
-        belirgin_ozellikler: "",
-        katalog_gorsel_url: "",
-        urun_sayfasi_url: webLinkleri[0]?.url || "",
-        aciklama: yanitMetni.slice(0, 200),
-        google_arama_kelimeleri: mevcut_urun_adi || ""
-      };
-    } else if (!sonuc.urun_sayfasi_url && webLinkleri.length > 0) {
-      sonuc.urun_sayfasi_url = webLinkleri[0].url;
-    }
-    if (sonuc.katalog_gorsel_url) {
-      const gecerliMi = await isValidImageUrl(sonuc.katalog_gorsel_url);
-      if (!gecerliMi) {
-        console.log(
-          `[G\xF6rsel Do\u011Frulama] Modelin \xFCretti\u011Fi katalog URL ge\xE7ersiz \xE7\u0131kt\u0131, temizleniyor.`
-        );
-        sonuc.katalog_gorsel_url = "";
-      }
-    }
-    if (!sonuc.katalog_gorsel_url) {
-      const adayLinkler = [sonuc.urun_sayfasi_url, ...webLinkleri.map((w) => w.url)].filter(
-        Boolean
-      );
-      for (const link of adayLinkler) {
-        if (!link || link.includes("google.com") || link.includes("google.com.tr")) continue;
-        const ogResmi = await fetchOgImageFromUrl(link);
-        if (ogResmi && await isValidImageUrl(ogResmi)) {
-          sonuc.katalog_gorsel_url = ogResmi;
-          break;
-        }
-      }
-    }
-    const aramaKelimeleri = (sonuc.google_arama_kelimeleri || `${sonuc.marka || ""} ${sonuc.resmi_urun_adi || ""}`).trim() || "\xDCr\xFCn Ara";
-    const googleGorselAramaUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(aramaKelimeleri)}`;
-    const googleWebAramaUrl = `https://www.google.com/search?q=${encodeURIComponent(aramaKelimeleri)}`;
-    const googleAlisverisUrl = `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(aramaKelimeleri)}`;
-    if (!sonuc.urun_sayfasi_url) {
-      sonuc.urun_sayfasi_url = googleWebAramaUrl;
-    }
-    const sonWebLinkleri = webLinkleri.length > 0 ? webLinkleri.slice(0, 5) : [
+    const ilgiliSiparisler = source.map(formatlaSiparis).filter((s) => seciliTenant === "all" || s.tenant_id === seciliTenant);
+    const kuryeler = [
       {
-        baslik: `Google G\xF6rseller: ${aramaKelimeleri}`,
-        url: googleGorselAramaUrl
+        id: "kurye-elvin",
+        ad_soyad: "Elvin M\u0259mm\u0259dli",
+        telefon: "+994 50 411 22 33",
+        bolge: "N\u0259rimanov & G\u0259nclik & M\u0259rk\u0259z"
       },
       {
-        baslik: `Google Al\u0131\u015Fveri\u015F / Fiyatlar: ${aramaKelimeleri}`,
-        url: googleAlisverisUrl
+        id: "kurye-resad",
+        ad_soyad: "R\u0259\u015Fad K\u0259rimov",
+        telefon: "+994 55 622 33 44",
+        bolge: "Yasamal & Elml\u0259r & 28 May"
       },
       {
-        baslik: `Google Web Arama: ${aramaKelimeleri}`,
-        url: googleWebAramaUrl
+        id: "kurye-vuqar",
+        ad_soyad: "V\xFCqar Ta\u011F\u0131yev",
+        telefon: "+994 70 833 44 55",
+        bolge: "G\u0259nc\u0259 & Q\u0259rb Rayonlar\u0131 (Po\xE7t/Avtova\u011Fzal)"
+      },
+      {
+        id: "ofis-tehvil",
+        ad_soyad: "Ofis / M\u0259rk\u0259zi Evd\u0259n T\u0259hvil",
+        telefon: "+994 50 111 22 33",
+        bolge: "N\u0259simi r., 28 May"
       }
     ];
-    res.json({
-      basarili: true,
-      sonuc,
-      web_linkleri: sonWebLinkleri,
-      google_gorsel_arama_url: googleGorselAramaUrl
-    });
-  } catch (err) {
-    console.error("G\xF6rselden arama hatas\u0131:", err);
-    res.status(err instanceof PublicResourceError ? err.status : 500).json({ basarili: false, hata: err.message || "G\xF6rsel \xFCzerinden arama yap\u0131lamad\u0131." });
-  }
-});
-router7.post("/katalog-gorseli-kaydet", async (req, res) => {
-  try {
-    const { siparis_id, urun_indeksi, katalog_gorsel_url, urun_sayfasi_url, resmi_urun_adi } = req.body;
-    if (!siparis_id || urun_indeksi === void 0 || !katalog_gorsel_url) {
-      return res.status(400).json({
-        basarili: false,
-        hata: "siparis_id, urun_indeksi ve katalog_gorsel_url gereklidir."
+    const zenginKuryeler = kuryeler.map((k) => {
+      const kuryeSiparisleri = ilgiliSiparisler.filter((s) => {
+        if (s.baku_kurye_id === k.id) return true;
+        const adresVeSehir = `${s.teslimat_sehri || ""} ${s.teslimat_adresi || ""}`.toLowerCase();
+        if (k.id === "kurye-elvin" && (adresVeSehir.includes("n\u0259rimanov") || adresVeSehir.includes("g\u0259nclik") || adresVeSehir.includes("t\u0259briz")))
+          return true;
+        if (k.id === "kurye-resad" && (adresVeSehir.includes("yasamal") || adresVeSehir.includes("elml\u0259r") || adresVeSehir.includes("28 may") || adresVeSehir.includes("i\xE7\u0259ri\u015F\u0259h\u0259r")))
+          return true;
+        if (k.id === "kurye-vuqar" && (adresVeSehir.includes("g\u0259nc\u0259") || adresVeSehir.includes("sumqay\u0131t") || adresVeSehir.includes("rayon")))
+          return true;
+        if (k.id === "ofis-tehvil" && (s.ozel_not?.toLowerCase().includes("s\xFCr\xFCc\xFC") || s.ozel_not?.toLowerCase().includes("\xF6z\xFC") || s.ham_mesaj?.toLowerCase().includes("\xF6z\xFC")))
+          return true;
+        return false;
       });
-    }
-    if (typeof katalog_gorsel_url === "string" && (katalog_gorsel_url.startsWith("http://") || katalog_gorsel_url.startsWith("https://"))) {
-      const urlKontrol = urlGuvenlimi(katalog_gorsel_url);
-      if (!urlKontrol.guvenli) {
-        return res.status(403).json({
-          basarili: false,
-          hata: `G\xFCvenlik engeli (SSRF): ${urlKontrol.sebep}`
-        });
-      }
-    }
-    let mevcutSiparis = null;
-    if (supabase) {
-      const { data } = await supabase.from("siparisler").select("*").eq("id", siparis_id).single();
-      if (data) mevcutSiparis = data;
-    }
-    if (!mevcutSiparis) {
-      mevcutSiparis = siparislerVeritabani.find((s) => s.id === siparis_id);
-    }
-    if (!mevcutSiparis) {
-      return res.status(404).json({ basarili: false, hata: "Sipari\u015F bulunamad\u0131." });
-    }
-    const formatli = formatlaSiparis(mevcutSiparis);
-    const guncelUrunler = [...formatli.urunler || []];
-    if (!guncelUrunler[urun_indeksi]) {
-      return res.status(400).json({ basarili: false, hata: "Belirtilen \xFCr\xFCn bulunamad\u0131." });
-    }
-    const mevcutUrun = guncelUrunler[urun_indeksi];
-    const korunanOrijinalGorsel = mevcutUrun.orijinal_gorsel_url || mevcutUrun.urun_gorseli || formatli.gorseller && formatli.gorseller[0] || "";
-    let kaydedilecekGorselUrl = katalog_gorsel_url;
-    if (kaydedilecekGorselUrl.includes("/api/proxy-gorsel?url=")) {
-      try {
-        const parsed = new URL(kaydedilecekGorselUrl, "http://localhost:3000");
-        const gercekUrl = parsed.searchParams.get("url");
-        if (gercekUrl) kaydedilecekGorselUrl = gercekUrl;
-      } catch {
-      }
-    }
-    if (kaydedilecekGorselUrl.startsWith("data:image/")) {
-      const image = decodeImage(kaydedilecekGorselUrl);
-      const dosyaAdi = `kirpinti_${Date.now()}_${urun_indeksi}.${image.ext}`;
-      const dosyaYolu = path5.join(UPLOADS_DIR, dosyaAdi);
-      fs3.writeFileSync(dosyaYolu, image.buffer);
-      kaydedilecekGorselUrl = `/uploads/${dosyaAdi}`;
-    } else if (kaydedilecekGorselUrl.startsWith("http://") || kaydedilecekGorselUrl.startsWith("https://")) {
-      const urlKontrol = urlGuvenlimi(kaydedilecekGorselUrl);
-      if (!urlKontrol.guvenli) {
-        return res.status(403).json({
-          basarili: false,
-          hata: `G\xFCvenlik engeli (SSRF): ${urlKontrol.sebep}`
-        });
-      }
-      try {
-        const response = await fetchPublicResource(kaydedilecekGorselUrl);
-        const contentType = response.headers.get("content-type") || "";
-        if (contentType.includes("text/html")) {
-          return res.status(400).json({
-            basarili: false,
-            hata: "Belirtilen adres do\u011Frudan bir g\xF6rsel dosyas\u0131 de\u011Fil, web sayfas\u0131 linkidir. L\xFCtfen do\u011Frudan resim adresini (.jpg, .png vb.) girin."
-          });
-        }
-        if (response.ok && contentType.startsWith("image/")) {
-          const arrayBuffer = await response.arrayBuffer();
-          const image = inspectImage(Buffer.from(arrayBuffer), contentType.split(";")[0]);
-          const dosyaAdi = `katalog_${Date.now()}_${urun_indeksi}.${image.ext}`;
-          const dosyaYolu = path5.join(UPLOADS_DIR, dosyaAdi);
-          fs3.writeFileSync(dosyaYolu, image.buffer);
-          kaydedilecekGorselUrl = `/uploads/${dosyaAdi}`;
-        }
-      } catch (fetchErr) {
-        if (fetchErr instanceof PublicResourceError) {
-          return res.status(fetchErr.status).json({ basarili: false, hata: fetchErr.message });
-        }
-        console.warn("G\xF6rsel yerel indirme uyar\u0131s\u0131 (URL do\u011Frudan kullan\u0131lacak):", fetchErr);
-      }
-    }
-    guncelUrunler[urun_indeksi] = {
-      ...mevcutUrun,
-      orijinal_gorsel_url: korunanOrijinalGorsel,
-      katalog_gorseli: kaydedilecekGorselUrl,
-      urun_gorseli: kaydedilecekGorselUrl,
-      urun_sayfasi_url: urun_sayfasi_url || mevcutUrun.urun_sayfasi_url,
-      resmi_urun_adi: resmi_urun_adi || mevcutUrun.resmi_urun_adi
-    };
-    const sbPayload = hazirlaSupabasePayload({
-      ...formatli,
-      urunler: guncelUrunler
+      const bekleyenler = kuryeSiparisleri.filter((s) => s.lojistik_durumu !== "TESLIM_EDILDI");
+      const toplanacakBorc = bekleyenler.reduce((acc, s) => acc + (s.kalan_tutar || 0), 0);
+      return {
+        ...k,
+        tenant_id: seciliTenant || "all",
+        aktif_paket_sayisi: bekleyenler.length,
+        toplam_tahsilat_bekleyen: toplanacakBorc,
+        toplam_paket_sayisi: kuryeSiparisleri.length
+      };
     });
-    if (supabase) {
-      const { data, error } = await supabase.from("siparisler").update(sbPayload).eq("id", siparis_id).select().single();
-      if (error) console.error("Supabase katalog g\xF6rseli g\xFCncelleme hatas\u0131:", error.message);
-      if (data) {
-        return res.json({
-          basarili: true,
-          siparis: formatlaSiparis(data),
-          mesaj: "Orijinal web katalog g\xF6rseli kaydedildi!"
-        });
-      }
-    }
-    const idx = siparislerVeritabani.findIndex((s) => s.id === siparis_id);
-    if (idx !== -1) {
-      siparislerVeritabani[idx].urunler = guncelUrunler;
-    }
     res.json({
       basarili: true,
-      siparis: { ...formatli, urunler: guncelUrunler },
-      mesaj: "Orijinal web katalog g\xF6rseli kaydedildi!"
+      kuryeler: zenginKuryeler
     });
-  } catch (err) {
-    console.error("Katalog g\xF6rseli kaydetme hatas\u0131:", err);
-    res.status(err instanceof PublicResourceError ? err.status : 500).json({ basarili: false, hata: err.message });
+  } catch {
+    res.status(503).json({ basarili: false, hata: "Kurye verileri okunamad\u0131." });
   }
 });
-router7.post("/urun-orijinal-gorsele-don", async (req, res) => {
-  try {
-    const { siparis_id, urun_indeksi } = req.body;
-    if (!siparis_id || urun_indeksi === void 0) {
-      return res.status(400).json({ basarili: false, hata: "siparis_id ve urun_indeksi gereklidir." });
-    }
-    let mevcutSiparis = null;
-    if (supabase) {
-      const { data } = await supabase.from("siparisler").select("*").eq("id", siparis_id).single();
-      if (data) mevcutSiparis = data;
-    }
-    if (!mevcutSiparis) {
-      mevcutSiparis = siparislerVeritabani.find((s) => s.id === siparis_id);
-    }
-    if (!mevcutSiparis) {
-      return res.status(404).json({ basarili: false, hata: "Sipari\u015F bulunamad\u0131." });
-    }
-    const formatli = formatlaSiparis(mevcutSiparis);
-    const guncelUrunler = [...formatli.urunler || []];
-    if (!guncelUrunler[urun_indeksi]) {
-      return res.status(400).json({ basarili: false, hata: "Belirtilen \xFCr\xFCn bulunamad\u0131." });
-    }
-    const u = guncelUrunler[urun_indeksi];
-    const geriDonecekGorsel = u.orijinal_gorsel_url || formatli.gorseller && formatli.gorseller[0] || "";
-    guncelUrunler[urun_indeksi] = {
-      ...u,
-      urun_gorseli: geriDonecekGorsel,
-      katalog_gorseli: void 0,
-      urun_sayfasi_url: void 0,
-      resmi_urun_adi: void 0
-    };
-    const sbPayload = hazirlaSupabasePayload({
-      ...formatli,
-      urunler: guncelUrunler
-    });
-    if (supabase) {
-      const { data, error } = await supabase.from("siparisler").update(sbPayload).eq("id", siparis_id).select().single();
-      if (error) console.error("Supabase orijinal g\xF6rsele d\xF6nme hatas\u0131:", error.message);
-      if (data) {
-        return res.json({
-          basarili: true,
-          siparis: formatlaSiparis(data),
-          mesaj: "Orijinal ekran g\xF6r\xFCnt\xFCs\xFC ba\u015Far\u0131yla geri y\xFCklendi."
-        });
-      }
-    }
-    const idx = siparislerVeritabani.findIndex((s) => s.id === siparis_id);
-    if (idx !== -1) {
-      siparislerVeritabani[idx].urunler = guncelUrunler;
-    }
-    res.json({
-      basarili: true,
-      siparis: { ...formatli, urunler: guncelUrunler },
-      mesaj: "Orijinal ekran g\xF6r\xFCnt\xFCs\xFC ba\u015Far\u0131yla geri y\xFCklendi."
-    });
-  } catch (err) {
-    console.error("Orijinal g\xF6rsele d\xF6nme hatas\u0131:", err);
-    res.status(500).json({ basarili: false, hata: err.message });
-  }
-});
-var gorsel_default = router7;
+var kuryeler_default = router7;
 
 // src/server/routes/veritabani.ts
 import { Router as Router8 } from "express";
@@ -7225,7 +7602,9 @@ router8.post("/veritabani/temizle", async (req, res) => {
       setSiparislerVeritabani([]);
     } else {
       const oncekiSayi = siparislerVeritabani.length;
-      const filtrelenmis = siparislerVeritabani.filter((s) => (s.tenant_id || "kanada_shopper_baku") !== hedefTenant);
+      const filtrelenmis = siparislerVeritabani.filter(
+        (s) => (s.tenant_id || "kanada_shopper_baku") !== hedefTenant
+      );
       silinenAdet = Math.max(silinenAdet, oncekiSayi - filtrelenmis.length);
       setSiparislerVeritabani(filtrelenmis);
     }
@@ -7248,7 +7627,9 @@ router8.post("/veritabani/demo-yukle", async (req, res) => {
     if (supabase) {
       await supabase.from("siparisler").delete().eq("tenant_id", hedefTenant);
     }
-    const digerSiparisler = siparislerVeritabani.filter((s) => (s.tenant_id || "kanada_shopper_baku") !== hedefTenant);
+    const digerSiparisler = siparislerVeritabani.filter(
+      (s) => (s.tenant_id || "kanada_shopper_baku") !== hedefTenant
+    );
     const eklenecekler = BASLANGIC_SIPARISLER.map((s) => ({
       ...s,
       tenant_id: hedefTenant,
@@ -7282,13 +7663,13 @@ router8.get("/veritabani/yedek-al", async (req, res) => {
   try {
     let siparisler = [];
     if (supabase) {
-      const { data } = await supabase.from("siparisler").select("*").order("olusturma_tarihi", { ascending: false });
-      if (data) {
-        siparisler = data.map((s) => formatlaSiparis(s));
-      }
-    }
-    if (siparisler.length === 0) {
-      siparisler = siparislerVeritabani.map((s) => formatlaSiparis(s));
+      let query = supabase.from("siparisler").select("*").order("olusturma_tarihi", { ascending: false });
+      if (req.tenantId !== "all") query = query.eq("tenant_id", req.tenantId);
+      const { data, error } = await query;
+      if (error) return res.status(503).json({ basarili: false, hata: "Yedek verisi okunamad\u0131." });
+      siparisler = (data || []).map(formatlaSiparis);
+    } else {
+      siparisler = siparislerVeritabani.filter((s) => req.tenantId === "all" || s.tenant_id === req.tenantId).map(formatlaSiparis);
     }
     const yedekPaketi = {
       proje: "Kanada Shopper Baku ERP",
@@ -7298,7 +7679,10 @@ router8.get("/veritabani/yedek-al", async (req, res) => {
       siparisler
     };
     res.setHeader("Content-Type", "application/json");
-    res.setHeader("Content-Disposition", `attachment; filename=knb_backup_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=knb_backup_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`
+    );
     res.json(yedekPaketi);
   } catch (err) {
     res.status(500).json({ basarili: false, hata: "Yedek olu\u015Fturulamad\u0131: " + err.message });
@@ -7326,7 +7710,9 @@ router8.post("/veritabani/yedek-yukle", async (req, res) => {
       }
     }
     const formatlanmis = siparisler.map((s) => formatlaSiparis(s));
-    setSiparislerVeritabani(temizleVeYukle ? [...formatlanmis] : [...formatlanmis, ...siparislerVeritabani]);
+    setSiparislerVeritabani(
+      temizleVeYukle ? [...formatlanmis] : [...formatlanmis, ...siparislerVeritabani]
+    );
     res.json({
       basarili: true,
       mesaj: `${siparisler.length} sifari\u015F u\u011Furla bazaya idxal edildi v\u0259 b\u0259rpa olundu!`,
@@ -7417,7 +7803,7 @@ var AramexProvider = class {
             UserName: kimlik.kullaniciAdi,
             Password: kimlik.sifre,
             Version: "v1.0",
-            AccountNumber: kimlik.hesapNo || "72470858",
+            AccountNumber: kimlik.hesapNo || "",
             AccountPin: kimlik.pin || "",
             AccountEntity: kimlik.entity || (ayarlar.cikisUlkesi === "CA" ? "YYZ" : "DXB"),
             AccountCountryCode: ayarlar.cikisUlkesi || "CA"
@@ -7444,6 +7830,7 @@ var AramexProvider = class {
             const dateStr = item.UpdateDateTime || (/* @__PURE__ */ new Date()).toISOString();
             tumGuncellemeler.push({
               takipNo: waybill,
+              kaynak: "LIVE",
               durum: this.mapStatus(code, desc, loc),
               hamDurumKodu: code,
               hamAciklama: desc,
@@ -7453,11 +7840,10 @@ var AramexProvider = class {
             });
           }
         } else {
-          tumGuncellemeler.push(...this.simuleTakipSonuclari(chunk, ayarlar));
+          throw new Error("Ge\xE7erli canl\u0131 kargo yan\u0131t\u0131 al\u0131namad\u0131.");
         }
       } catch (err) {
-        console.warn("Aramex API \xE7a\u011Fr\u0131s\u0131 ba\u015Far\u0131s\u0131z, sim\xFClasyon fallback devreye girdi:", err);
-        tumGuncellemeler.push(...this.simuleTakipSonuclari(chunk, ayarlar));
+        throw new Error("Canl\u0131 kargo takibi ba\u015Far\u0131s\u0131z. Sipari\u015F durumlar\u0131 de\u011Fi\u015Ftirilmedi.");
       }
     }
     return tumGuncellemeler;
@@ -7474,7 +7860,7 @@ var AramexProvider = class {
         mesaj: "Aramex simulyasiya v\u0259 demo rejimi aktivdir (R\u0259smi API a\xE7arlar\u0131 daxil edilm\u0259yib).",
         saglayici: this.tip,
         gecikmeMs: 15,
-        detay: { mod: "SIMULATION", hesapNo: kimlik.hesapNo || "72470858" }
+        detay: { mod: "SIMULATION", hesapNo: kimlik.hesapNo || "" }
       };
     }
     try {
@@ -7488,7 +7874,7 @@ var AramexProvider = class {
             UserName: kimlik.kullaniciAdi,
             Password: kimlik.sifre,
             Version: "v1.0",
-            AccountNumber: kimlik.hesapNo || "72470858",
+            AccountNumber: kimlik.hesapNo || "",
             AccountPin: kimlik.pin || "",
             AccountEntity: kimlik.entity || "YYZ",
             AccountCountryCode: ayarlar.cikisUlkesi || "CA"
@@ -7512,7 +7898,7 @@ var AramexProvider = class {
       }
       return {
         basarili: true,
-        mesaj: `Aramex API ba\u011Flant\u0131s\u0131 u\u011Furludur! (Hesab: ${kimlik.hesapNo || "72470858"}, Cavab vaxt\u0131: ${gecikmeMs}ms)`,
+        mesaj: `Aramex API ba\u011Flant\u0131s\u0131 u\u011Furludur! (Hesab: ${kimlik.hesapNo || ""}, Cavab vaxt\u0131: ${gecikmeMs}ms)`,
         saglayici: this.tip,
         gecikmeMs,
         detay: { endpoint, status: res.status }
@@ -7567,8 +7953,25 @@ var AramexProvider = class {
       const findCol = (...keywords) => {
         return headers.findIndex((h) => keywords.some((k) => h.includes(k)));
       };
-      const waybillCol = findCol("waybill", "awb", "tracking", "takip", "hawb", "barcode", "kon\u015Fimento");
-      const nameCol = findCol("consignee", "receiver", "al\u0131c\u0131", "alici", "m\xFC\u015Ft\u0259ri", "musteri", "name", "ad");
+      const waybillCol = findCol(
+        "waybill",
+        "awb",
+        "tracking",
+        "takip",
+        "hawb",
+        "barcode",
+        "kon\u015Fimento"
+      );
+      const nameCol = findCol(
+        "consignee",
+        "receiver",
+        "al\u0131c\u0131",
+        "alici",
+        "m\xFC\u015Ft\u0259ri",
+        "musteri",
+        "name",
+        "ad"
+      );
       const phoneCol = findCol("phone", "telephone", "tel", "mobil", "\u0259laq\u0259");
       const cityCol = findCol("destination", "city", "\u015F\u0259h\u0259r", "sehir", "dest");
       const addressCol = findCol("address", "\xFCnvan", "unvan", "addr");
@@ -7643,6 +8046,7 @@ var AramexProvider = class {
       if (sonHane >= 8) {
         return {
           takipNo,
+          kaynak: "SIMULATION",
           durum: "TESLIM_EDILDI",
           hamDurumKodu: "DLV",
           hamAciklama: "Ba\u011Flama Bak\u0131da \xFCnvanda m\xFC\u015Ft\u0259riy\u0259 u\u011Furla t\u0259hvil verildi (\u0130mzal\u0131).",
@@ -7652,6 +8056,7 @@ var AramexProvider = class {
       } else if (sonHane >= 5) {
         return {
           takipNo,
+          kaynak: "SIMULATION",
           durum: "BAKU_DAGITIM_ARKADAS",
           hamDurumKodu: "SH008",
           hamAciklama: "Heyd\u0259r \u018Fliyev Beyn\u0259lxalq Hava Liman\u0131nda (GYD) g\xF6mr\xFCk r\u0259smil\u0259\u015Fdirilm\u0259si tamamland\u0131, kurye b\xF6lg\xFCs\xFCnd\u0259dir.",
@@ -7661,6 +8066,7 @@ var AramexProvider = class {
       } else if (sonHane >= 2) {
         return {
           takipNo,
+          kaynak: "SIMULATION",
           durum: "ULUSLARARASI_KARGO",
           hamDurumKodu: "SH014",
           hamAciklama: "Kargo tranzit qov\u015Fa\u011F\u0131ndan yola d\xFC\u015Fd\xFC (Aramex Flight - In Transit to GYD).",
@@ -7670,6 +8076,7 @@ var AramexProvider = class {
       } else {
         return {
           takipNo,
+          kaynak: "SIMULATION",
           durum: "KANADA_DEPO",
           hamDurumKodu: "SH005",
           hamAciklama: `Kargo ${cikisSehri} anbar\u0131nda q\u0259bul edildi v\u0259 beyn\u0259lxalq g\xF6nd\u0259ri\u015F \xFC\xE7\xFCn qabla\u015Fd\u0131r\u0131ld\u0131.`,
@@ -7698,6 +8105,7 @@ var DhlExpressProvider = class {
     const varis = ayarlar.varisHavalimani || "Baku GYD";
     return takipNolari.map((takipNo) => ({
       takipNo,
+      kaynak: "SIMULATION",
       durum: "ULUSLARARASI_KARGO",
       hamDurumKodu: "DHL_IN_TRANSIT",
       hamAciklama: `Shipment has departed DHL Hub (${cikis}) towards ${varis}`,
@@ -7744,6 +8152,7 @@ var UpsProvider = class {
     const cikis = ayarlar.cikisSehri || "Louisville (SDF) / Toronto";
     return takipNolari.map((takipNo) => ({
       takipNo,
+      kaynak: "SIMULATION",
       durum: "ULUSLARARASI_KARGO",
       hamDurumKodu: "UPS_ON_WAY",
       hamAciklama: `UPS Worldport departure scan (${cikis})`,
@@ -7784,9 +8193,9 @@ var VARSAYILAN_AYARLAR = {
   varisUlkesi: "AZ",
   varisHavalimani: "Heyd\u0259r \u018Fliyev Beyn\u0259lxalq Hava Liman\u0131 (GYD)",
   kimlikBilgileri: {
-    kullaniciAdi: "canadian_brand_shop@aramex.com",
+    kullaniciAdi: "",
     sifre: "",
-    hesapNo: "72470858",
+    hesapNo: "",
     pin: "",
     entity: "YYZ",
     testModu: true
@@ -7814,13 +8223,14 @@ var KargoMerkezi = class {
     return provider;
   }
   getAyarlar(tenantId) {
-    const tid = tenantId || "kanada_shopper_baku";
-    const ayar = this.tenantAyarlari.get(tid) || this.tenantAyarlari.get("all");
+    const tid = tenantId;
+    if (!tid || tid === "all") throw new Error("Kargo i\u015Flemi i\xE7in firma se\xE7in.");
+    const ayar = this.tenantAyarlari.get(tid);
     if (ayar) {
-      return { ...ayar };
+      return structuredClone(ayar);
     }
     return {
-      ...VARSAYILAN_AYARLAR,
+      ...structuredClone(VARSAYILAN_AYARLAR),
       tenantId: tid
     };
   }
@@ -7883,14 +8293,15 @@ var KargoMerkezi = class {
   async topluSenkronizeEt(tenantId) {
     const ayarlar = this.getAyarlar(tenantId);
     const provider = this.getProvider(ayarlar.saglayici);
-    const aktifSiparisler = siparislerVeritabani.filter((s) => {
-      if (tenantId && tenantId !== "all" && (s.tenant_id || "kanada_shopper_baku") !== tenantId) {
-        return false;
-      }
-      const hasCode = Boolean(s.uluslararasi_kargo_kodu && s.uluslararasi_kargo_kodu.trim());
-      const notDelivered = s.lojistik_durumu !== "TESLIM_EDILDI";
-      return hasCode && notDelivered;
-    });
+    let adaylar = siparislerVeritabani;
+    if (supabase) {
+      const { data, error } = await supabase.from("siparisler").select("*").eq("tenant_id", tenantId);
+      if (error) throw new Error("Kargo sipari\u015Fleri okunamad\u0131.");
+      adaylar = (data || []).map(formatlaSiparis);
+    }
+    const aktifSiparisler = adaylar.filter(
+      (s) => s.tenant_id === tenantId && Boolean(s.uluslararasi_kargo_kodu?.trim()) && s.lojistik_durumu !== "TESLIM_EDILDI"
+    );
     if (aktifSiparisler.length === 0) {
       return {
         basarili: true,
@@ -7901,6 +8312,10 @@ var KargoMerkezi = class {
     }
     const awbListesi = aktifSiparisler.map((s) => s.uluslararasi_kargo_kodu.trim());
     const takipSonuclari = await provider.topluTakipEt(awbListesi, ayarlar);
+    if (takipSonuclari.some((result) => result.kaynak !== "LIVE"))
+      throw new Error(
+        "Sim\xFClasyon sonu\xE7lar\u0131 sipari\u015Flere kaydedilemez. Canl\u0131 kargo hesab\u0131 yap\u0131land\u0131r\u0131n."
+      );
     const takipMap = /* @__PURE__ */ new Map();
     for (const res of takipSonuclari) {
       takipMap.set(res.takipNo.toUpperCase(), res);
@@ -7931,8 +8346,10 @@ var KargoMerkezi = class {
         if (supabase) {
           try {
             const payload = hazirlaSupabasePayload(siparis);
-            supabase.from("siparisler").update(payload).eq("id", siparis.id).then();
+            const { data, error } = await supabase.from("siparisler").update(payload).eq("id", siparis.id).eq("tenant_id", tenantId).select("id").maybeSingle();
+            if (error || !data) throw new Error("Kargo g\xFCncellemesi kaydedilemedi.");
           } catch {
+            throw new Error("Kargo g\xFCncellemesi kaydedilemedi.");
           }
         }
       }
@@ -7999,17 +8416,47 @@ var kargoMerkezi = new KargoMerkezi();
 // src/server/routes/kargoEntegrasyon.ts
 var router9 = Router9();
 var DESTEKLENEN_SAGLAYICILAR = [
-  { id: "ARAMEX", ad: "Aramex International", aciklama: "Kanada \u2794 Bak\xFC ana hava kargo hatt\u0131 (REST API v2 Canl\u0131 & Batch)", durum: "AKTIF" },
-  { id: "DHL", ad: "DHL Express", aciklama: "Qlobal ekspres kurye \u015F\u0259b\u0259k\u0259si v\u0259 hava yolu da\u015F\u0131malar\u0131", durum: "GENISLETILEBILIR" },
-  { id: "UPS", ad: "UPS Worldwide", aciklama: "\u015Eimali Amerika v\u0259 Avropa m\u0259rk\u0259zli geni\u015F lojistika \u015F\u0259b\u0259k\u0259si", durum: "GENISLETILEBILIR" },
-  { id: "FEDEX", ad: "FedEx Cross-Border", aciklama: "AB\u015E v\u0259 Asiya istiqam\u0259tli beyn\u0259lxalq parsel xidm\u0259ti", durum: "GENISLETILEBILIR" },
-  { id: "MANUEL", ad: "F\u0259rdi / \xD6z\u0259l Karqo", aciklama: "Kargo kodu v\u0259 \xE7\u0259kinin \u0259l il\u0259 daxil edildiyi \u0259n\u0259n\u0259vi rejim", durum: "AKTIF" }
+  {
+    id: "ARAMEX",
+    ad: "Aramex International",
+    aciklama: "Kanada \u2794 Bak\xFC ana hava kargo hatt\u0131 (REST API v2 Canl\u0131 & Batch)",
+    durum: "AKTIF"
+  },
+  {
+    id: "DHL",
+    ad: "DHL Express",
+    aciklama: "Qlobal ekspres kurye \u015F\u0259b\u0259k\u0259si v\u0259 hava yolu da\u015F\u0131malar\u0131",
+    durum: "GENISLETILEBILIR"
+  },
+  {
+    id: "UPS",
+    ad: "UPS Worldwide",
+    aciklama: "\u015Eimali Amerika v\u0259 Avropa m\u0259rk\u0259zli geni\u015F lojistika \u015F\u0259b\u0259k\u0259si",
+    durum: "GENISLETILEBILIR"
+  },
+  {
+    id: "FEDEX",
+    ad: "FedEx Cross-Border",
+    aciklama: "AB\u015E v\u0259 Asiya istiqam\u0259tli beyn\u0259lxalq parsel xidm\u0259ti",
+    durum: "GENISLETILEBILIR"
+  },
+  {
+    id: "MANUEL",
+    ad: "F\u0259rdi / \xD6z\u0259l Karqo",
+    aciklama: "Kargo kodu v\u0259 \xE7\u0259kinin \u0259l il\u0259 daxil edildiyi \u0259n\u0259n\u0259vi rejim",
+    durum: "AKTIF"
+  }
 ];
 var DESTEKLENEN_ULKELER = [
   { kod: "CA", ad: "Kanada", bayrak: "\u{1F1E8}\u{1F1E6}", anaHavalimani: "Toronto Pearson (YYZ)" },
   { kod: "US", ad: "AB\u015E (Amerika)", bayrak: "\u{1F1FA}\u{1F1F8}", anaHavalimani: "New York (JFK) / Chicago (ORD)" },
   { kod: "JP", ad: "Yaponiya", bayrak: "\u{1F1EF}\u{1F1F5}", anaHavalimani: "Tokyo Narita (NRT)" },
-  { kod: "GB", ad: "B\xF6y\xFCk Britaniya (\u0130ngilt\u0259r\u0259)", bayrak: "\u{1F1EC}\u{1F1E7}", anaHavalimani: "London Heathrow (LHR)" },
+  {
+    kod: "GB",
+    ad: "B\xF6y\xFCk Britaniya (\u0130ngilt\u0259r\u0259)",
+    bayrak: "\u{1F1EC}\u{1F1E7}",
+    anaHavalimani: "London Heathrow (LHR)"
+  },
   { kod: "DE", ad: "Almaniya", bayrak: "\u{1F1E9}\u{1F1EA}", anaHavalimani: "Frankfurt (FRA)" },
   { kod: "TR", ad: "T\xFCrkiy\u0259", bayrak: "\u{1F1F9}\u{1F1F7}", anaHavalimani: "\u0130stanbul (IST)" },
   { kod: "AE", ad: "B\u018F\u018F (Birl\u0259\u015Fmi\u015F \u018Fr\u0259b \u018Fmirlikl\u0259ri)", bayrak: "\u{1F1E6}\u{1F1EA}", anaHavalimani: "Dubai (DXB)" }
@@ -8061,7 +8508,7 @@ router9.post("/kargo/ayarlar", (req, res) => {
 router9.post("/kargo/test", async (req, res) => {
   try {
     const { tenantId = "kanada_shopper_baku", ayarlar } = req.body;
-    const testAyar = ayarlar ? { ...kargoMerkezi.getAyarlar(tenantId), ...ayarlar } : kargoMerkezi.getAyarlar(tenantId);
+    const testAyar = ayarlar ? { ...kargoMerkezi.getAyarlar(tenantId), ...ayarlar, tenantId } : kargoMerkezi.getAyarlar(tenantId);
     const sonuc = await kargoMerkezi.baglantiTesti(testAyar);
     res.json(sonuc);
   } catch (err) {
@@ -8077,7 +8524,10 @@ router9.post("/kargo/takip", async (req, res) => {
   try {
     const { takipNolari, tenantId = "kanada_shopper_baku" } = req.body;
     if (!Array.isArray(takipNolari) || takipNolari.length === 0) {
-      return res.status(400).json({ basarili: false, hata: "Z\u0259hm\u0259t olmasa \u0259n az\u0131 bir izl\u0259m\u0259 (AWB) n\xF6mr\u0259si daxil edin." });
+      return res.status(400).json({
+        basarili: false,
+        hata: "Z\u0259hm\u0259t olmasa \u0259n az\u0131 bir izl\u0259m\u0259 (AWB) n\xF6mr\u0259si daxil edin."
+      });
     }
     const sonuclar = await kargoMerkezi.takipEt(takipNolari, tenantId);
     res.json({
@@ -8103,10 +8553,17 @@ router9.post("/kargo/senkronize-et", async (req, res) => {
 });
 router9.post("/kargo/manifesto-yukle", async (req, res) => {
   try {
-    const { dosya_base64, dosya_adi = "manifest.xlsx", tenantId = "kanada_shopper_baku", otomatik_esle = true } = req.body;
+    const {
+      dosya_base64,
+      dosya_adi = "manifest.xlsx",
+      tenantId = "kanada_shopper_baku",
+      otomatik_esle = true
+    } = req.body;
     if (!dosya_base64) {
       return res.status(400).json({ basarili: false, hata: "Excel v\u0259 ya CSV fayl m\u0259zmunu (base64) t\u0259l\u0259b olunur." });
     }
+    if (typeof dosya_base64 !== "string" || dosya_base64.length > 14 * 1024 * 1024)
+      return res.status(413).json({ basarili: false, hata: "Manifesto en fazla 10 MB olabilir." });
     const base64Data = dosya_base64.replace(/^data:.*?;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
     const ayarlar = kargoMerkezi.getAyarlar(tenantId);
@@ -8119,11 +8576,17 @@ router9.post("/kargo/manifesto-yukle", async (req, res) => {
     const eslesmeler = [];
     if (otomatik_esle && sonuc.satirlar.length > 0) {
       const simdiIso = (/* @__PURE__ */ new Date()).toISOString();
+      let adaylar = siparislerVeritabani;
+      if (supabase) {
+        const { data, error } = await supabase.from("siparisler").select("*").eq("tenant_id", tenantId);
+        if (error) return res.status(503).json({ basarili: false, hata: "Sipari\u015Fler okunamad\u0131." });
+        adaylar = data || [];
+      }
       for (const satir of sonuc.satirlar) {
         const aliciTemiz = satir.aliciAdi.toLowerCase().replace(/[^a-z0-9]/g, "");
         const telTemiz = (satir.telefon || "").replace(/[^\d]/g, "").slice(-7);
-        const bulunan = siparislerVeritabani.find((s) => {
-          if (tenantId && tenantId !== "all" && (s.tenant_id || "kanada_shopper_baku") !== tenantId) {
+        const bulunan = adaylar.find((s) => {
+          if (s.tenant_id !== tenantId) {
             return false;
           }
           if (telTemiz && (s.telefon_numarasi || "").replace(/[^\d]/g, "").includes(telTemiz)) {
@@ -8154,8 +8617,11 @@ router9.post("/kargo/manifesto-yukle", async (req, res) => {
           if (supabase) {
             try {
               const payload = hazirlaSupabasePayload(bulunan);
-              supabase.from("siparisler").update(payload).eq("id", bulunan.id).then();
+              const { data, error } = await supabase.from("siparisler").update(payload).eq("id", bulunan.id).eq("tenant_id", tenantId).select("id").maybeSingle();
+              if (error || !data)
+                return res.status(503).json({ basarili: false, hata: "Manifesto de\u011Fi\u015Fikli\u011Fi kaydedilemedi." });
             } catch {
+              return res.status(503).json({ basarili: false, hata: "Manifesto de\u011Fi\u015Fikli\u011Fi kaydedilemedi." });
             }
           }
         }
@@ -8176,7 +8642,7 @@ var kargoEntegrasyon_default = router9;
 
 // src/server/routes/auth.ts
 import { Router as Router10 } from "express";
-import { randomUUID } from "node:crypto";
+import { randomUUID as randomUUID4 } from "node:crypto";
 var router10 = Router10();
 function isUnexpired(value) {
   return typeof value === "string" && Date.parse(value) > Date.now();
@@ -8378,10 +8844,10 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
       return res.status(400).json({ basarili: false, hata: "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil." });
     }
     const newUser = {
-      id: "usr_" + randomUUID(),
+      id: "usr_" + randomUUID4(),
       tenant_id: invite.tenantId,
       ad_soyad: typeof adSoyad === "string" && adSoyad.trim() ? adSoyad.trim() : invite.kullananKisi || "Komanda \xDCzv\xFC",
-      email: userEmail || `invite-${randomUUID()}@tomnap.internal`,
+      email: userEmail || `invite-${randomUUID4()}@tomnap.internal`,
       telefon: userPhone,
       rol: invite.rol,
       sifre_hash: sifreHashle(sifre),
@@ -8450,140 +8916,109 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
     });
   }
 });
+function normalizePhone(value) {
+  if (!/^[+\d\s().-]+$/.test(value)) return "";
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 7 && digits.length <= 15 ? digits : "";
+}
+async function findLoginUser(identifier) {
+  const email = identifier.toLowerCase();
+  const phone2 = normalizePhone(identifier);
+  const emailMatches = (user) => user.email?.toLowerCase() === email;
+  const phoneMatches = (user) => !!phone2 && normalizePhone(user.telefon || "") === phone2;
+  if (!supabase) {
+    const matches2 = kullanicilarVeritabani.filter(
+      (user) => emailMatches(user) || phoneMatches(user)
+    );
+    return matches2.length === 1 ? { ...matches2[0] } : void 0;
+  }
+  if (email.includes("@") && email.length <= 254) {
+    const escapedEmail = email.replace(/[\\%_]/g, (character) => `\\${character}`);
+    const { data, error } = await supabase.from("kullanicilar").select("*").ilike("email", escapedEmail).maybeSingle();
+    if (error) throw error;
+    return data && emailMatches(data) ? data : void 0;
+  }
+  if (phone2) {
+    const pattern = `%${phone2.split("").join("%")}%`;
+    const { data, error } = await supabase.from("kullanicilar").select("*").ilike("telefon", pattern);
+    if (error) throw error;
+    const matches2 = (data || []).filter(phoneMatches);
+    return matches2.length === 1 ? matches2[0] : void 0;
+  }
+  return void 0;
+}
 router10.post(["/auth/giris", "/firmalar/giris"], async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
   try {
     const { identifikator, email, kullaniciAdi, telefon, kod, sifre } = req.body || {};
-    const girisMetni = String(
-      identifikator || email || kullaniciAdi || telefon || kod || ""
-    ).trim();
-    const sifreMetni = typeof sifre === "string" ? sifre : "";
-    if (!girisMetni) {
-      return res.status(400).json({
+    const identifier = identifikator || email || kullaniciAdi || telefon || kod;
+    if (typeof identifier !== "string" || !identifier.trim() || identifier.length > 254) {
+      return res.status(400).json({ basarili: false, hata: "E-po\xE7t \xFCnvan\u0131n\u0131z\u0131 v\u0259 ya telefon n\xF6mr\u0259nizi daxil edin." });
+    }
+    if (typeof sifre !== "string" || !sifre || sifre.length > 1024) {
+      return res.status(400).json({ basarili: false, hata: "Z\u0259hm\u0259t olmasa \u015Fifr\u0259nizi daxil edin." });
+    }
+    const user = await findLoginUser(identifier.trim());
+    if (!user) {
+      return res.status(404).json({ basarili: false, hata: "Bu m\u0259lumatlara uy\u011Fun aktiv istifad\u0259\xE7i tap\u0131lmad\u0131." });
+    }
+    if (user.durum !== "AKTIF") {
+      return res.status(403).json({
         basarili: false,
-        hata: "Z\u0259hm\u0259t olmasa e-po\xE7t \xFCnvan\u0131n\u0131z\u0131 v\u0259 ya telefon n\xF6mr\u0259nizi daxil edin."
+        hata: user.durum === "BEKLEMEDE_SIFRE" ? "Hesab\u0131n\u0131z h\u0259l\u0259 aktivl\u0259\u015Fdirilm\u0259yib. E-po\xE7t \xFCnvan\u0131n\u0131za g\xF6nd\u0259ril\u0259n linkd\u0259n \u015Fifr\u0259nizi t\u0259yin edin." : "Hesab\u0131n\u0131z aktiv deyil."
       });
     }
-    const lower = girisMetni.toLowerCase();
-    if (lower === "admin2026" || lower === "admin" && sifreMetni === "admin2026") {
-      return res.json({
-        basarili: true,
-        tip: "super_admin",
-        rol: "SUPER_ADMIN",
-        tenantId: "all",
-        mesaj: "S\u0259lahiyy\u0259tli Super Admin giri\u015Fi t\u0259sdiql\u0259ndi."
-      });
+    if (!user.sifre_hash || !sifreDogrula(sifre, user.sifre_hash)) {
+      return res.status(401).json({ basarili: false, hata: "Daxil edilmi\u015F \u015Fifr\u0259 yanl\u0131\u015Fd\u0131r." });
     }
-    if (lower === "tomnap2026" || lower === "tomnap" || lower === "demo" && sifreMetni === "tomnap2026") {
-      return res.json({
-        basarili: true,
-        tip: "demo",
-        rol: "SUPER_ADMIN",
-        tenantId: "demo_sandbox",
-        mesaj: "Canl\u0131 Sandbox Demo M\xFChitin\u0259 ke\xE7id edildi."
-      });
-    }
-    if (!sifreMetni) {
-      return res.status(400).json({
-        basarili: false,
-        hata: "Z\u0259hm\u0259t olmasa \u015Fifr\u0259nizi daxil edin."
-      });
-    }
-    const reqDigits = girisMetni.replace(/[^0-9]/g, "");
-    let tapilanKullanici = supabase ? void 0 : kullanicilarVeritabani.find((u) => {
-      const emailMatch = u.email && u.email.toLowerCase() === lower;
-      const uDigits = String(u.telefon || "").replace(/[^0-9]/g, "");
-      const phoneMatch = reqDigits.length >= 7 && uDigits.length >= 7 && (reqDigits.endsWith(uDigits.slice(-7)) || uDigits.endsWith(reqDigits.slice(-7)));
-      return emailMatch || phoneMatch;
-    });
-    if (!tapilanKullanici && supabase) {
-      try {
-        let sbUser = null;
-        if (lower.includes("@")) {
-          const { data, error } = await supabase.from("kullanicilar").select("*").ilike("email", lower).maybeSingle();
-          if (error) throw error;
-          if (data) sbUser = data;
-        }
-        if (!sbUser && reqDigits.length >= 7) {
-          const { data, error } = await supabase.from("kullanicilar").select("*").ilike("telefon", `%${reqDigits.slice(-7)}%`).maybeSingle();
-          if (error) throw error;
-          if (data) sbUser = data;
-        }
-        if (!sbUser) {
-          const { data, error } = await supabase.from("kullanicilar").select("*").ilike("ad_soyad", lower).maybeSingle();
-          if (error) throw error;
-          if (data) sbUser = data;
-        }
-        if (!sbUser) {
-          const { data: matchedFirma, error: firmaError } = await supabase.from("firmalar").select("id").or(`ad.ilike.%${girisMetni}%,sahip_email.ilike.%${lower}%`).limit(1).maybeSingle();
-          if (firmaError) throw firmaError;
-          if (matchedFirma) {
-            const { data: patronUser, error: patronError } = await supabase.from("kullanicilar").select("*").eq("tenant_id", matchedFirma.id).eq("rol", "PATRON").maybeSingle();
-            if (patronError) throw patronError;
-            if (patronUser) sbUser = patronUser;
-          }
-        }
-        if (sbUser) {
-          tapilanKullanici = {
-            id: sbUser.id,
-            tenant_id: sbUser.tenant_id,
-            ad_soyad: sbUser.ad_soyad,
-            email: sbUser.email,
-            telefon: sbUser.telefon,
-            rol: sbUser.rol,
-            sifre_hash: sbUser.sifre_hash,
-            durum: sbUser.durum,
-            aktivasyon_token: sbUser.aktivasyon_token,
-            token_gecerlilik: sbUser.token_gecerlilik,
-            olusturma_tarihi: sbUser.olusturma_tarihi
-          };
-        }
-      } catch {
-        return res.status(503).json({
-          basarili: false,
-          hata: "Giri\u015F haz\u0131rda yoxlan\u0131la bilmir. Daha sonra yenid\u0259n c\u0259hd edin."
-        });
-      }
-    }
-    if (tapilanKullanici) {
-      if (tapilanKullanici.durum !== "AKTIF") {
-        return res.status(403).json({
-          basarili: false,
-          hata: tapilanKullanici.durum === "BEKLEMEDE_SIFRE" ? "Hesab\u0131n\u0131z h\u0259l\u0259 aktivl\u0259\u015Fdirilm\u0259yib. Z\u0259hm\u0259t olmasa e-po\xE7t \xFCnvan\u0131n\u0131za g\xF6nd\u0259ril\u0259n t\u0259hl\xFCk\u0259siz link\u0259 ke\xE7id ed\u0259r\u0259k \u015Fifr\u0259nizi t\u0259yin edin." : "Hesab\u0131n\u0131z aktiv deyil."
-        });
-      }
-      if (!tapilanKullanici.sifre_hash || !sifreDogrula(sifreMetni, tapilanKullanici.sifre_hash)) {
-        return res.status(401).json({
-          basarili: false,
-          hata: "Daxil edilmi\u015F \u015Fifr\u0259 yanl\u0131\u015Fd\u0131r. Z\u0259hm\u0259t olmasa yenid\u0259n c\u0259hd edin."
-        });
-      }
-      const firma = await findFirma(tapilanKullanici.tenant_id);
-      return res.json({
-        basarili: true,
-        tip: "butik",
-        rol: tapilanKullanici.rol,
-        tenantId: tapilanKullanici.tenant_id,
-        kullanici: {
-          id: tapilanKullanici.id,
-          adSoyad: tapilanKullanici.ad_soyad,
-          email: tapilanKullanici.email,
-          telefon: tapilanKullanici.telefon,
-          rol: tapilanKullanici.rol,
-          tenantId: tapilanKullanici.tenant_id
-        },
-        firma,
-        mesaj: `Xo\u015F g\u0259ldiniz, ${tapilanKullanici.ad_soyad}!`
-      });
-    }
-    return res.status(404).json({
-      basarili: false,
-      hata: "Bu m\u0259lumatlara uy\u011Fun aktiv istifad\u0259\xE7i v\u0259 ya butik tap\u0131lmad\u0131. Z\u0259hm\u0259t olmasa e-po\xE7t / n\xF6mr\u0259nizi yoxlay\u0131n v\u0259 ya qeydiyyatdan ke\xE7in."
+    const firma = user.rol === "SUPER_ADMIN" ? void 0 : await findFirma(user.tenant_id);
+    const session = await createSession(user, res);
+    const tenantId = user.rol === "SUPER_ADMIN" ? "all" : user.tenant_id;
+    return res.json({
+      basarili: true,
+      tip: user.rol === "SUPER_ADMIN" ? "super_admin" : "butik",
+      rol: user.rol,
+      tenantId,
+      kullanici: {
+        id: user.id,
+        adSoyad: user.ad_soyad,
+        email: user.email,
+        telefon: user.telefon,
+        rol: user.rol,
+        tenantId
+      },
+      firma,
+      ...session,
+      mesaj: `Xo\u015F g\u0259ldiniz, ${user.ad_soyad}!`
     });
   } catch {
-    res.status(503).json({
+    return res.status(503).json({
       basarili: false,
       hata: "Giri\u015F haz\u0131rda yoxlan\u0131la bilmir. Daha sonra yenid\u0259n c\u0259hd edin."
     });
+  }
+});
+router10.get("/auth/oturum", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const session = req.auth || await readSession(req);
+    if (!session) return res.status(401).json({ basarili: false, hata: "Giri\u015F t\u0259l\u0259b olunur." });
+    return res.json({
+      basarili: true,
+      kullanici: session.kullanici,
+      csrfToken: session.csrfToken,
+      expiresAt: session.expiresAt
+    });
+  } catch {
+    return res.status(503).json({ basarili: false, hata: "Oturum haz\u0131rda yoxlan\u0131la bilmir." });
+  }
+});
+router10.post("/auth/cikis", async (req, res) => {
+  try {
+    await revokeSession(req, res);
+    return res.json({ basarili: true });
+  } catch {
+    return res.status(503).json({ basarili: false, hata: "Oturum l\u0259\u011Fv edil\u0259 bilm\u0259di. Yenid\u0259n c\u0259hd edin." });
   }
 });
 var auth_default = router10;
@@ -8596,7 +9031,7 @@ function createApp() {
     helmet({
       contentSecurityPolicy: false,
       // SPA için CSP'yi devre dışı bırak (Vite dev server uyumu)
-      crossOriginResourcePolicy: { policy: "cross-origin" },
+      crossOriginResourcePolicy: { policy: "same-origin" },
       // Görsel servisi için
       crossOriginEmbedderPolicy: false
     })
@@ -8611,7 +9046,18 @@ function createApp() {
   });
   app2.use(express.json({ limit: "25mb" }));
   app2.use(express.urlencoded({ extended: true, limit: "25mb" }));
+  app2.use(
+    [
+      "/api/auth/giris",
+      "/api/firmalar/giris",
+      "/api/auth/sifre-belirle",
+      "/api/firmalar/davet/katil",
+      "/api/firmalar/kayit"
+    ],
+    girisLimiter
+  );
   app2.use(apiKeyAuth());
+  app2.get(["/health", "/api/health"], (_req, res) => res.json({ basarili: true }));
   app2.use("/api/", genelApiLimiter);
   app2.use("/api/ayristir-siparis", aiEndpointLimiter);
   app2.use("/api/urun-katalog-gorseli-ara", aiEndpointLimiter);
@@ -8626,10 +9072,6 @@ function createApp() {
     }
   } catch {
   }
-  app2.use("/uploads", (req, res, next) => {
-    res.header("Cross-Origin-Resource-Policy", "cross-origin");
-    next();
-  });
   app2.get("/uploads/:dosyaAdi", serveUploadedImage);
   const mountRoutes = (basePath) => {
     app2.use(basePath, sistem_default);

@@ -6,6 +6,14 @@ describe('useAppStore (Zustand State Management)', () => {
   beforeEach(() => {
     // Reset store to known state
     useAppStore.setState({
+      session: {
+        id: 'test-user',
+        adSoyad: 'Test',
+        email: 'test@example.test',
+        rol: 'PATRON',
+        tenantId: 'test-tenant',
+      },
+      sessionStatus: 'authenticated',
       siparisler: [],
       firmalar: [],
       seciliFirmaId: 'all',
@@ -124,12 +132,12 @@ describe('useAppStore (Zustand State Management)', () => {
     expect(kalan[0].id).toBe('sip-2');
   });
 
-  it('setAktifRol ve setSeciliFirmaId durumları doğru güncellemeli', () => {
-    useAppStore.getState().setAktifRol('BAKU_KURYE');
-    expect(useAppStore.getState().aktifRol).toBe('BAKU_KURYE');
-
-    useAppStore.getState().setSeciliFirmaId('tenant-baku-express');
-    expect(useAppStore.getState().seciliFirmaId).toBe('tenant-baku-express');
+  it('normal users cannot change their role or tenant', () => {
+    useAppStore.setState({ seciliFirmaId: 'test-tenant', aktifRol: 'PATRON' });
+    expect((useAppStore.getState() as any).setAktifRol).toBeUndefined();
+    useAppStore.getState().setSeciliFirmaId('another-tenant');
+    expect(useAppStore.getState().seciliFirmaId).toBe('test-tenant');
+    expect(useAppStore.getState().aktifRol).toBe('PATRON');
   });
 
   it('setBildirim ve setInboxSayisi doğru çalışmalı', () => {

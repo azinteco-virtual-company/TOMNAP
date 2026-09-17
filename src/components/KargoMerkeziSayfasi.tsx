@@ -25,7 +25,7 @@ import {
   Calendar,
   Layers,
   MapPin,
-  Clock
+  Clock,
 } from 'lucide-react';
 import { useDil } from '../context/DilKonteksti';
 import { fetchWithRetry } from '../lib/apiClient';
@@ -71,10 +71,12 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
   const [cikisUlkesi, setCikisUlkesi] = useState('CA');
   const [cikisSehri, setCikisSehri] = useState('Toronto (YYZ)');
   const [varisUlkesi, setVarisUlkesi] = useState('AZ');
-  const [varisHavalimani, setVarisHavalimani] = useState('Heydər Əliyev Beynəlxalq Hava Limanı (GYD)');
+  const [varisHavalimani, setVarisHavalimani] = useState(
+    'Heydər Əliyev Beynəlxalq Hava Limanı (GYD)'
+  );
   const [kullaniciAdi, setKullaniciAdi] = useState('');
   const [sifre, setSifre] = useState('');
-  const [hesapNo, setHesapNo] = useState('72470858');
+  const [hesapNo, setHesapNo] = useState('');
   const [pin, setPin] = useState('');
   const [entity, setEntity] = useState('YYZ');
   const [testModu, setTestModu] = useState(true);
@@ -85,7 +87,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
   // Ayarları Yükle
   const yukleAyarlar = () => {
     setAyarlarYukleniyor(true);
-    fetchWithRetry(`/api/kargo/ayarlar?tenant_id=${encodeURIComponent(seciliFirmaId || 'kanada_shopper_baku')}`)
+    fetchWithRetry(`/api/kargo/ayarlar?tenant_id=${encodeURIComponent(seciliFirmaId)}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.basarili && data.ayarlar) {
@@ -99,7 +101,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
           const k = a.kimlikBilgileri || {};
           setKullaniciAdi(k.kullaniciAdi || '');
           setSifre(k.sifre || '');
-          setHesapNo(k.hesapNo || '72470858');
+          setHesapNo(k.hesapNo || '');
           setPin(k.pin || '');
           setEntity(k.entity || 'YYZ');
           setTestModu(k.testModu ?? true);
@@ -155,7 +157,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           takipNolari: [awb],
-          tenantId: seciliFirmaId || 'kanada_shopper_baku',
+          tenantId: seciliFirmaId,
         }),
       });
       const data = await res.json();
@@ -192,7 +194,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
           body: JSON.stringify({
             dosya_base64: base64,
             dosya_adi: file.name,
-            tenantId: seciliFirmaId || 'kanada_shopper_baku',
+            tenantId: seciliFirmaId,
             otomatik_esle: true,
           }),
         });
@@ -223,7 +225,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tenantId: seciliFirmaId || 'kanada_shopper_baku',
+          tenantId: seciliFirmaId,
           ayarlar: {
             saglayici,
             cikisUlkesi,
@@ -251,7 +253,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tenantId: seciliFirmaId || 'kanada_shopper_baku',
+          tenantId: seciliFirmaId,
           saglayici,
           cikisUlkesi,
           cikisSehri,
@@ -293,7 +295,10 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
 
   // Sayı İstatistikleri
   const yoldakiSayisi = useMemo(() => {
-    return siparisler.filter((s) => s.lojistik_durumu === 'ULUSLARARASI_KARGO' || s.lojistik_durumu === 'BAKU_DAGITIM_ARKADAS').length;
+    return siparisler.filter(
+      (s) =>
+        s.lojistik_durumu === 'ULUSLARARASI_KARGO' || s.lojistik_durumu === 'BAKU_DAGITIM_ARKADAS'
+    ).length;
   }, [siparisler]);
 
   const kanadaDepoSayisi = useMemo(() => {
@@ -326,7 +331,8 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              Kanada (YYZ) ➔ Bakı (GYD) hava kargo xətti, toplu AWB izləməsi və Daily Dispatch Excel avtomatlaşdırması
+              Kanada (YYZ) ➔ Bakı (GYD) hava kargo xətti, toplu AWB izləməsi və Daily Dispatch Excel
+              avtomatlaşdırması
             </p>
           </div>
         </div>
@@ -340,7 +346,9 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
             className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-60 text-white text-xs sm:text-sm font-extrabold flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all cursor-pointer ring-1 ring-blue-400/40"
           >
             <RefreshCw className={`w-4 h-4 ${senkronizeEdiliyor ? 'animate-spin' : ''}`} />
-            <span>{senkronizeEdiliyor ? 'Sinxronlaşdırılır...' : 'Aramex İlə Sinxronizasiya Et'}</span>
+            <span>
+              {senkronizeEdiliyor ? 'Sinxronlaşdırılır...' : 'Aramex İlə Sinxronizasiya Et'}
+            </span>
           </button>
         </div>
       </div>
@@ -355,10 +363,18 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
           }`}
         >
           <div className="flex items-center gap-2.5">
-            {bildirim.tip === 'basari' ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertTriangle className="w-5 h-5 text-rose-600" />}
+            {bildirim.tip === 'basari' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-rose-600" />
+            )}
             <span>{bildirim.mesaj}</span>
           </div>
-          <button type="button" onClick={() => setBildirim(null)} className="text-slate-400 hover:text-slate-600">
+          <button
+            type="button"
+            onClick={() => setBildirim(null)}
+            className="text-slate-400 hover:text-slate-600"
+          >
             ×
           </button>
         </div>
@@ -371,9 +387,15 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
             <Truck className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-2xs font-extrabold uppercase tracking-wider text-slate-400">Aktiv Provayder</div>
-            <div className="text-sm font-black text-slate-900 dark:text-white mt-0.5">{saglayici} (#72470858)</div>
-            <div className="text-3xs text-slate-500 font-mono">Çıxış: {cikisUlkesi} ➔ {varisUlkesi}</div>
+            <div className="text-2xs font-extrabold uppercase tracking-wider text-slate-400">
+              Aktiv Provayder
+            </div>
+            <div className="text-sm font-black text-slate-900 dark:text-white mt-0.5">
+              {saglayici}
+            </div>
+            <div className="text-3xs text-slate-500 font-mono">
+              Çıxış: {cikisUlkesi} ➔ {varisUlkesi}
+            </div>
           </div>
         </div>
 
@@ -382,8 +404,12 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
             <Plane className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-2xs font-extrabold uppercase tracking-wider text-slate-400">Uçuşda / Tranzitdə</div>
-            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5 font-numeric">{yoldakiSayisi} bağlama</div>
+            <div className="text-2xs font-extrabold uppercase tracking-wider text-slate-400">
+              Uçuşda / Tranzitdə
+            </div>
+            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5 font-numeric">
+              {yoldakiSayisi} bağlama
+            </div>
             <div className="text-3xs text-slate-500">Toronto ➔ Dubai ➔ Bakı</div>
           </div>
         </div>
@@ -393,8 +419,12 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
             <Package className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-2xs font-extrabold uppercase tracking-wider text-slate-400">Kanada Anbarında</div>
-            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5 font-numeric">{kanadaDepoSayisi} bağlama</div>
+            <div className="text-2xs font-extrabold uppercase tracking-wider text-slate-400">
+              Kanada Anbarında
+            </div>
+            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5 font-numeric">
+              {kanadaDepoSayisi} bağlama
+            </div>
             <div className="text-3xs text-slate-500">Çıxış gözləyir</div>
           </div>
         </div>
@@ -404,8 +434,12 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-2xs font-extrabold uppercase tracking-wider text-slate-400">Təhvil Verildi</div>
-            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5 font-numeric">{teslimSayisi} bağlama</div>
+            <div className="text-2xs font-extrabold uppercase tracking-wider text-slate-400">
+              Təhvil Verildi
+            </div>
+            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5 font-numeric">
+              {teslimSayisi} bağlama
+            </div>
             <div className="text-3xs text-emerald-600 font-bold">Tam çatdırıldı</div>
           </div>
         </div>
@@ -470,7 +504,10 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
             </div>
 
             {/* Anlık Aramex Tekil Sorgu Kutusu */}
-            <form onSubmit={handleHizliAwbSorgula} className="flex items-center gap-2 w-full sm:w-auto">
+            <form
+              onSubmit={handleHizliAwbSorgula}
+              className="flex items-center gap-2 w-full sm:w-auto"
+            >
               <input
                 type="text"
                 value={hizliAwbSorgu}
@@ -505,7 +542,9 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                       {hizliSorguSonuc.hamDurumKodu || 'LIVE'}
                     </span>
                   </div>
-                  <p className="text-xs text-blue-900 dark:text-blue-300 mt-0.5">{hizliSorguSonuc.hamAciklama}</p>
+                  <p className="text-xs text-blue-900 dark:text-blue-300 mt-0.5">
+                    {hizliSorguSonuc.hamAciklama}
+                  </p>
                 </div>
               </div>
               <div className="text-right sm:text-right w-full sm:w-auto">
@@ -548,20 +587,33 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                     kargoluSiparisler.map((s, idx) => {
                       const awb = s.uluslararasi_kargo_kodu || s.kanada_takip_kodu || '—';
                       return (
-                        <tr key={s.id} className="hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors">
-                          <td className="p-3 text-slate-400 font-mono text-center font-bold">{idx + 1}</td>
+                        <tr
+                          key={s.id}
+                          className="hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors"
+                        >
+                          <td className="p-3 text-slate-400 font-mono text-center font-bold">
+                            {idx + 1}
+                          </td>
                           <td className="p-3 font-mono font-bold text-blue-700 dark:text-blue-400 whitespace-nowrap">
                             <span className="bg-blue-50 dark:bg-blue-950/50 px-2 py-1 rounded-md border border-blue-200 dark:border-blue-800 inline-block">
                               📦 {awb}
                             </span>
                           </td>
                           <td className="p-3">
-                            <div className="font-bold text-slate-900 dark:text-white text-sm">{s.musteri_adi}</div>
-                            <div className="text-2xs text-slate-500 font-mono">{s.telefon_numarasi || '—'}</div>
+                            <div className="font-bold text-slate-900 dark:text-white text-sm">
+                              {s.musteri_adi}
+                            </div>
+                            <div className="text-2xs text-slate-500 font-mono">
+                              {s.telefon_numarasi || '—'}
+                            </div>
                           </td>
                           <td className="p-3">
-                            <div className="font-medium text-slate-900 dark:text-white line-clamp-1">{s.urun_aciklamasi}</div>
-                            <div className="text-2xs text-slate-400">{[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}</div>
+                            <div className="font-medium text-slate-900 dark:text-white line-clamp-1">
+                              {s.urun_aciklamasi}
+                            </div>
+                            <div className="text-2xs text-slate-400">
+                              {[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}
+                            </div>
                           </td>
                           <td className="p-3 text-center font-bold font-mono">
                             {s.kargo_agirligi_kg ? `${s.kargo_agirligi_kg} kg` : '—'}
@@ -572,10 +624,10 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                                 s.lojistik_durumu === 'TESLIM_EDILDI'
                                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300'
                                   : s.lojistik_durumu === 'BAKU_DAGITIM_ARKADAS'
-                                  ? 'bg-purple-50 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300'
-                                  : s.lojistik_durumu === 'ULUSLARARASI_KARGO'
-                                  ? 'bg-blue-50 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300'
-                                  : 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300'
+                                    ? 'bg-purple-50 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300'
+                                    : s.lojistik_durumu === 'ULUSLARARASI_KARGO'
+                                      ? 'bg-blue-50 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300'
+                                      : 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300'
                               }`}
                             >
                               {s.lojistik_durumu}
@@ -619,7 +671,9 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                 Aramex Daily Dispatch Hesabatını İdxal Edin
               </h2>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Toronto ofisinizin Aramex-ə təhvil verdiyi bağlamaların axşam e-poçtunuza gələn Excel / CSV faylını bura yükləyin. Sistem konşimento nömrələrini (AWB) və çəkiləri (kg) müştəri adları ilə avtomatik eşləşdirib sifarişlərə bağlayacaq.
+                Toronto ofisinizin Aramex-ə təhvil verdiyi bağlamaların axşam e-poçtunuza gələn
+                Excel / CSV faylını bura yükləyin. Sistem konşimento nömrələrini (AWB) və çəkiləri
+                (kg) müştəri adları ilə avtomatik eşləşdirib sifarişlərə bağlayacaq.
               </p>
             </div>
 
@@ -655,12 +709,18 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
               }`}
             >
               <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center mb-3">
-                <FileSpreadsheet className={`w-8 h-8 ${dispatchYukleniyor ? 'animate-bounce' : ''}`} />
+                <FileSpreadsheet
+                  className={`w-8 h-8 ${dispatchYukleniyor ? 'animate-bounce' : ''}`}
+                />
               </div>
               <div className="text-sm font-extrabold text-slate-900 dark:text-white">
-                {dispatchYukleniyor ? 'Excel faylı təhlil edilir və bağlamalar bağlanır...' : 'Aramex Daily Dispatch Excel / CSV Faylını Bura Sürükləyin'}
+                {dispatchYukleniyor
+                  ? 'Excel faylı təhlil edilir və bağlamalar bağlanır...'
+                  : 'Aramex Daily Dispatch Excel / CSV Faylını Bura Sürükləyin'}
               </div>
-              <p className="text-xs text-slate-500 mt-1">və ya kompüterinizdən seçmək üçün toxunun (.xlsx, .xls, .csv)</p>
+              <p className="text-xs text-slate-500 mt-1">
+                və ya kompüterinizdən seçmək üçün toxunun (.xlsx, .xls, .csv)
+              </p>
             </div>
           </div>
 
@@ -695,8 +755,12 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                         <tr key={idx}>
                           <td className="p-2.5 font-bold">{e.musteriAdi}</td>
                           <td className="p-2.5 font-mono text-blue-600 font-bold">{e.awbNo}</td>
-                          <td className="p-2.5 text-center font-mono">{e.agirlikKg ? `${e.agirlikKg} kg` : '—'}</td>
-                          <td className="p-2.5 text-right text-emerald-600 font-bold">✓ Bağlandı</td>
+                          <td className="p-2.5 text-center font-mono">
+                            {e.agirlikKg ? `${e.agirlikKg} kg` : '—'}
+                          </td>
+                          <td className="p-2.5 text-right text-emerald-600 font-bold">
+                            ✓ Bağlandı
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -735,11 +799,14 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                          {isAramex ? '📦' : p.id === 'DHL' ? '🟡' : p.id === 'UPS' ? '🟤' : '🚚'} {p.ad}
+                          {isAramex ? '📦' : p.id === 'DHL' ? '🟡' : p.id === 'UPS' ? '🟤' : '🚚'}{' '}
+                          {p.ad}
                         </span>
                         {isSelected && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />}
                       </div>
-                      <p className="text-2xs text-slate-500 dark:text-slate-400 leading-relaxed mb-3">{p.aciklama}</p>
+                      <p className="text-2xs text-slate-500 dark:text-slate-400 leading-relaxed mb-3">
+                        {p.aciklama}
+                      </p>
                       <span
                         className={`text-3xs font-extrabold px-2 py-0.5 rounded w-fit ${
                           p.durum === 'AKTIF'
@@ -777,7 +844,9 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                     </option>
                   ))}
                 </select>
-                <p className="text-3xs text-slate-500 mt-1">Bugün Kanada, sabah ABŞ, Yaponiya və ya İngiltərə seçilə bilər.</p>
+                <p className="text-3xs text-slate-500 mt-1">
+                  Bugün Kanada, sabah ABŞ, Yaponiya və ya İngiltərə seçilə bilər.
+                </p>
               </div>
 
               <div>
@@ -798,7 +867,8 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-                  <Key className="w-3.5 h-3.5 text-blue-600" /> 2. {saglayici} Kurumsal API Kimlik Bilgiləri
+                  <Key className="w-3.5 h-3.5 text-blue-600" /> 2. {saglayici} Kurumsal API Kimlik
+                  Bilgiləri
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-400">
                   <input
@@ -821,7 +891,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                       type="text"
                       value={kullaniciAdi}
                       onChange={(e) => setKullaniciAdi(e.target.value)}
-                      placeholder="canadian_brand_shop@aramex.com"
+                      placeholder="Kargo hesabınız"
                       className="w-full text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -849,7 +919,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                       type="text"
                       value={hesapNo}
                       onChange={(e) => setHesapNo(e.target.value)}
-                      placeholder="72470858"
+                      placeholder="Hesap numaranız"
                       className="w-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -883,7 +953,8 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
 
                 <div className="pt-2 flex items-center justify-between border-t border-slate-200 dark:border-slate-700">
                   <span className="text-2xs text-slate-500 flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-emerald-600" /> Şifrə və PIN kodları maskələnərək qorunur.
+                    <Lock className="w-3.5 h-3.5 text-emerald-600" /> Şifrə və PIN kodları
+                    maskələnərək qorunur.
                   </span>
 
                   <button
@@ -892,8 +963,12 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                     disabled={testEdiliyor}
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
                   >
-                    <Activity className={`w-3.5 h-3.5 text-blue-600 ${testEdiliyor ? 'animate-spin' : ''}`} />
-                    <span>{testEdiliyor ? 'Yoxlanılır...' : 'Bağlantını Sına (Test Connection)'}</span>
+                    <Activity
+                      className={`w-3.5 h-3.5 text-blue-600 ${testEdiliyor ? 'animate-spin' : ''}`}
+                    />
+                    <span>
+                      {testEdiliyor ? 'Yoxlanılır...' : 'Bağlantını Sına (Test Connection)'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -909,7 +984,11 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  {testSonucu.basarili ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <ShieldAlert className="w-4 h-4 text-rose-600" />}
+                  {testSonucu.basarili ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <ShieldAlert className="w-4 h-4 text-rose-600" />
+                  )}
                   <span>{testSonucu.mesaj}</span>
                 </div>
                 <span className="font-mono text-2xs opacity-80">{testSonucu.gecikmeMs}ms</span>
@@ -924,7 +1003,9 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                 className="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white shadow-md flex items-center gap-2 transition-all cursor-pointer"
               >
                 <Save className="w-4 h-4" />
-                <span>{ayarlarKaydediliyor ? 'Yadda saxlanılır...' : 'Tənzimləmələri Yadda Saxla'}</span>
+                <span>
+                  {ayarlarKaydediliyor ? 'Yadda saxlanılır...' : 'Tənzimləmələri Yadda Saxla'}
+                </span>
               </button>
             </div>
           </div>

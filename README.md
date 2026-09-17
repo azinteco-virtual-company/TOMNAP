@@ -1,3 +1,7 @@
+> **Güncel güvenlik kurulumu:** [Oturum, firma yetkileri ve migration](docs/SESSION_SECURITY.md).
+> API için gerçek kullanıcı oturumu gerekir. İlk yönetici `npm run admin:bootstrap` ile oluşturulur.
+> Eski admin/demo kodları ve anonim API anahtarı erişimi kaldırılmıştır.
+
 # TOMNAP — Global Cross-Border Commerce & Parcel Logistics Platform
 
 > **TOMNAP**, sınır ötesi e-ticaret (cross-border commerce), çok kanallı sipariş yönetimi, yapay zeka destekli otomasyon ve son kilometre kapıya teslim lojistiğini uçtan uca yöneten kurumsal bir SaaS platformudur.
@@ -11,12 +15,12 @@
 - **A – Automate:** AI destekli görsel/metin okuma ve otomatik durum güncellemeleri
 - **P – Parcel:** Son kilometre kapıya teslim ve tahsilat
 
-> Güvenlik durumu ve aşamalı iyileştirme planı: [yeniden inceleme](docs/SECURITY_RECHECK.md). Bu dal üretime hazırlık çalışmalarını içerir; kalan oturum/yetkilendirme engelleri raporda listelenmiştir.
+> Güvenlik durumu ve aşamalı iyileştirme planı: [yeniden inceleme](docs/SECURITY_RECHECK.md). Bu dal üretime hazırlık çalışmalarını içerir; üretim geçişi ve kalan veri kalıcılığı işleri güncel oturum raporunda listelenmiştir.
 
 ## 🚀 Özellikler
 
 - **AI Destekli Sipariş Ayrıştırma:** Google Gemini 2.5 Flash entegrasyonu ile WhatsApp mesajları, görseller veya bağlantılardan müşteri, ürün, fiyat ve adres bilgilerini otomatik ayrıştırma.
-- **Tenant desteği:** Firma bazlı veri alanları mevcut; sunucu oturumu, rol ve tenant yetkilendirmesi henüz tamamlanmadı.
+- **Tenant erişimi:** Sunucu oturumu, rol ve firma kapsamı API üzerinde doğrulanır. Veritabanı tarayıcı rollerine kapalıdır; üretim için migration gereklidir.
 - **Finans & Kâr-Zarar Analitiği:** Toronto alış (CAD) ve Bakü tahsilat (AZN) kurları üzerinden dinamik ciro, net kâr marjı, kargo maliyeti ve alacak takibi.
 - **Bakü Son Mil Teslimatı:** Kurye zimmetleme, teslimat durumu güncelleme ve canlı kurye masası.
 - **Kargo Manifesto & Çeki Listesi:** Otomatik PDF manifesto ve Excel çeki listesi dışa aktarımı.
@@ -107,14 +111,14 @@ PORT=3000
 NODE_ENV=development
 
 # Güvenlik & Kimlik Doğrulama
-API_SECRET_KEY=gelistirme_anahtari_veya_guclu_prod_key
+# API_SECRET_KEY yalnız mevcut kargo şifrelemesi içindir; HTTP oturumu değildir.
+API_SECRET_KEY=mevcut_sifreleme_anahtari
 
 # Google Gemini API
 GEMINI_API_KEY=your_gemini_api_key_here
 
 # Supabase Veritabanı
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 ```
 

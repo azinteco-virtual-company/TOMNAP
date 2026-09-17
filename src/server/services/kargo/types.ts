@@ -29,6 +29,7 @@ export interface KargoSaglayiciAyarlari {
 }
 
 export interface KargoTakipGuncelleme {
+  kaynak?: 'LIVE' | 'SIMULATION';
   takipNo: string;
   durum: LojistikDurumu;
   hamDurumKodu: string;
@@ -70,7 +71,13 @@ export interface KargoSaglayiciInterface {
   readonly ad: string;
 
   kargoTakipEt(takipNo: string, ayarlar: KargoSaglayiciAyarlari): Promise<KargoTakipGuncelleme>;
-  topluTakipEt(takipNolari: string[], ayarlar: KargoSaglayiciAyarlari): Promise<KargoTakipGuncelleme[]>;
+  topluTakipEt(
+    takipNolari: string[],
+    ayarlar: KargoSaglayiciAyarlari
+  ): Promise<KargoTakipGuncelleme[]>;
   baglantiTesti(ayarlar: KargoSaglayiciAyarlari): Promise<BaglantiTestSonucu>;
-  manifestoAyristir(dosyaBuffer: Buffer | ArrayBuffer, dosyaAdi: string): Promise<AyrismisManifestoSonuc>;
+  manifestoAyristir(
+    dosyaBuffer: Buffer | ArrayBuffer,
+    dosyaAdi: string
+  ): Promise<AyrismisManifestoSonuc>;
 }

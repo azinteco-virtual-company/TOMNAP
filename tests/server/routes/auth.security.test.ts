@@ -546,6 +546,7 @@ describe('Legacy login must verify an existing password', () => {
   );
 
   it('requires the existing user password on the legacy alias', async () => {
+    state.firms[0].onayDurumu = 'AKTIF';
     state.users.push(
       pendingUser({ durum: 'AKTIF', aktivasyon_token: null, sifre_hash: sifreHashle(password) })
     );

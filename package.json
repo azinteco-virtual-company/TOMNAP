@@ -15,7 +15,8 @@
     "test": "vitest run",
     "format": "prettier --write .",
     "lint": "tsc --noEmit",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

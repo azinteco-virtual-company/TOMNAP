@@ -13,18 +13,25 @@ export class DhlExpressProvider implements KargoSaglayiciInterface {
   readonly tip: KargoSaglayiciTipi = 'DHL';
   readonly ad: string = 'DHL Express International';
 
-  public async kargoTakipEt(takipNo: string, ayarlar: KargoSaglayiciAyarlari): Promise<KargoTakipGuncelleme> {
+  public async kargoTakipEt(
+    takipNo: string,
+    ayarlar: KargoSaglayiciAyarlari
+  ): Promise<KargoTakipGuncelleme> {
     const sonuclar = await this.topluTakipEt([takipNo], ayarlar);
     return sonuclar[0];
   }
 
-  public async topluTakipEt(takipNolari: string[], ayarlar: KargoSaglayiciAyarlari): Promise<KargoTakipGuncelleme[]> {
+  public async topluTakipEt(
+    takipNolari: string[],
+    ayarlar: KargoSaglayiciAyarlari
+  ): Promise<KargoTakipGuncelleme[]> {
     const simdi = new Date();
     const cikis = ayarlar.cikisSehri || 'Leipzig Hub / Toronto';
     const varis = ayarlar.varisHavalimani || 'Baku GYD';
 
     return takipNolari.map((takipNo) => ({
       takipNo,
+      kaynak: 'SIMULATION' as const,
       durum: 'ULUSLARARASI_KARGO' as LojistikDurumu,
       hamDurumKodu: 'DHL_IN_TRANSIT',
       hamAciklama: `Shipment has departed DHL Hub (${cikis}) towards ${varis}`,
@@ -46,7 +53,10 @@ export class DhlExpressProvider implements KargoSaglayiciInterface {
     };
   }
 
-  public async manifestoAyristir(dosyaBuffer: Buffer | ArrayBuffer, dosyaAdi: string): Promise<AyrismisManifestoSonuc> {
+  public async manifestoAyristir(
+    dosyaBuffer: Buffer | ArrayBuffer,
+    dosyaAdi: string
+  ): Promise<AyrismisManifestoSonuc> {
     const wb = XLSX.read(dosyaBuffer, { type: 'buffer' });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { header: 1 });

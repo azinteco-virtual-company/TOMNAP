@@ -1,3 +1,4 @@
+import { APP_URL } from '../config';
 /**
  * Güvenlik Yardımcıları ve Input Sanitization
  *
@@ -211,38 +212,39 @@ export function urlGuvenlimi(url: string): { guvenli: boolean; sebep?: string } 
  * Konfigüre edilebilir CORS middleware'i.
  * CORS_ORIGIN env variable'ından izin verilen origin'leri okur.
  */
-export function corsMiddleware() {
-  const corsOrigin = process.env.CORS_ORIGIN || '*';
-  const izinliOriginler = corsOrigin === '*' ? null : corsOrigin.split(',').map((o) => o.trim());
+export function allowedOrigins(): Set<string> {
+  const origins = new Set<string>();
+  const configured = [
+    process.env.APP_URL || APP_URL,
+    ...(process.env.CORS_ORIGIN || '').split(','),
+  ];
+  for (const value of configured) {
+    try {
+      const url = new URL(value.trim());
+      if (['https:', 'http:'].includes(url.protocol) && !url.username && !url.password)
+        origins.add(url.origin);
+    } catch {
+      /* Wildcards and malformed origins grant no access. */
+    }
+  }
+  return origins;
+}
 
+export function corsMiddleware() {
   return (req: Request, res: Response, next: NextFunction): void => {
     const origin = req.headers.origin;
-
-    if (izinliOriginler === null) {
-      // Geliştirme modu veya wildcard: origin varsa origin'i yansıt ve credentials aç, yoksa * ver
-      if (origin) {
-        res.header('Access-Control-Allow-Origin', origin);
-        res.header('Access-Control-Allow-Credentials', 'true');
-      } else {
-        res.header('Access-Control-Allow-Origin', '*');
-      }
-    } else if (origin && izinliOriginler.includes(origin)) {
+    res.vary('Origin');
+    if (origin && allowedOrigins().has(origin)) {
       res.header('Access-Control-Allow-Origin', origin);
       res.header('Access-Control-Allow-Credentials', 'true');
-    } else if (!origin) {
-      // Tarayıcı dışı istekler (curl, Postman vb.)
-      res.header('Access-Control-Allow-Origin', izinliOriginler[0] || '*');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, x-csrf-token, x-tenant-id');
+      res.header('Access-Control-Max-Age', '600');
     }
-
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key');
-    res.header('Access-Control-Max-Age', '86400'); // 24 saat preflight cache
-
     if (req.method === 'OPTIONS') {
-      res.status(204).end();
+      res.status(origin && !allowedOrigins().has(origin) ? 403 : 204).end();
       return;
     }
-
     next();
   };
 }

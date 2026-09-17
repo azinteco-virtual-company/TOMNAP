@@ -18,7 +18,7 @@ import { sifreleMetin, cozMetin } from '../crypto';
 
 const AYARLAR_DOSYA_YOLU = path.join(DATA_DIR, 'kargo_ayarlari.json');
 
-// Varsayılan Kargo Ayarı (Kanada Aramex Kurumsal Hesabı #72470858)
+// Kimlik bilgisi içermeyen başlangıç kargo ayarları.
 const VARSAYILAN_AYARLAR: KargoSaglayiciAyarlari = {
   tenantId: 'kanada_shopper_baku',
   saglayici: 'ARAMEX',
@@ -28,9 +28,9 @@ const VARSAYILAN_AYARLAR: KargoSaglayiciAyarlari = {
   varisUlkesi: 'AZ',
   varisHavalimani: 'Heydər Əliyev Beynəlxalq Hava Limanı (GYD)',
   kimlikBilgileri: {
-    kullaniciAdi: 'canadian_brand_shop@aramex.com',
+    kullaniciAdi: '',
     sifre: '',
-    hesapNo: '72470858',
+    hesapNo: '',
     pin: '',
     entity: 'YYZ',
     testModu: true,
@@ -67,13 +67,14 @@ class KargoMerkezi {
   }
 
   public getAyarlar(tenantId?: string): KargoSaglayiciAyarlari {
-    const tid = tenantId || 'kanada_shopper_baku';
-    const ayar = this.tenantAyarlari.get(tid) || this.tenantAyarlari.get('all');
+    const tid = tenantId;
+    if (!tid || tid === 'all') throw new Error('Kargo işlemi için firma seçin.');
+    const ayar = this.tenantAyarlari.get(tid);
     if (ayar) {
-      return { ...ayar };
+      return structuredClone(ayar);
     }
     return {
-      ...VARSAYILAN_AYARLAR,
+      ...structuredClone(VARSAYILAN_AYARLAR),
       tenantId: tid,
     };
   }
@@ -167,14 +168,21 @@ class KargoMerkezi {
 
     // 1. Senkronize edilecek siparişleri bul:
     // uluslararası kargo kodu olan ve henüz teslim edilmemiş olanlar
-    const aktifSiparisler = siparislerVeritabani.filter((s) => {
-      if (tenantId && tenantId !== 'all' && (s.tenant_id || 'kanada_shopper_baku') !== tenantId) {
-        return false;
-      }
-      const hasCode = Boolean(s.uluslararasi_kargo_kodu && s.uluslararasi_kargo_kodu.trim());
-      const notDelivered = s.lojistik_durumu !== 'TESLIM_EDILDI';
-      return hasCode && notDelivered;
-    });
+    let adaylar = siparislerVeritabani;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('siparisler')
+        .select('*')
+        .eq('tenant_id', tenantId);
+      if (error) throw new Error('Kargo siparişleri okunamadı.');
+      adaylar = (data || []).map(formatlaSiparis);
+    }
+    const aktifSiparisler = adaylar.filter(
+      (s) =>
+        s.tenant_id === tenantId &&
+        Boolean(s.uluslararasi_kargo_kodu?.trim()) &&
+        s.lojistik_durumu !== 'TESLIM_EDILDI'
+    );
 
     if (aktifSiparisler.length === 0) {
       return {
@@ -187,6 +195,10 @@ class KargoMerkezi {
 
     const awbListesi = aktifSiparisler.map((s) => s.uluslararasi_kargo_kodu.trim());
     const takipSonuclari = await provider.topluTakipEt(awbListesi, ayarlar);
+    if (takipSonuclari.some((result) => result.kaynak !== 'LIVE'))
+      throw new Error(
+        'Simülasyon sonuçları siparişlere kaydedilemez. Canlı kargo hesabı yapılandırın.'
+      );
     const takipMap = new Map<string, KargoTakipGuncelleme>();
     for (const res of takipSonuclari) {
       takipMap.set(res.takipNo.toUpperCase(), res);
@@ -226,8 +238,17 @@ class KargoMerkezi {
         if (supabase) {
           try {
             const payload = hazirlaSupabasePayload(siparis);
-            supabase.from('siparisler').update(payload).eq('id', siparis.id).then();
-          } catch {}
+            const { data, error } = await supabase
+              .from('siparisler')
+              .update(payload)
+              .eq('id', siparis.id)
+              .eq('tenant_id', tenantId)
+              .select('id')
+              .maybeSingle();
+            if (error || !data) throw new Error('Kargo güncellemesi kaydedilemedi.');
+          } catch {
+            throw new Error('Kargo güncellemesi kaydedilemedi.');
+          }
         }
       }
     }

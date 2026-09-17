@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/apiClient';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Database,
@@ -16,7 +17,7 @@ import {
   RefreshCw,
   Store,
   Layers,
-  FileSpreadsheet
+  FileSpreadsheet,
 } from 'lucide-react';
 import { FirmaTenant } from '../types';
 
@@ -71,7 +72,7 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
   const durumGetir = async () => {
     try {
       setYukleniyor(true);
-      const res = await fetch('/api/veritabani/durum');
+      const res = await apiFetch('/api/veritabani/durum');
       const data = await res.json();
       if (data.basarili) {
         setDurum(data);
@@ -95,10 +96,13 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
   const handleVeritabaniTemizle = async () => {
     setIslemDevam('temizle');
     try {
-      const res = await fetch('/api/veritabani/temizle', { method: 'POST' });
+      const res = await apiFetch('/api/veritabani/temizle', { method: 'POST' });
       const data = await res.json();
       if (data.basarili) {
-        bildirimGoster(data.mesaj || 'Verilənlər bazası təmizləndi! Sistem canlı sifarişləri qəbul etməyə hazırdır.');
+        bildirimGoster(
+          data.mesaj ||
+            'Verilənlər bazası təmizləndi! Sistem canlı sifarişləri qəbul etməyə hazırdır.'
+        );
         setSilmeOnayGoster(false);
         await durumGetir();
         onSiparislerYenilendi();
@@ -116,7 +120,7 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
   const handleDemoYukle = async () => {
     setIslemDevam('demo-yukle');
     try {
-      const res = await fetch('/api/veritabani/demo-yukle', { method: 'POST' });
+      const res = await apiFetch('/api/veritabani/demo-yukle', { method: 'POST' });
       const data = await res.json();
       if (data.basarili) {
         bildirimGoster(data.mesaj || 'Demo məlumatlar bazaya bərpa edildi!');
@@ -136,7 +140,7 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
   const handleYedekIndir = async () => {
     setIslemDevam('yedek-al');
     try {
-      const res = await fetch('/api/veritabani/yedek-al');
+      const res = await apiFetch('/api/veritabani/yedek-al');
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -164,18 +168,20 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
       try {
         const text = evt.target?.result as string;
         const parsed = JSON.parse(text);
-        const siparisListesi = Array.isArray(parsed) ? parsed : (parsed.siparisler || []);
+        const siparisListesi = Array.isArray(parsed) ? parsed : parsed.siparisler || [];
 
         if (!siparisListesi || siparisListesi.length === 0) {
           alert('Faylın içərisində etibarlı sifariş siyahısı tapılmadı.');
           return;
         }
 
-        const onay = window.confirm(`Faylda ${siparisListesi.length} sifariş aşkarlandı. Bazaya bərpa etmək istəyirsiniz?`);
+        const onay = window.confirm(
+          `Faylda ${siparisListesi.length} sifariş aşkarlandı. Bazaya bərpa etmək istəyirsiniz?`
+        );
         if (!onay) return;
 
         setIslemDevam('yedek-yukle');
-        const res = await fetch('/api/veritabani/yedek-yukle', {
+        const res = await apiFetch('/api/veritabani/yedek-yukle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ siparisler: siparisListesi, temizleVeYukle: true }),
@@ -205,7 +211,7 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
 
     try {
       setIslemDevam('firma-ekle');
-      const res = await fetch('/api/firmalar', {
+      const res = await apiFetch('/api/firmalar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -307,7 +313,9 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
                     <h4 className="text-sm font-bold text-white">
-                      {durum?.supabase_bagli ? 'Supabase PostgreSQL Canlı Əlaqə Qurulub' : 'Lokal Yaddaş Rejimi'}
+                      {durum?.supabase_bagli
+                        ? 'Supabase PostgreSQL Canlı Əlaqə Qurulub'
+                        : 'Lokal Yaddaş Rejimi'}
                     </h4>
                   </div>
                   <p className="text-xs text-slate-300 mt-1">
@@ -316,8 +324,8 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
                       {durum?.rejim === 'TEMIZ_CANLI'
                         ? 'Təmiz Canlı İstehsalat (0 test sifarişi)'
                         : durum?.rejim === 'DEMO_MODU'
-                        ? 'Təqdimat / Demo Rejimi (Tarixi zəngin məlumatlar)'
-                        : 'Qarışıq / Canlı Rejim'}
+                          ? 'Təqdimat / Demo Rejimi (Tarixi zəngin məlumatlar)'
+                          : 'Qarışıq / Canlı Rejim'}
                     </span>
                   </p>
                 </div>
@@ -326,12 +334,16 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
               <div className="flex items-center gap-4 bg-slate-800/80 px-4 py-2.5 rounded-xl border border-slate-700 self-start sm:self-auto">
                 <div className="text-center">
                   <div className="text-xs text-slate-400">Ümumi Sifariş</div>
-                  <div className="text-base font-extrabold text-white">{durum?.toplam_siparis ?? '...'}</div>
+                  <div className="text-base font-extrabold text-white">
+                    {durum?.toplam_siparis ?? '...'}
+                  </div>
                 </div>
                 <div className="h-6 w-px bg-slate-700" />
                 <div className="text-center">
                   <div className="text-xs text-slate-400">Demo / Sınaq</div>
-                  <div className="text-base font-extrabold text-amber-400">{durum?.demo_siparis_sayisi ?? '...'}</div>
+                  <div className="text-base font-extrabold text-amber-400">
+                    {durum?.demo_siparis_sayisi ?? '...'}
+                  </div>
                 </div>
                 <div className="h-6 w-px bg-slate-700" />
                 <button
@@ -361,7 +373,9 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
                       Canlıya Keç (Bazanı Təmizlə)
                     </h4>
                     <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-                      Sistem real fəaliyyətə başladıqda bütün sınaq və demo sifarişlərini Supabase-dən tək kliklə sıfırlayın. İlk real müştəri sifarişinizi qəbul etmək üçün baza tər-təmiz açılır.
+                      Sistem real fəaliyyətə başladıqda bütün sınaq və demo sifarişlərini
+                      Supabase-dən tək kliklə sıfırlayın. İlk real müştəri sifarişinizi qəbul etmək
+                      üçün baza tər-təmiz açılır.
                     </p>
                   </div>
 
@@ -414,7 +428,9 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
                       Təqdimat Rejimi (Demo Bərpa Et)
                     </h4>
                     <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-                      Yeni müştəriyə, butik sahibinə və ya investora sistemin gücünü göstərmək üçün 100+ real Kanada sifarişini, 90 günlük maliyyə qrafiklərini və Kanban kartlarını dərhal geri yükləyin.
+                      Yeni müştəriyə, butik sahibinə və ya investora sistemin gücünü göstərmək üçün
+                      100+ real Kanada sifarişini, 90 günlük maliyyə qrafiklərini və Kanban
+                      kartlarını dərhal geri yükləyin.
                     </p>
                   </div>
 
@@ -425,8 +441,14 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
                       disabled={islemDevam !== null}
                       className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
                     >
-                      <RotateCcw className={`w-4 h-4 ${islemDevam === 'demo-yukle' ? 'animate-spin' : ''}`} />
-                      <span>{islemDevam === 'demo-yukle' ? 'Supabase-ə Yüklənir...' : '100+ Demo Sifarişi Bərpa Et'}</span>
+                      <RotateCcw
+                        className={`w-4 h-4 ${islemDevam === 'demo-yukle' ? 'animate-spin' : ''}`}
+                      />
+                      <span>
+                        {islemDevam === 'demo-yukle'
+                          ? 'Supabase-ə Yüklənir...'
+                          : '100+ Demo Sifarişi Bərpa Et'}
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -439,7 +461,9 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
                   <span>Təhlükəsizlik & Ehtiyat Nüsxə (Backup / Restore)</span>
                 </div>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  İstənilən vaxt sistemdəki canlı və ya demo sifarişləri JSON formatında kompüterinizə endirə və ya əvvəllər götürülmüş ehtiyat nüsxəni tək toxunuşla geri yükləyə bilərsiniz.
+                  İstənilən vaxt sistemdəki canlı və ya demo sifarişləri JSON formatında
+                  kompüterinizə endirə və ya əvvəllər götürülmüş ehtiyat nüsxəni tək toxunuşla geri
+                  yükləyə bilərsiniz.
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-3 pt-1">
@@ -469,7 +493,9 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
                     className="flex-1 py-2.5 px-4 bg-white border border-slate-200 hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-xl shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
                     <Upload className="w-4 h-4 text-emerald-600" />
-                    <span>{islemDevam === 'yedek-yukle' ? 'Yüklənir...' : 'Ehtiyat Nüsxəni Geri Yüklə'}</span>
+                    <span>
+                      {islemDevam === 'yedek-yukle' ? 'Yüklənir...' : 'Ehtiyat Nüsxəni Geri Yüklə'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -481,7 +507,9 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
             <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-sm font-bold text-slate-900">Qeydiyyatdan Keçmiş Butiklər & Filiallar</h4>
+                  <h4 className="text-sm font-bold text-slate-900">
+                    Qeydiyyatdan Keçmiş Butiklər & Filiallar
+                  </h4>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Hər firma öz sifarişlərini ayrı iş sahəsində idarə edir.
                   </p>
@@ -623,13 +651,24 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
                         const say = durum?.firma_dagilimi?.[firma.id] ?? 0;
                         const aktif = seciliFirmaId === firma.id;
                         return (
-                          <tr key={firma.id} className={`hover:bg-slate-50/80 ${aktif ? 'bg-blue-50/40' : ''}`}>
+                          <tr
+                            key={firma.id}
+                            className={`hover:bg-slate-50/80 ${aktif ? 'bg-blue-50/40' : ''}`}
+                          >
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2.5">
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                  firma.isDemo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'
-                                }`}>
-                                  {firma.isDemo ? <Sparkles className="w-4 h-4" /> : <Store className="w-4 h-4" />}
+                                <div
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                    firma.isDemo
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  {firma.isDemo ? (
+                                    <Sparkles className="w-4 h-4" />
+                                  ) : (
+                                    <Store className="w-4 h-4" />
+                                  )}
                                 </div>
                                 <div>
                                   <div className="font-bold text-slate-900 flex items-center gap-1.5">
@@ -647,7 +686,9 @@ export const VeritabaniYonetimModal: React.FC<VeritabaniYonetimModalProps> = ({
                               </div>
                             </td>
                             <td className="px-4 py-3 font-medium text-slate-600">{firma.sehir}</td>
-                            <td className="px-4 py-3 font-semibold text-slate-800">%{firma.varsayilanKomisyonYuzdesi}</td>
+                            <td className="px-4 py-3 font-semibold text-slate-800">
+                              %{firma.varsayilanKomisyonYuzdesi}
+                            </td>
                             <td className="px-4 py-3">
                               <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold text-[11px]">
                                 {say} ədəd

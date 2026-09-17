@@ -18,7 +18,10 @@ vi.mock('../../../src/server/services/gemini', () => ({
   generateContentWithRetryAndFallback: mocks.generate,
 }));
 
-import gorselRouter, { serveUploadedImage } from '../../../src/server/routes/gorsel';
+import gorselRouter, {
+  serveUploadedImage,
+  storeTenantImage,
+} from '../../../src/server/routes/gorsel';
 import { UPLOADS_DIR } from '../../../src/server/config';
 import { MAX_IMAGE_BYTES, PublicResourceError } from '../../../src/server/services/publicFetch';
 import { setSiparislerVeritabani } from '../../../src/server/services/state';
@@ -27,7 +30,16 @@ const png = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=',
   'base64'
 );
+const trustedRequest: any = {
+  auth: { role: 'PATRON', tenantId: 'demo_sandbox' },
+  tenantId: 'demo_sandbox',
+};
+const save = (bytes: Buffer) => storeTenantImage(trustedRequest, bytes.toString('base64')).url;
 const app = express();
+app.use((req, _res, next) => {
+  Object.assign(req, trustedRequest);
+  next();
+});
 app.use(express.json({ limit: '25mb' }));
 app.get('/uploads/:dosyaAdi', serveUploadedImage);
 app.use('/api', gorselRouter);
@@ -42,7 +54,7 @@ beforeEach(() => {
       id: 'security-order',
       tenant_id: 'demo_sandbox',
       musteri_adi: 'Synthetic Test',
-      urunler: [{ urun_adi: 'Test', urun_gorseli: '/uploads/original.png' }],
+      urunler: [{ urun_adi: 'Test', urun_gorseli: '' }],
     },
   ]);
 });
@@ -61,28 +73,27 @@ describe('image route file boundaries', () => {
   it('rejects symlinks outside the upload directory for serving and AI reading', async () => {
     const outside = path.join(process.env.DATA_DIR!, 'outside.png');
     fs.writeFileSync(outside, png);
-    fs.symlinkSync(outside, path.join(UPLOADS_DIR, 'linked.png'));
-    expect((await request(app).get('/uploads/linked.png')).status).toBe(403);
+    const linked = save(png);
+    fs.unlinkSync(path.join(UPLOADS_DIR, path.basename(linked)));
+    fs.symlinkSync(outside, path.join(UPLOADS_DIR, path.basename(linked)));
+    expect((await request(app).get(linked)).status).toBe(403);
     expect(
-      (await request(app).post('/api/gorselden-urun-ara').send({ gorsel: '/uploads/linked.png' }))
-        .status
+      (await request(app).post('/api/gorselden-urun-ara').send({ gorsel: linked })).status
     ).toBe(403);
     expect(mocks.generate).not.toHaveBeenCalled();
   });
 
   it('returns 404 for a missing file instead of a different uploaded image', async () => {
-    fs.writeFileSync(path.join(UPLOADS_DIR, 'other_1.png'), png);
+    const existingUrl = save(png);
     expect((await request(app).get('/uploads/missing_1.png')).status).toBe(404);
-    const exact = await request(app).get('/uploads/other_1.png');
+    const exact = await request(app).get(existingUrl);
     expect(exact.status).toBe(200);
     expect(exact.body).toEqual(png);
   });
 
   it('passes an exact local upload to AI without remote fetch', async () => {
-    fs.writeFileSync(path.join(UPLOADS_DIR, 'allowed.png'), png);
-    const res = await request(app)
-      .post('/api/gorselden-urun-ara')
-      .send({ gorsel: '/uploads/allowed.png' });
+    const url = save(png);
+    const res = await request(app).post('/api/gorselden-urun-ara').send({ gorsel: url });
     expect(res.status).toBe(200);
     expect(mocks.generate.mock.calls[0][1].contents[0].inlineData.data).toBe(
       png.toString('base64')
@@ -92,10 +103,8 @@ describe('image route file boundaries', () => {
 
   it('preserves the detected WebP MIME when sending a local upload to AI', async () => {
     const webp = Buffer.from('UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA', 'base64');
-    fs.writeFileSync(path.join(UPLOADS_DIR, 'allowed.webp'), webp);
-    const res = await request(app)
-      .post('/api/gorselden-urun-ara')
-      .send({ gorsel: '/uploads/allowed.webp' });
+    const url = save(webp);
+    const res = await request(app).post('/api/gorselden-urun-ara').send({ gorsel: url });
     expect(res.status).toBe(200);
     expect(mocks.generate.mock.calls[0][1].contents[0].inlineData.mimeType).toBe('image/webp');
   });
@@ -105,7 +114,7 @@ describe('image route file boundaries', () => {
       .post('/api/upload-gorsel')
       .send({ base64: png.toString('base64'), mimeType: 'image/png', dosyaAdi: '../../evil.svg' });
     expect(res.status).toBe(200);
-    expect(res.body.url).toMatch(/^\/uploads\/urun_.*\.png$/);
+    expect(res.body.url).toMatch(/^\/uploads\/t_[a-f0-9]{24}_[a-f0-9]{32}\.png$/);
     expect(fs.readFileSync(path.join(UPLOADS_DIR, path.basename(res.body.url)))).toEqual(png);
   });
 
@@ -189,13 +198,11 @@ describe('all remote image paths use the validated downloader', () => {
 
   it('does not silently save the original URL after a blocked redirect in catalog download', async () => {
     mocks.download.mockRejectedValue(new PublicResourceError('Private redirect'));
-    const res = await request(app)
-      .post('/api/katalog-gorseli-kaydet')
-      .send({
-        siparis_id: 'security-order',
-        urun_indeksi: 0,
-        katalog_gorsel_url: 'https://cdn.example/a.png',
-      });
+    const res = await request(app).post('/api/katalog-gorseli-kaydet').send({
+      siparis_id: 'security-order',
+      urun_indeksi: 0,
+      katalog_gorsel_url: 'https://cdn.example/a.png',
+    });
     expect(res.status).toBe(403);
     expect(mocks.download).toHaveBeenCalledWith('https://cdn.example/a.png');
     expect(fs.readdirSync(UPLOADS_DIR)).toEqual([]);

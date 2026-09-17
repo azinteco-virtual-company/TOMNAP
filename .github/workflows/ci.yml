@@ -31,6 +31,9 @@ jobs:
       - name: TypeScript Statik Tip Kontrolü
         run: npx tsc --noEmit
 
+      - name: Production Bundle Derlemesi (Vite + esbuild)
+        run: npm run build
+
       - name: Vitest Birim ve Entegrasyon Testlerini Çalıştır
         run: npm run test:coverage
 
@@ -40,11 +43,36 @@ jobs:
       - name: Production bağımlılık güvenlik denetimi
         run: npm audit --omit=dev --audit-level=moderate
 
-      - name: Production Bundle Derlemesi (Vite + esbuild)
-        run: npm run build
-
       - name: Dağıtım Paketi Kontrolü
         run: |
           test -f dist/server.cjs || exit 1
           test -f dist/index.html || exit 1
           echo "✅ Production derlemesi başarıyla doğrulandı."
+
+  database-security:
+    name: PostgreSQL grants, RLS and session schema
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: isolated-ci-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: isolated-ci-only
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Synthetic schema, migration and access regression checks
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/base-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase_saas_schema.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-access-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20260917151255_server_sessions_and_private_tables.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/security-rls.sql

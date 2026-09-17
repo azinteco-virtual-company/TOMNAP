@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  ShieldAlert, 
-  X, 
-  RefreshCw, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Database, 
-  Copy, 
-  Check, 
-  Store, 
-  Server, 
-  Layers, 
-  Lock
+import {
+  ShieldCheck,
+  ShieldAlert,
+  X,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
+  Database,
+  Copy,
+  Check,
+  Store,
+  Server,
+  Layers,
+  Lock,
 } from 'lucide-react';
 import { fetchWithRetry } from '../lib/apiClient';
 import { FirmaTenant } from '../types';
@@ -54,7 +54,7 @@ export const IzolasyonDogrulamaModal: React.FC<IzolasyonDogrulamaModalProps> = (
   const [hata, setHata] = useState<string | null>(null);
   const [sqlKopyalandi, setSqlKopyalandi] = useState(false);
 
-  const aktifFirma = firmalar.find(f => f.id === seciliFirmaId) || {
+  const aktifFirma = firmalar.find((f) => f.id === seciliFirmaId) || {
     id: seciliFirmaId || 'all',
     ad: seciliFirmaId === 'all' ? 'Bütün Butiklər (Qlobal)' : seciliFirmaId,
     sehir: 'Bakı',
@@ -66,7 +66,7 @@ export const IzolasyonDogrulamaModal: React.FC<IzolasyonDogrulamaModalProps> = (
     try {
       setYukleniyor(true);
       setHata(null);
-      const url = `/api/tenant/izolasyon-testi?tenant_id=${encodeURIComponent(seciliFirmaId || 'kanada_shopper_baku')}`;
+      const url = `/api/tenant/izolasyon-testi?tenant_id=${encodeURIComponent(seciliFirmaId)}`;
       const res = await fetchWithRetry(url, { timeoutMs: 9000, retries: 2 });
       const data = await res.json();
       if (data.basarili) {
@@ -113,7 +113,9 @@ CREATE INDEX IF NOT EXISTS idx_inbox_tenant_id ON public.inbox_mesajlar(tenant_i
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-black text-base">Tenant Veri İzolasiyası & Təhlükəsizlik Testi</h3>
+                <h3 className="font-black text-base">
+                  Tenant Veri İzolasiyası & Təhlükəsizlik Testi
+                </h3>
                 <span className="text-[10px] uppercase tracking-wider bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
                   <Lock className="w-3 h-3" />
                   Tam İzolə
@@ -141,7 +143,9 @@ CREATE INDEX IF NOT EXISTS idx_inbox_tenant_id ON public.inbox_mesajlar(tenant_i
                 <Store className="w-5 h-5" />
               </div>
               <div>
-                <div className="text-[11px] uppercase tracking-wider font-bold text-slate-400">Yoxlanılan Butik</div>
+                <div className="text-[11px] uppercase tracking-wider font-bold text-slate-400">
+                  Yoxlanılan Butik
+                </div>
                 <div className="text-base font-black text-slate-900 flex items-center gap-2">
                   {aktifFirma.ad}
                   <span className="text-xs font-mono font-normal px-2 py-0.5 bg-slate-200/70 rounded text-slate-700">
@@ -174,11 +178,13 @@ CREATE INDEX IF NOT EXISTS idx_inbox_tenant_id ON public.inbox_mesajlar(tenant_i
           {rapor && (
             <div className="space-y-4">
               {/* Ümumi Status Banneri */}
-              <div className={`p-4 rounded-2xl border flex items-center justify-between gap-4 ${
-                rapor.tum_testler_gecti 
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
-                  : 'bg-red-50 border-red-200 text-red-900'
-              }`}>
+              <div
+                className={`p-4 rounded-2xl border flex items-center justify-between gap-4 ${
+                  rapor.tum_testler_gecti
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : 'bg-red-50 border-red-200 text-red-900'
+                }`}
+              >
                 <div className="flex items-center gap-3">
                   {rapor.tum_testler_gecti ? (
                     <CheckCircle2 className="w-7 h-7 text-emerald-600 shrink-0" />
@@ -187,13 +193,11 @@ CREATE INDEX IF NOT EXISTS idx_inbox_tenant_id ON public.inbox_mesajlar(tenant_i
                   )}
                   <div>
                     <h4 className="text-sm font-black">
-                      {rapor.tum_testler_gecti 
-                        ? '100% İZOLYASİYA TƏSDİQLƏNDİ — SIZMA YOXDUR' 
+                      {rapor.tum_testler_gecti
+                        ? 'FİLTRLƏNMİŞ SORĞULAR UYĞUNDUR'
                         : 'DİQQƏT: MƏLUMAT SIZMASI AŞKARLANDI'}
                     </h4>
-                    <p className="text-xs mt-0.5 text-slate-600">
-                      {rapor.ozet}
-                    </p>
+                    <p className="text-xs mt-0.5 text-slate-600">{rapor.ozet}</p>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
@@ -205,10 +209,12 @@ CREATE INDEX IF NOT EXISTS idx_inbox_tenant_id ON public.inbox_mesajlar(tenant_i
 
               {/* Modul üzrə Test Detalları */}
               <div className="space-y-2.5">
-                <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Modul İnteqrasiya Yoxlamaları</h5>
+                <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Modul İnteqrasiya Yoxlamaları
+                </h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {rapor.sonuclar.map((s, idx) => (
-                    <div 
+                    <div
                       key={idx}
                       className={`p-3.5 rounded-xl border bg-white shadow-2xs space-y-1.5 ${
                         s.durum === 'GECTI' ? 'border-slate-200' : 'border-red-300 bg-red-50/50'
@@ -223,17 +229,28 @@ CREATE INDEX IF NOT EXISTS idx_inbox_tenant_id ON public.inbox_mesajlar(tenant_i
                           )}
                           {s.modul}
                         </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                          s.durum === 'GECTI' 
-                            ? 'bg-emerald-100 text-emerald-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            s.durum === 'GECTI'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
                           {s.durum === 'GECTI' ? 'KEÇDİ' : 'XƏTA'}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>Yoxlanılan Qeyd: <strong>{s.toplam_kayit}</strong></span>
-                        <span>Sızan Qeyd: <strong className={s.sizinti_sayisi === 0 ? 'text-emerald-700' : 'text-red-700'}>{s.sizinti_sayisi}</strong></span>
+                        <span>
+                          Yoxlanılan Qeyd: <strong>{s.toplam_kayit}</strong>
+                        </span>
+                        <span>
+                          Sızan Qeyd:{' '}
+                          <strong
+                            className={s.sizinti_sayisi === 0 ? 'text-emerald-700' : 'text-red-700'}
+                          >
+                            {s.sizinti_sayisi}
+                          </strong>
+                        </span>
                       </div>
                       <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
                         {s.aciklama}
@@ -248,33 +265,47 @@ CREATE INDEX IF NOT EXISTS idx_inbox_tenant_id ON public.inbox_mesajlar(tenant_i
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Database className="w-4 h-4 text-blue-400" />
-                    <span className="text-xs font-bold">SQL İndeksləri & Cədvəl Şeması Doğrulaması</span>
+                    <span className="text-xs font-bold">
+                      SQL İndeksləri & Cədvəl Şeması Doğrulaması
+                    </span>
                   </div>
                   <button
                     type="button"
                     onClick={handleSqlKopyala}
                     className="flex items-center gap-1 text-xs px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors cursor-pointer"
                   >
-                    {sqlKopyalandi ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    {sqlKopyalandi ? (
+                      <Check className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
                     <span>{sqlKopyalandi ? 'Kopyalandı!' : 'SQL Kodu'}</span>
                   </button>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                   <div className="bg-white/5 p-2 rounded-lg border border-white/10">
                     <div className="text-slate-400 text-[10px]">siparisler</div>
-                    <div className="text-emerald-400 font-mono font-bold mt-0.5">tenant_id (İndeksli)</div>
+                    <div className="text-emerald-400 font-mono font-bold mt-0.5">
+                      tenant_id (İndeksli)
+                    </div>
                   </div>
                   <div className="bg-white/5 p-2 rounded-lg border border-white/10">
                     <div className="text-slate-400 text-[10px]">musteriler</div>
-                    <div className="text-emerald-400 font-mono font-bold mt-0.5">tenant_id (İndeksli)</div>
+                    <div className="text-emerald-400 font-mono font-bold mt-0.5">
+                      tenant_id (İndeksli)
+                    </div>
                   </div>
                   <div className="bg-white/5 p-2 rounded-lg border border-white/10">
                     <div className="text-slate-400 text-[10px]">kuryeler</div>
-                    <div className="text-emerald-400 font-mono font-bold mt-0.5">tenant_id (İndeksli)</div>
+                    <div className="text-emerald-400 font-mono font-bold mt-0.5">
+                      tenant_id (İndeksli)
+                    </div>
                   </div>
                   <div className="bg-white/5 p-2 rounded-lg border border-white/10">
                     <div className="text-slate-400 text-[10px]">inbox_mesajlar</div>
-                    <div className="text-emerald-400 font-mono font-bold mt-0.5">tenant_id (İndeksli)</div>
+                    <div className="text-emerald-400 font-mono font-bold mt-0.5">
+                      tenant_id (İndeksli)
+                    </div>
                   </div>
                 </div>
               </div>
@@ -284,7 +315,10 @@ CREATE INDEX IF NOT EXISTS idx_inbox_tenant_id ON public.inbox_mesajlar(tenant_i
 
         {/* Modal Altlığı */}
         <div className="bg-slate-50 border-t border-slate-200 px-6 py-3 flex items-center justify-between text-xs text-slate-500">
-          <span>Yoxlama vaxtı: {rapor ? new Date(rapor.test_zamani).toLocaleTimeString('az-AZ') : 'Gözlənilir...'}</span>
+          <span>
+            Yoxlama vaxtı:{' '}
+            {rapor ? new Date(rapor.test_zamani).toLocaleTimeString('az-AZ') : 'Gözlənilir...'}
+          </span>
           <button
             type="button"
             onClick={onKapat}

@@ -19,7 +19,7 @@ import {
   Layers,
   Save,
   Activity,
-  FileSpreadsheet
+  FileSpreadsheet,
 } from 'lucide-react';
 import { fetchWithRetry } from '../lib/apiClient';
 
@@ -66,12 +66,14 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
   const [cikisUlkesi, setCikisUlkesi] = useState<string>('CA');
   const [cikisSehri, setCikisSehri] = useState<string>('Toronto (YYZ)');
   const [varisUlkesi, setVarisUlkesi] = useState<string>('AZ');
-  const [varisHavalimani, setVarisHavalimani] = useState<string>('Heydər Əliyev Beynəlxalq Hava Limanı (GYD)');
+  const [varisHavalimani, setVarisHavalimani] = useState<string>(
+    'Heydər Əliyev Beynəlxalq Hava Limanı (GYD)'
+  );
 
   // Kimlik Formu
   const [kullaniciAdi, setKullaniciAdi] = useState<string>('');
   const [sifre, setSifre] = useState<string>('');
-  const [hesapNo, setHesapNo] = useState<string>('72470858');
+  const [hesapNo, setHesapNo] = useState<string>('');
   const [pin, setPin] = useState<string>('');
   const [entity, setEntity] = useState<string>('YYZ');
   const [testModu, setTestModu] = useState<boolean>(true);
@@ -88,7 +90,7 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
     setTestSonucu(null);
     setBildirim(null);
 
-    fetchWithRetry(`/api/kargo/ayarlar?tenant_id=${encodeURIComponent(seciliTenantId || 'kanada_shopper_baku')}`)
+    fetchWithRetry(`/api/kargo/ayarlar?tenant_id=${encodeURIComponent(seciliTenantId)}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.basarili && data.ayarlar) {
@@ -103,7 +105,7 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
           const kimlik = ayar.kimlikBilgileri || {};
           setKullaniciAdi(kimlik.kullaniciAdi || '');
           setSifre(kimlik.sifre || '');
-          setHesapNo(kimlik.hesapNo || '72470858');
+          setHesapNo(kimlik.hesapNo || '');
           setPin(kimlik.pin || '');
           setEntity(kimlik.entity || 'YYZ');
           setTestModu(kimlik.testModu ?? true);
@@ -141,7 +143,7 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tenantId: seciliTenantId || 'kanada_shopper_baku',
+          tenantId: seciliTenantId,
           ayarlar: {
             saglayici,
             cikisUlkesi,
@@ -181,7 +183,7 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tenantId: seciliTenantId || 'kanada_shopper_baku',
+          tenantId: seciliTenantId,
           saglayici,
           cikisUlkesi,
           cikisSehri,
@@ -236,7 +238,8 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Aramex, DHL, UPS və digər beynəlxalq logistika provayderlərinin canlı API və çıxış ölkəsi parametrləri
+                Aramex, DHL, UPS və digər beynəlxalq logistika provayderlərinin canlı API və çıxış
+                ölkəsi parametrləri
               </p>
             </div>
           </div>
@@ -260,10 +263,18 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
               }`}
             >
               <div className="flex items-center gap-2">
-                {bildirim.tip === 'basari' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-rose-600" />}
+                {bildirim.tip === 'basari' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+                )}
                 <span>{bildirim.mesaj}</span>
               </div>
-              <button type="button" onClick={() => setBildirim(null)} className="text-slate-400 hover:text-slate-600">
+              <button
+                type="button"
+                onClick={() => setBildirim(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -293,11 +304,14 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
                     >
                       <div className="flex items-center justify-between mb-1.5">
                         <span className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
-                          {isAramex ? '📦' : p.id === 'DHL' ? '🟡' : p.id === 'UPS' ? '🟤' : '🚚'} {p.ad}
+                          {isAramex ? '📦' : p.id === 'DHL' ? '🟡' : p.id === 'UPS' ? '🟤' : '🚚'}{' '}
+                          {p.ad}
                         </span>
                         {isSelected && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />}
                       </div>
-                      <p className="text-2xs text-slate-500 dark:text-slate-400 line-clamp-2">{p.aciklama}</p>
+                      <p className="text-2xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                        {p.aciklama}
+                      </p>
                       <div className="mt-2.5 flex items-center justify-between">
                         <span
                           className={`text-3xs font-extrabold px-1.5 py-0.5 rounded ${
@@ -332,7 +346,9 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
                     </option>
                   ))}
                 </select>
-                <p className="text-3xs text-slate-500 mt-1">Bugün Kanada, sabah ABŞ, Yaponiya və ya İngiltərə seçilə bilər.</p>
+                <p className="text-3xs text-slate-500 mt-1">
+                  Bugün Kanada, sabah ABŞ, Yaponiya və ya İngiltərə seçilə bilər.
+                </p>
               </div>
 
               <div>
@@ -354,7 +370,8 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-                  <Key className="w-3.5 h-3.5 text-blue-600" /> 2. {saglayici} Kurumsal API Kimlik Bilgiləri
+                  <Key className="w-3.5 h-3.5 text-blue-600" /> 2. {saglayici} Kurumsal API Kimlik
+                  Bilgiləri
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-400">
                   <input
@@ -377,7 +394,7 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
                       type="text"
                       value={kullaniciAdi}
                       onChange={(e) => setKullaniciAdi(e.target.value)}
-                      placeholder="canadian_brand_shop@aramex.com"
+                      placeholder="Kargo hesabınız"
                       className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                   </div>
@@ -405,7 +422,7 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
                       type="text"
                       value={hesapNo}
                       onChange={(e) => setHesapNo(e.target.value)}
-                      placeholder="72470858"
+                      placeholder="Hesap numaranız"
                       className="w-full text-xs font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                   </div>
@@ -439,7 +456,8 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
 
                 <div className="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
                   <span className="text-2xs text-slate-500 flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-emerald-600" /> Şifrə və PIN kodları maskələnərək qorunur.
+                    <Lock className="w-3.5 h-3.5 text-emerald-600" /> Şifrə və PIN kodları
+                    maskələnərək qorunur.
                   </span>
 
                   <button
@@ -448,7 +466,9 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
                     disabled={testEdiliyor}
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
                   >
-                    <Activity className={`w-3.5 h-3.5 text-blue-600 ${testEdiliyor ? 'animate-spin' : ''}`} />
+                    <Activity
+                      className={`w-3.5 h-3.5 text-blue-600 ${testEdiliyor ? 'animate-spin' : ''}`}
+                    />
                     <span>{testEdiliyor ? 'Yoxlanılır...' : 'Bağlantını Sına (Test)'}</span>
                   </button>
                 </div>
@@ -465,7 +485,11 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  {testSonucu.basarili ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <ShieldAlert className="w-4 h-4 text-rose-600" />}
+                  {testSonucu.basarili ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <ShieldAlert className="w-4 h-4 text-rose-600" />
+                  )}
                   <span>{testSonucu.mesaj}</span>
                 </div>
                 <span className="font-mono text-2xs opacity-80">{testSonucu.gecikmeMs}ms</span>
@@ -476,7 +500,11 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
             <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 flex items-start gap-3">
               <FileSpreadsheet className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
               <div className="text-xs text-blue-900 dark:text-blue-200 leading-relaxed">
-                <strong>Aramex E-poçt Hesabatı (Daily Dispatch):</strong> Toronto anbarından Aramex-ə təslim etdiyiniz bağlamaların axşam e-poçtunuza gələn Excel faylını birbaşa <strong>Kargo Manifestosu</strong> səhifəsindəki <strong>"Daily Dispatch Excel İdxal Et"</strong> düyməsinə sürükləyərək 50 kargonun AWB kodunu 1 saniyədə sistemə bağlaya bilərsiniz.
+                <strong>Aramex E-poçt Hesabatı (Daily Dispatch):</strong> Toronto anbarından
+                Aramex-ə təslim etdiyiniz bağlamaların axşam e-poçtunuza gələn Excel faylını birbaşa{' '}
+                <strong>Kargo Manifestosu</strong> səhifəsindəki{' '}
+                <strong>"Daily Dispatch Excel İdxal Et"</strong> düyməsinə sürükləyərək 50 kargonun
+                AWB kodunu 1 saniyədə sistemə bağlaya bilərsiniz.
               </div>
             </div>
           </form>

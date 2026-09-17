@@ -15,8 +15,10 @@ export class AramexProvider implements KargoSaglayiciInterface {
   readonly tip: KargoSaglayiciTipi = 'ARAMEX';
   readonly ad: string = 'Aramex International';
 
-  private readonly PROD_URL = 'https://ws.aramex.net/ShippingAPI.V2/Tracking/Service_1_0.svc/json/TrackShipments';
-  private readonly DEV_URL = 'https://ws.dev.aramex.net/ShippingAPI.V2/Tracking/Service_1_0.svc/json/TrackShipments';
+  private readonly PROD_URL =
+    'https://ws.aramex.net/ShippingAPI.V2/Tracking/Service_1_0.svc/json/TrackShipments';
+  private readonly DEV_URL =
+    'https://ws.dev.aramex.net/ShippingAPI.V2/Tracking/Service_1_0.svc/json/TrackShipments';
 
   /**
    * Aramex takip durum kodlarını TOMNAP sisteminin 5 aşamalı yaşam döngüsüne haritalar.
@@ -27,7 +29,12 @@ export class AramexProvider implements KargoSaglayiciInterface {
     const loc = (location || '').toLowerCase();
 
     // 1. Teslim Edildi
-    if (code === 'DLV' || desc.includes('delivered') || desc.includes('təhvil verildi') || desc.includes('proof of delivery')) {
+    if (
+      code === 'DLV' ||
+      desc.includes('delivered') ||
+      desc.includes('təhvil verildi') ||
+      desc.includes('proof of delivery')
+    ) {
       return 'TESLIM_EDILDI';
     }
 
@@ -87,7 +94,10 @@ export class AramexProvider implements KargoSaglayiciInterface {
   /**
    * Tekil Takip Sorgusu
    */
-  public async kargoTakipEt(takipNo: string, ayarlar: KargoSaglayiciAyarlari): Promise<KargoTakipGuncelleme> {
+  public async kargoTakipEt(
+    takipNo: string,
+    ayarlar: KargoSaglayiciAyarlari
+  ): Promise<KargoTakipGuncelleme> {
     const sonuclar = await this.topluTakipEt([takipNo], ayarlar);
     if (sonuclar.length > 0) {
       return sonuclar[0];
@@ -105,10 +115,11 @@ export class AramexProvider implements KargoSaglayiciInterface {
   /**
    * Toplu Takip Sorgusu (50'şerli parçalama ile)
    */
-  public async topluTakipEt(takipNolari: string[], ayarlar: KargoSaglayiciAyarlari): Promise<KargoTakipGuncelleme[]> {
-    const temizNolar = takipNolari
-      .map((n) => (n || '').trim())
-      .filter((n) => n.length >= 6);
+  public async topluTakipEt(
+    takipNolari: string[],
+    ayarlar: KargoSaglayiciAyarlari
+  ): Promise<KargoTakipGuncelleme[]> {
+    const temizNolar = takipNolari.map((n) => (n || '').trim()).filter((n) => n.length >= 6);
 
     if (temizNolar.length === 0) return [];
 
@@ -133,7 +144,7 @@ export class AramexProvider implements KargoSaglayiciInterface {
             UserName: kimlik.kullaniciAdi,
             Password: kimlik.sifre,
             Version: 'v1.0',
-            AccountNumber: kimlik.hesapNo || '72470858',
+            AccountNumber: kimlik.hesapNo || '',
             AccountPin: kimlik.pin || '',
             AccountEntity: kimlik.entity || (ayarlar.cikisUlkesi === 'CA' ? 'YYZ' : 'DXB'),
             AccountCountryCode: ayarlar.cikisUlkesi || 'CA',
@@ -164,6 +175,7 @@ export class AramexProvider implements KargoSaglayiciInterface {
 
             tumGuncellemeler.push({
               takipNo: waybill,
+              kaynak: 'LIVE',
               durum: this.mapStatus(code, desc, loc),
               hamDurumKodu: code,
               hamAciklama: desc,
@@ -173,12 +185,10 @@ export class AramexProvider implements KargoSaglayiciInterface {
             });
           }
         } else {
-          // Yanıt boşsa simülasyona düş
-          tumGuncellemeler.push(...this.simuleTakipSonuclari(chunk, ayarlar));
+          throw new Error('Geçerli canlı kargo yanıtı alınamadı.');
         }
       } catch (err) {
-        console.warn('Aramex API çağrısı başarısız, simülasyon fallback devreye girdi:', err);
-        tumGuncellemeler.push(...this.simuleTakipSonuclari(chunk, ayarlar));
+        throw new Error('Canlı kargo takibi başarısız. Sipariş durumları değiştirilmedi.');
       }
     }
 
@@ -198,7 +208,7 @@ export class AramexProvider implements KargoSaglayiciInterface {
         mesaj: 'Aramex simulyasiya və demo rejimi aktivdir (Rəsmi API açarları daxil edilməyib).',
         saglayici: this.tip,
         gecikmeMs: 15,
-        detay: { mod: 'SIMULATION', hesapNo: kimlik.hesapNo || '72470858' },
+        detay: { mod: 'SIMULATION', hesapNo: kimlik.hesapNo || '' },
       };
     }
 
@@ -214,7 +224,7 @@ export class AramexProvider implements KargoSaglayiciInterface {
             UserName: kimlik.kullaniciAdi,
             Password: kimlik.sifre,
             Version: 'v1.0',
-            AccountNumber: kimlik.hesapNo || '72470858',
+            AccountNumber: kimlik.hesapNo || '',
             AccountPin: kimlik.pin || '',
             AccountEntity: kimlik.entity || 'YYZ',
             AccountCountryCode: ayarlar.cikisUlkesi || 'CA',
@@ -241,7 +251,7 @@ export class AramexProvider implements KargoSaglayiciInterface {
 
       return {
         basarili: true,
-        mesaj: `Aramex API bağlantısı uğurludur! (Hesab: ${kimlik.hesapNo || '72470858'}, Cavab vaxtı: ${gecikmeMs}ms)`,
+        mesaj: `Aramex API bağlantısı uğurludur! (Hesab: ${kimlik.hesapNo || ''}, Cavab vaxtı: ${gecikmeMs}ms)`,
         saglayici: this.tip,
         gecikmeMs,
         detay: { endpoint, status: res.status },
@@ -261,7 +271,10 @@ export class AramexProvider implements KargoSaglayiciInterface {
   /**
    * Aramex Daily Dispatch / Manifest Excel & CSV Dosya Ayrıştırıcısı
    */
-  public async manifestoAyristir(dosyaBuffer: Buffer | ArrayBuffer, dosyaAdi: string): Promise<AyrismisManifestoSonuc> {
+  public async manifestoAyristir(
+    dosyaBuffer: Buffer | ArrayBuffer,
+    dosyaAdi: string
+  ): Promise<AyrismisManifestoSonuc> {
     try {
       const wb = XLSX.read(dosyaBuffer, { type: 'buffer' });
       const firstSheetName = wb.SheetNames[0];
@@ -292,20 +305,42 @@ export class AramexProvider implements KargoSaglayiciInterface {
       let baslikIndex = 0;
       for (let i = 0; i < Math.min(rawRows.length, 5); i++) {
         const rowStr = rawRows[i].map((c: any) => String(c).toLowerCase()).join(' ');
-        if (rowStr.includes('waybill') || rowStr.includes('awb') || rowStr.includes('tracking') || rowStr.includes('takip')) {
+        if (
+          rowStr.includes('waybill') ||
+          rowStr.includes('awb') ||
+          rowStr.includes('tracking') ||
+          rowStr.includes('takip')
+        ) {
           baslikIndex = i;
           break;
         }
       }
 
       const headers = rawRows[baslikIndex].map((h: any) => String(h).trim().toLowerCase());
-      
+
       const findCol = (...keywords: string[]) => {
         return headers.findIndex((h: string) => keywords.some((k) => h.includes(k)));
       };
 
-      const waybillCol = findCol('waybill', 'awb', 'tracking', 'takip', 'hawb', 'barcode', 'konşimento');
-      const nameCol = findCol('consignee', 'receiver', 'alıcı', 'alici', 'müştəri', 'musteri', 'name', 'ad');
+      const waybillCol = findCol(
+        'waybill',
+        'awb',
+        'tracking',
+        'takip',
+        'hawb',
+        'barcode',
+        'konşimento'
+      );
+      const nameCol = findCol(
+        'consignee',
+        'receiver',
+        'alıcı',
+        'alici',
+        'müştəri',
+        'musteri',
+        'name',
+        'ad'
+      );
       const phoneCol = findCol('phone', 'telephone', 'tel', 'mobil', 'əlaqə');
       const cityCol = findCol('destination', 'city', 'şəhər', 'sehir', 'dest');
       const addressCol = findCol('address', 'ünvan', 'unvan', 'addr');
@@ -340,14 +375,19 @@ export class AramexProvider implements KargoSaglayiciInterface {
 
         let agirlikKg: number | undefined = undefined;
         if (weightCol !== -1) {
-          const rawWeight = String(row[weightCol] || '').replace(/[^\d.,]/g, '').replace(',', '.');
+          const rawWeight = String(row[weightCol] || '')
+            .replace(/[^\d.,]/g, '')
+            .replace(',', '.');
           const numWeight = parseFloat(rawWeight);
           if (!isNaN(numWeight) && numWeight > 0) {
             agirlikKg = numWeight;
           }
         }
 
-        const tarih = dateCol !== -1 ? String(row[dateCol] || '').trim() : new Date().toISOString().slice(0, 10);
+        const tarih =
+          dateCol !== -1
+            ? String(row[dateCol] || '').trim()
+            : new Date().toISOString().slice(0, 10);
         const referansNo = refCol !== -1 ? String(row[refCol] || '').trim() : undefined;
 
         satirlar.push({
@@ -382,19 +422,23 @@ export class AramexProvider implements KargoSaglayiciInterface {
   /**
    * Geliştirme / Test ve Demo için Akıllı Takip Simülasyonu
    */
-  private simuleTakipSonuclari(takipNolari: string[], ayarlar: KargoSaglayiciAyarlari): KargoTakipGuncelleme[] {
+  private simuleTakipSonuclari(
+    takipNolari: string[],
+    ayarlar: KargoSaglayiciAyarlari
+  ): KargoTakipGuncelleme[] {
     const simdi = new Date();
     const cikisSehri = ayarlar.cikisSehri || 'Toronto (YYZ)';
     const varisSehri = ayarlar.varisHavalimani || 'Bakı (GYD)';
 
     return takipNolari.map((takipNo, idx) => {
       // Takip numarasının son hanesine göre gerçekçi aşama belirle
-      const sonHane = parseInt(takipNo.slice(-1), 10) || (idx % 10);
+      const sonHane = parseInt(takipNo.slice(-1), 10) || idx % 10;
 
       if (sonHane >= 8) {
         // Teslim Edildi
         return {
           takipNo,
+          kaynak: 'SIMULATION',
           durum: 'TESLIM_EDILDI',
           hamDurumKodu: 'DLV',
           hamAciklama: 'Bağlama Bakıda ünvanda müştəriyə uğurla təhvil verildi (İmzalı).',
@@ -405,9 +449,11 @@ export class AramexProvider implements KargoSaglayiciInterface {
         // Bakü Dağıtımda / Kuryede
         return {
           takipNo,
+          kaynak: 'SIMULATION',
           durum: 'BAKU_DAGITIM_ARKADAS',
           hamDurumKodu: 'SH008',
-          hamAciklama: 'Heydər Əliyev Beynəlxalq Hava Limanında (GYD) gömrük rəsmiləşdirilməsi tamamlandı, kurye bölgüsündədir.',
+          hamAciklama:
+            'Heydər Əliyev Beynəlxalq Hava Limanında (GYD) gömrük rəsmiləşdirilməsi tamamlandı, kurye bölgüsündədir.',
           konum: `${varisSehri} Kurye Mərkəzi`,
           tarih: new Date(simdi.getTime() - 1000 * 60 * 60 * 12).toISOString(),
         };
@@ -415,6 +461,7 @@ export class AramexProvider implements KargoSaglayiciInterface {
         // Uçuşta / Uluslararası Kargo (Dubai Hub aktarmalı)
         return {
           takipNo,
+          kaynak: 'SIMULATION',
           durum: 'ULUSLARARASI_KARGO',
           hamDurumKodu: 'SH014',
           hamAciklama: 'Kargo tranzit qovşağından yola düşdü (Aramex Flight - In Transit to GYD).',
@@ -425,6 +472,7 @@ export class AramexProvider implements KargoSaglayiciInterface {
         // Çıkış Deposu (Toronto YYZ)
         return {
           takipNo,
+          kaynak: 'SIMULATION',
           durum: 'KANADA_DEPO',
           hamDurumKodu: 'SH005',
           hamAciklama: `Kargo ${cikisSehri} anbarında qəbul edildi və beynəlxalq göndəriş üçün qablaşdırıldı.`,

@@ -13,58 +13,15 @@ Kanada ➔ Bakü e-ticaret lojistiği, sipariş ayrıştırma, multi-tenant firm
 
 ### Kimlik Doğrulama (Authentication)
 
-API anahtarı katmanı vardır; ancak geniş public rota istisnaları ve origin başlıklarını güvenilir sayan geçişler nedeniyle tüm endpoint'ler korunmamaktadır. Kullanıcı oturumu ve rol yetkilendirmesi henüz tamamlanmadı. [Güncel güvenlik değerlendirmesine](SECURITY_RECHECK.md) bakın. Anahtar kabul eden rotalarda desteklenen başlıklar:
+Giriş `POST /api/auth/giris` üzerinden kayıtlı e-posta veya tam telefon numarası ve parola ile yapılır.
+Sunucu `HttpOnly` oturum çerezini ayarlar ve yanıtta `csrfToken` döndürür.
+`GET /api/auth/oturum` mevcut kullanıcıyı ve CSRF tokenini, `POST /api/auth/cikis` çıkışı sağlar.
+Değişiklik isteklerinde `x-csrf-token` zorunludur. Çerez dışında API anahtarı, URL kodu veya tarayıcı başlığı kimlik sayılmaz.
 
-```http
-X-API-Key: your_api_secret_key
-```
+Firma kapsamı oturumdan gelir. Sistem yöneticisi firma işlemlerinde `x-tenant-id` ile somut firma seçmelidir.
+Normal kullanıcı başka firma veya `all` seçemez. Uyumsuz query/body/header değerleri reddedilir.
 
-veya
-
-```http
-Authorization: Bearer your_api_secret_key
-```
-
-> **Not:** Geliştirme (`NODE_ENV !== 'production'`) ortamında `API_SECRET_KEY` tanımlanmamışsa geliştirici kolaylığı için istekler otomatik geçirilir ve loglara uyarı basılır.
-
-### Multi-Tenancy (Çok Kiracılı Mimari)
-
-Bazı rotalar tenant filtreleri uygular; bu filtreler sunucuda doğrulanmış kullanıcı kimliğinden türetilmediği için güvenlik izolasyonu oluşturmaz. Kullanılan istemci parametreleri:
-
-- Query Parametresi: `?tenant_id=kanada_shopper_baku`
-- Header: `X-Tenant-ID: kanada_shopper_baku`
-
-`tenant_id` belirtilmediğinde veya `all` gönderildiğinde bazı rotalar tüm veri havuzunu döndürebilir; sunucu rol kontrolü henüz bulunmamaktadır.
-
-### İstek Hız Sınırları (Rate Limiting)
-
-| Kategori               | Limit                 | Kapsam                                                                              |
-| ---------------------- | --------------------- | ----------------------------------------------------------------------------------- |
-| **Genel API**          | 150 istek / 15 dakika | Tüm `/api/*` rotaları                                                               |
-| **AI İşlemleri**       | 10 istek / 1 dakika   | `/api/ayristir-siparis`, `/api/urun-katalog-gorseli-ara`, `/api/gorselden-urun-ara` |
-| **Veritabanı Yönetim** | 3 istek / 1 dakika    | `/api/veritabani/temizle`, `/api/veritabani/demo-yukle`, vb.                        |
-
-### Standart Yanıt Formatı
-
-Başarılı Yanıt:
-
-```json
-{
-  "basarili": true,
-  "mesaj": "İşlem başarılı",
-  "data": { ... }
-}
-```
-
-Hata Yanıtı:
-
-```json
-{
-  "basarili": false,
-  "hata": "Hata başlığı veya açıklaması",
-  "detay": "Varsa ayrıntılı hata mesajı"
-}
-```
+Tam rol matrisi, public rota listesi ve geçiş koşulları: [SESSION_SECURITY.md](SESSION_SECURITY.md).
 
 ---
 

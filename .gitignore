@@ -10,3 +10,8 @@ coverage/
 data/kargo_ayarlari.json
 uploads/
 scratch/
+
+data/oturumlar.json
+data/oturumlar.json.*.tmp
+
+supabase/.temp/

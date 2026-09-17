@@ -1,16 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Truck, 
-  Phone, 
-  MapPin, 
-  DollarSign, 
-  CheckCircle2, 
-  Clock, 
-  AlertTriangle, 
-  ExternalLink, 
-  MessageCircle, 
-  Search, 
-  Package, 
+import {
+  Truck,
+  Phone,
+  MapPin,
+  DollarSign,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  ExternalLink,
+  MessageCircle,
+  Search,
+  Package,
   Filter,
   Navigation,
   Check,
@@ -18,7 +18,7 @@ import {
   Calendar,
   Sparkles,
   Store,
-  RefreshCw
+  RefreshCw,
 } from 'lucide-react';
 import { Siparis, BakuKuryeProfili, FirmaTenant } from '../types';
 import { BAKU_KURYELER } from '../data/kuryeler';
@@ -51,7 +51,9 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
   onSiparisleriYukle,
 }) => {
   const [aramaMetni, setAramaMetni] = useState('');
-  const [durumFiltresi, setDurumFiltresi] = useState<'HEPSI' | 'TESLIM_BEKLEYEN' | 'TESLIM_EDILDI'>('TESLIM_BEKLEYEN');
+  const [durumFiltresi, setDurumFiltresi] = useState<'HEPSI' | 'TESLIM_BEKLEYEN' | 'TESLIM_EDILDI'>(
+    'TESLIM_BEKLEYEN'
+  );
   const [islemBildirimi, setIslemBildirimi] = useState<string | null>(null);
   const [yenileniyor, setYenileniyor] = useState(false);
 
@@ -73,24 +75,45 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
     }
   };
 
-  const aktifKurye = BAKU_KURYELER.find(k => k.id === seciliKuryeId) || BAKU_KURYELER[0];
+  const aktifKurye = BAKU_KURYELER.find((k) => k.id === seciliKuryeId) || BAKU_KURYELER[0];
 
   // Bu kuryeye atanmış veya bölgesine düşen siparişler
   const kuryeSiparisleri = useMemo(() => {
-    return siparisler.filter(s => {
+    return siparisler.filter((s) => {
       // 1. Doğrudan bu kuryeye atanmış mı?
       if (s.baku_kurye_id && s.baku_kurye_id === seciliKuryeId) return true;
 
       // 2. Kurye atanmamış ama adreste kuryenin bölgesi geçiyor mu? (Otomatik akıllı öneri)
       const adresVeSehir = `${s.teslimat_sehri || ''} ${s.teslimat_adresi || ''}`.toLowerCase();
       if (seciliKuryeId === 'kurye-elvin') {
-        if (adresVeSehir.includes('nərimanov') || adresVeSehir.includes('gənclik') || adresVeSehir.includes('təbriz')) return true;
+        if (
+          adresVeSehir.includes('nərimanov') ||
+          adresVeSehir.includes('gənclik') ||
+          adresVeSehir.includes('təbriz')
+        )
+          return true;
       } else if (seciliKuryeId === 'kurye-resad') {
-        if (adresVeSehir.includes('yasamal') || adresVeSehir.includes('elmlər') || adresVeSehir.includes('28 may') || adresVeSehir.includes('içərişəhər')) return true;
+        if (
+          adresVeSehir.includes('yasamal') ||
+          adresVeSehir.includes('elmlər') ||
+          adresVeSehir.includes('28 may') ||
+          adresVeSehir.includes('içərişəhər')
+        )
+          return true;
       } else if (seciliKuryeId === 'kurye-vuqar') {
-        if (adresVeSehir.includes('gəncə') || adresVeSehir.includes('sumqayıt') || adresVeSehir.includes('rayon')) return true;
+        if (
+          adresVeSehir.includes('gəncə') ||
+          adresVeSehir.includes('sumqayıt') ||
+          adresVeSehir.includes('rayon')
+        )
+          return true;
       } else if (seciliKuryeId === 'ofis-tehvil') {
-        if (s.ozel_not?.toLowerCase().includes('sürücü') || s.ozel_not?.toLowerCase().includes('özü') || s.ham_mesaj.toLowerCase().includes('özü')) return true;
+        if (
+          s.ozel_not?.toLowerCase().includes('sürücü') ||
+          s.ozel_not?.toLowerCase().includes('özü') ||
+          s.ham_mesaj.toLowerCase().includes('özü')
+        )
+          return true;
       }
 
       return false;
@@ -99,9 +122,10 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
 
   // Filtreleme
   const filtrelenmisSiparisler = useMemo(() => {
-    return kuryeSiparisleri.filter(s => {
+    return kuryeSiparisleri.filter((s) => {
       const arama = aramaMetni.toLowerCase().trim();
-      const aramaUygun = !arama ||
+      const aramaUygun =
+        !arama ||
         s.musteri_adi.toLowerCase().includes(arama) ||
         (s.telefon_numarasi && s.telefon_numarasi.includes(arama)) ||
         (s.teslimat_adresi && s.teslimat_adresi.toLowerCase().includes(arama)) ||
@@ -126,12 +150,12 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
       lojistik_durumu: 'TESLIM_EDILDI',
       teslim_tarihi: new Date().toISOString(),
       teslim_eden_kisi: aktifKurye.ad_soyad,
-      finans_durumu: (borcAlindi || siparis.kalan_tutar <= 0) ? 'ODENDI' : siparis.finans_durumu,
+      finans_durumu: borcAlindi || siparis.kalan_tutar <= 0 ? 'ODENDI' : siparis.finans_durumu,
       alinan_tutar: borcAlindi ? siparis.toplam_tutar : siparis.alinan_tutar,
       kalan_tutar: borcAlindi ? 0 : siparis.kalan_tutar,
-      baku_tahsilat_notu: borcAlindi 
+      baku_tahsilat_notu: borcAlindi
         ? `${siparis.baku_tahsilat_notu || ''} [Kurye ${aktifKurye.ad_soyad} tarafından teslim edildi ve ${siparis.kalan_tutar} AZN tahsil edildi]`.trim()
-        : `${siparis.baku_tahsilat_notu || ''} [Kurye ${aktifKurye.ad_soyad} tarafından teslim edildi]`.trim()
+        : `${siparis.baku_tahsilat_notu || ''} [Kurye ${aktifKurye.ad_soyad} tarafından teslim edildi]`.trim(),
     };
 
     onSiparisGuncelle(yeniSiparis);
@@ -140,10 +164,14 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
   };
 
   // İstatistikler
-  const bekleyenSayisi = kuryeSiparisleri.filter(s => s.lojistik_durumu !== 'TESLIM_EDILDI').length;
-  const teslimEdilenSayisi = kuryeSiparisleri.filter(s => s.lojistik_durumu === 'TESLIM_EDILDI').length;
+  const bekleyenSayisi = kuryeSiparisleri.filter(
+    (s) => s.lojistik_durumu !== 'TESLIM_EDILDI'
+  ).length;
+  const teslimEdilenSayisi = kuryeSiparisleri.filter(
+    (s) => s.lojistik_durumu === 'TESLIM_EDILDI'
+  ).length;
   const toplanacakToplamBorc = kuryeSiparisleri
-    .filter(s => s.lojistik_durumu !== 'TESLIM_EDILDI')
+    .filter((s) => s.lojistik_durumu !== 'TESLIM_EDILDI')
     .reduce((acc, s) => acc + (s.kalan_tutar || 0), 0);
 
   return (
@@ -162,7 +190,9 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
-              <span>📍 Bölge: <strong>{aktifKurye.bolge}</strong></span>
+              <span>
+                📍 Bölge: <strong>{aktifKurye.bolge}</strong>
+              </span>
               <span>• 📞 {aktifKurye.telefon}</span>
             </p>
           </div>
@@ -173,29 +203,59 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
           {seciliFirmaAd && (
             <div className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-900 rounded-xl text-xs font-bold">
               <Store className="w-3.5 h-3.5 text-blue-600" />
-              <span>Butik: <strong>{seciliFirmaAd}</strong></span>
+              <span>
+                Butik: <strong>{seciliFirmaAd}</strong>
+              </span>
             </div>
           )}
 
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-400 hidden sm:inline">Kurye / Bölge:</span>
+            <span className="text-xs font-bold text-slate-400 hidden sm:inline">
+              Kurye / Bölge:
+            </span>
             <select
               value={seciliKuryeId}
               onChange={(e) => onKuryeDegistir(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-purple-500 focus:bg-white cursor-pointer"
             >
-              {BAKU_KURYELER.map(k => {
-                const kuryeBekleyenPaketSayisi = siparisler.filter(s => {
+              {BAKU_KURYELER.map((k) => {
+                const kuryeBekleyenPaketSayisi = siparisler.filter((s) => {
                   if (seciliFirmaId && seciliFirmaId !== 'all') {
-                    if ((s.tenant_id || 'kanada_shopper_baku') !== seciliFirmaId) return false;
+                    if (s.tenant_id !== seciliFirmaId) return false;
                   }
                   if (s.lojistik_durumu === 'TESLIM_EDILDI') return false;
                   if (s.baku_kurye_id === k.id) return true;
-                  const adres = `${s.teslimat_sehri || ''} ${s.teslimat_adresi || ''}`.toLowerCase();
-                  if (k.id === 'kurye-elvin' && (adres.includes('nərimanov') || adres.includes('gənclik') || adres.includes('təbriz'))) return true;
-                  if (k.id === 'kurye-resad' && (adres.includes('yasamal') || adres.includes('elmlər') || adres.includes('28 may') || adres.includes('içərişəhər'))) return true;
-                  if (k.id === 'kurye-vuqar' && (adres.includes('gəncə') || adres.includes('sumqayıt') || adres.includes('rayon'))) return true;
-                  if (k.id === 'ofis-tehvil' && (s.ozel_not?.toLowerCase().includes('sürücü') || s.ozel_not?.toLowerCase().includes('özü') || s.ham_mesaj?.toLowerCase().includes('özü'))) return true;
+                  const adres =
+                    `${s.teslimat_sehri || ''} ${s.teslimat_adresi || ''}`.toLowerCase();
+                  if (
+                    k.id === 'kurye-elvin' &&
+                    (adres.includes('nərimanov') ||
+                      adres.includes('gənclik') ||
+                      adres.includes('təbriz'))
+                  )
+                    return true;
+                  if (
+                    k.id === 'kurye-resad' &&
+                    (adres.includes('yasamal') ||
+                      adres.includes('elmlər') ||
+                      adres.includes('28 may') ||
+                      adres.includes('içərişəhər'))
+                  )
+                    return true;
+                  if (
+                    k.id === 'kurye-vuqar' &&
+                    (adres.includes('gəncə') ||
+                      adres.includes('sumqayıt') ||
+                      adres.includes('rayon'))
+                  )
+                    return true;
+                  if (
+                    k.id === 'ofis-tehvil' &&
+                    (s.ozel_not?.toLowerCase().includes('sürücü') ||
+                      s.ozel_not?.toLowerCase().includes('özü') ||
+                      s.ham_mesaj?.toLowerCase().includes('özü'))
+                  )
+                    return true;
                   return false;
                 }).length;
 
@@ -214,7 +274,9 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
                 className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer disabled:opacity-50"
                 title="Kurye bağlamalarını verilənlər bazasından yenilə"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${yenileniyor ? 'animate-spin text-purple-600' : 'text-slate-600'}`} />
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${yenileniyor ? 'animate-spin text-purple-600' : 'text-slate-600'}`}
+                />
               </button>
             )}
           </div>
@@ -231,12 +293,16 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
 
         <div className="bg-white p-4 rounded-xl border border-amber-100 shadow-2xs text-center">
           <div className="text-[11px] font-bold text-amber-700 uppercase">Toplanacak Para</div>
-          <div className="text-2xl font-black text-amber-800 mt-1">{toplanacakToplamBorc.toFixed(0)} AZN</div>
+          <div className="text-2xl font-black text-amber-800 mt-1">
+            {toplanacakToplamBorc.toFixed(0)} AZN
+          </div>
           <div className="text-[10px] text-amber-600 mt-0.5">Tahsilat Sorumluluğu</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-2xs text-center">
-          <div className="text-[11px] font-bold text-emerald-700 uppercase">Tamamlanan Teslimat</div>
+          <div className="text-[11px] font-bold text-emerald-700 uppercase">
+            Tamamlanan Teslimat
+          </div>
           <div className="text-2xl font-black text-emerald-700 mt-1">{teslimEdilenSayisi} Adet</div>
           <div className="text-[10px] text-emerald-600 mt-0.5">Başarıyla Verildi</div>
         </div>
@@ -246,7 +312,12 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
       {islemBildirimi && (
         <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in">
           <span>{islemBildirimi}</span>
-          <button onClick={() => setIslemBildirimi(null)} className="text-emerald-700 hover:text-emerald-900">✕</button>
+          <button
+            onClick={() => setIslemBildirimi(null)}
+            className="text-emerald-700 hover:text-emerald-900"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -268,7 +339,7 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
             { key: 'TESLIM_BEKLEYEN', label: '⏳ Dağıtım Bekleyen' },
             { key: 'TESLIM_EDILDI', label: '✅ Teslim Edilenler' },
             { key: 'HEPSI', label: 'Tümü' },
-          ].map(f => (
+          ].map((f) => (
             <button
               key={f.key}
               type="button"
@@ -323,17 +394,21 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
               <div
                 key={sip.id}
                 className={`bg-white rounded-2xl border transition-all p-4 space-y-3 shadow-xs ${
-                  teslimEdildi 
-                    ? 'border-emerald-200 bg-emerald-50/20 opacity-80' 
+                  teslimEdildi
+                    ? 'border-emerald-200 bg-emerald-50/20 opacity-80'
                     : 'border-slate-200 hover:border-purple-300'
                 }`}
               >
                 {/* Üst Satır: Müşteri Adı, Telefon, Durum */}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2.5">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
-                      teslimEdildi ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-100 text-purple-800'
-                    }`}>
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
+                        teslimEdildi
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-purple-100 text-purple-800'
+                      }`}
+                    >
                       {teslimEdildi ? '✓' : '📦'}
                     </div>
                     <div>
@@ -347,7 +422,9 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
                       </div>
                       <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
                         <Phone className="w-3 h-3 text-slate-400" />
-                        <span className="font-semibold text-slate-700">{sip.telefon_numarasi || 'Telefon yok'}</span>
+                        <span className="font-semibold text-slate-700">
+                          {sip.telefon_numarasi || 'Telefon yok'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -391,7 +468,8 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
                       <span>Ürün Bilgisi</span>
                     </div>
                     <div className="font-bold text-slate-800 truncate">
-                      {sip.urun_aciklamasi} ({sip.adet} Adet {sip.beden_veya_olcu ? `• ${sip.beden_veya_olcu}` : ''})
+                      {sip.urun_aciklamasi} ({sip.adet} Adet{' '}
+                      {sip.beden_veya_olcu ? `• ${sip.beden_veya_olcu}` : ''})
                     </div>
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-slate-500">Toplam: {sip.toplam_tutar} AZN</span>
@@ -473,7 +551,8 @@ export const KuryeTeslimatMasasi: React.FC<KuryeTeslimatMasasiProps> = ({
                     </div>
                   ) : (
                     <div className="text-[11px] text-slate-400 italic">
-                      {sip.teslim_tarihi && `Teslim zamanı: ${new Date(sip.teslim_tarihi).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`}
+                      {sip.teslim_tarihi &&
+                        `Teslim zamanı: ${new Date(sip.teslim_tarihi).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`}
                     </div>
                   )}
                 </div>

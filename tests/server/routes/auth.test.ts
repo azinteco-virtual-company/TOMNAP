@@ -1,7 +1,19 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../../src/server/index';
 import { firmalarVeritabani, kullanicilarVeritabani } from '../../../src/server/services/state';
+import { sifreHashle } from '../../../src/server/services/crypto';
+
+// Authentication behavior is tested independently of rate-window exhaustion.
+vi.mock('../../../src/server/middleware/rateLimiter', () => {
+  const pass = (_req: unknown, _res: unknown, next: () => void) => next();
+  return {
+    genelApiLimiter: pass,
+    girisLimiter: pass,
+    aiEndpointLimiter: pass,
+    veritabaniYonetimLimiter: pass,
+  };
+});
 
 describe('E-poçt ilə Aktivasiya və Şifrəli Giriş Sistemi (/api/auth & /api/firmalar)', () => {
   let app: any;
@@ -109,6 +121,7 @@ describe('E-poçt ilə Aktivasiya və Şifrəli Giriş Sistemi (/api/auth & /api
 
     expect(successRes.status).toBe(200);
     expect(successRes.body.basarili).toBe(true);
+    expect(successRes.headers['set-cookie']).toBeUndefined();
 
     // İstifadəçi statusu və şifrəsi yenilənməlidir
     const updatedUser = kullanicilarVeritabani.find((u) => u.email === uniqueEmail.toLowerCase());
@@ -149,22 +162,27 @@ describe('E-poçt ilə Aktivasiya və Şifrəli Giriş Sistemi (/api/auth & /api
     expect(okRes.body.basarili).toBe(true);
     expect(okRes.body.rol).toBe('PATRON');
     expect(okRes.body.kullanici.email).toBe(uniqueEmail);
+    expect(okRes.headers['set-cookie'][0]).toContain('HttpOnly');
+    expect(okRes.body.csrfToken).toMatch(/^[a-f0-9]{64}$/);
+    const restored = await request(app)
+      .get('/api/auth/oturum')
+      .set('Cookie', okRes.headers['set-cookie'][0].split(';')[0]);
+    expect(restored.status).toBe(200);
+    expect(restored.body.kullanici.email).toBe(uniqueEmail);
   });
 
-  it('Canlı demo (tomnap2026) və Super Admin (admin2026) toxunulmaz qalmalıdır', async () => {
-    // Admin girişi
-    const adminRes = await request(app)
-      .post('/api/auth/giris')
-      .send({ identifikator: 'admin2026', sifre: '' });
-    expect(adminRes.status).toBe(200);
-    expect(adminRes.body.rol).toBe('SUPER_ADMIN');
-
-    // Demo girişi
-    const demoRes = await request(app)
-      .post('/api/auth/giris')
-      .send({ identifikator: 'tomnap2026', sifre: '' });
-    expect(demoRes.status).toBe(200);
-    expect(demoRes.body.tenantId).toBe('demo_sandbox');
+  it('Köhnə demo və admin kodları artıq giriş imkanı verməməlidir', async () => {
+    for (const identifikator of ['admin2026', 'admin', 'tomnap2026', 'tomnap', 'demo']) {
+      const noPassword = await request(app)
+        .post('/api/auth/giris')
+        .send({ identifikator, sifre: '' });
+      expect(noPassword.status).toBe(400);
+      const suppliedPassword = await request(app)
+        .post('/api/auth/giris')
+        .send({ identifikator, sifre: 'admin2026' });
+      expect(suppliedPassword.status).toBe(404);
+      expect(suppliedPassword.headers['set-cookie']).toBeUndefined();
+    }
   });
 
   it('Komanda üzvü e-poçt ilə dəvət olunmalı və şifrə təyin edərək qoşulmalıdır', async () => {
@@ -172,13 +190,34 @@ describe('E-poçt ilə Aktivasiya və Şifrəli Giriş Sistemi (/api/auth & /api
     const firma = firmalarVeritabani[0];
     const employeeEmail = `kurye_${Date.now()}@courier.az`;
 
-    // 1. Dəvət göndər
-    const inviteRes = await request(app).post('/api/firmalar/davet-olustur').send({
-      tenantId: firma.id,
-      rol: 'BAKU_KURYE',
-      email: employeeEmail,
-      adSoyad: 'Cavid Həsənov',
+    // A real owner session authorizes the invitation and binds its tenant.
+    firma.onayDurumu = 'AKTIF';
+    const ownerPassword = 'Existing owner password!';
+    const ownerEmail = 'invite-owner@example.test';
+    kullanicilarVeritabani.push({
+      id: 'invite-owner',
+      tenant_id: firma.id,
+      ad_soyad: 'Owner',
+      email: ownerEmail,
+      rol: 'PATRON',
+      durum: 'AKTIF',
+      sifre_hash: sifreHashle(ownerPassword),
+      olusturma_tarihi: new Date().toISOString(),
     });
+    const ownerLogin = await request(app)
+      .post('/api/auth/giris')
+      .send({ email: ownerEmail, sifre: ownerPassword });
+    expect(ownerLogin.status).toBe(200);
+    const inviteRes = await request(app)
+      .post('/api/firmalar/davet-olustur')
+      .set('Cookie', ownerLogin.headers['set-cookie'][0].split(';')[0])
+      .set('x-csrf-token', ownerLogin.body.csrfToken)
+      .send({
+        tenantId: firma.id,
+        rol: 'BAKU_KURYE',
+        email: employeeEmail,
+        adSoyad: 'Cavid Həsənov',
+      });
 
     expect(inviteRes.status).toBe(200);
     expect(inviteRes.body.basarili).toBe(true);
@@ -195,6 +234,8 @@ describe('E-poçt ilə Aktivasiya və Şifrəli Giriş Sistemi (/api/auth & /api
 
     expect(joinRes.status).toBe(200);
     expect(joinRes.body.basarili).toBe(true);
+    expect(joinRes.headers['set-cookie']).toBeUndefined();
+    expect(joinRes.body.csrfToken).toBeUndefined();
 
     // 3. Kuryer öz e-poçtu və şifrəsi ilə daxil ola bilməlidir
     const courierLogin = await request(app).post('/api/auth/giris').send({

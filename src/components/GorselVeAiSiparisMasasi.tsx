@@ -1,28 +1,29 @@
+import { apiFetch } from '../lib/apiClient';
 import React, { useState, useEffect, useRef } from 'react';
 import { Siparis } from '../types';
-import { 
-  Camera, 
-  UploadCloud, 
-  Sparkles, 
-  Trash2, 
-  Check, 
-  AlertCircle, 
-  ArrowRight, 
-  Info, 
-  DollarSign, 
-  Tag, 
-  User, 
-  MapPin, 
-  Phone, 
-  CheckCircle2, 
-  MessageSquare, 
-  HelpCircle, 
-  Plus, 
-  Images, 
-  Package, 
+import {
+  Camera,
+  UploadCloud,
+  Sparkles,
+  Trash2,
+  Check,
+  AlertCircle,
+  ArrowRight,
+  Info,
+  DollarSign,
+  Tag,
+  User,
+  MapPin,
+  Phone,
+  CheckCircle2,
+  MessageSquare,
+  HelpCircle,
+  Plus,
+  Images,
+  Package,
   Layers,
   Loader2,
-  RefreshCw 
+  RefreshCw,
 } from 'lucide-react';
 import { uretKanadaTakipKodu, uretUluslararasiKargoKodu } from '../utils/pdfHelpers';
 
@@ -49,8 +50,10 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
 }) => {
   const [hamMetin, setHamMetin] = useState('');
   const [gorseller, setGorseller] = useState<YuklenenGorsel[]>([]);
-  const [siparisKaynagi, setSiparisKaynagi] = useState<'WHATSAPP' | 'INSTAGRAM_DM' | 'INSTAGRAM_LIVE' | 'INSTAGRAM_REELS'>('WHATSAPP');
-  
+  const [siparisKaynagi, setSiparisKaynagi] = useState<
+    'WHATSAPP' | 'INSTAGRAM_DM' | 'INSTAGRAM_LIVE' | 'INSTAGRAM_REELS'
+  >('WHATSAPP');
+
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [basari, setBasari] = useState(false);
@@ -85,7 +88,7 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
 
   // Görselleri HTML5 Canvas ile optimize edip listeye ekleme
   const dosyalariIsle = (files: FileList | File[], ozelAdPrefix?: string) => {
-    const fileArray: File[] = Array.from(files).filter(f => f.type.startsWith('image/'));
+    const fileArray: File[] = Array.from(files).filter((f) => f.type.startsWith('image/'));
 
     if (fileArray.length === 0) {
       setHata('Lütfen sadece fotoğraf veya ekran görüntüsü yükleyin (PNG, JPG, WebP).');
@@ -123,8 +126,8 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
             dataUrl = canvas.toDataURL('image/jpeg', 0.75);
           }
 
-          const dosyaAdi = ozelAdPrefix 
-            ? `${ozelAdPrefix}_${Date.now()}_${index + 1}.png` 
+          const dosyaAdi = ozelAdPrefix
+            ? `${ozelAdPrefix}_${Date.now()}_${index + 1}.png`
             : file.name;
 
           setGorseller((onceki) => [
@@ -185,19 +188,29 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
   // Örnek Hızlı Test Düğmeleri
   const ornekDoldur = (tip: 'konul_isaq' | 'kemale' | 'coklu_kemale' | 'tommy' | 'zara') => {
     if (tip === 'konul_isaq') {
-      setHamMetin('Könül İsaq\n0552843911\nBakıya çatanda xəbər edilsin sürücümüz özü gedib götürəcək\n\nNəcəf Nərimanov 97\nKarl Lagerfeld 125 azn');
+      setHamMetin(
+        'Könül İsaq\n0552843911\nBakıya çatanda xəbər edilsin sürücümüz özü gedib götürəcək\n\nNəcəf Nərimanov 97\nKarl Lagerfeld 125 azn'
+      );
       setSiparisKaynagi('WHATSAPP');
     } else if (tip === 'kemale') {
-      setHamMetin('Kemake xanım +994 50 694 25 25 Gence seheri Ozan kucesi. On Cloud ayagqabi 338 azn tam odenildi.');
+      setHamMetin(
+        'Kemake xanım +994 50 694 25 25 Gence seheri Ozan kucesi. On Cloud ayagqabi 338 azn tam odenildi.'
+      );
       setSiparisKaynagi('WHATSAPP');
     } else if (tip === 'coklu_kemale') {
-      setHamMetin('Kəmalə Bədirbəyli +994 50 694 25 25 Gəncə. 2 məhsul: 1 cüt On Cloud ağ ayaqqabı 338 AZN və 1 ədəd Michael Kors çanta 180 AZN. Ümumi 518 AZN tam ödənilib.');
+      setHamMetin(
+        'Kəmalə Bədirbəyli +994 50 694 25 25 Gəncə. 2 məhsul: 1 cüt On Cloud ağ ayaqqabı 338 AZN və 1 ədəd Michael Kors çanta 180 AZN. Ümumi 518 AZN tam ödənilib.'
+      );
       setSiparisKaynagi('WHATSAPP');
     } else if (tip === 'tommy') {
-      setHamMetin('Elmir Tommy Hilfiger köynək L razmer boz rəng, 80 manat beh atdı bibiyə. Qalan 40 manatı Bakıda təhvil verəndə ödəyəcək.');
+      setHamMetin(
+        'Elmir Tommy Hilfiger köynək L razmer boz rəng, 80 manat beh atdı bibiyə. Qalan 40 manatı Bakıda təhvil verəndə ödəyəcək.'
+      );
       setSiparisKaynagi('WHATSAPP');
     } else {
-      setHamMetin('Aytən xanım Zara qara dəri kurtka S razmer 180 AZN + Zara kəmər 45 AZN. Cəmi 225 AZN. Nərimanov m/s yaxınlığı.');
+      setHamMetin(
+        'Aytən xanım Zara qara dəri kurtka S razmer 180 AZN + Zara kəmər 45 AZN. Cəmi 225 AZN. Nərimanov m/s yaxınlığı.'
+      );
       setSiparisKaynagi('WHATSAPP');
     }
     setHata(null);
@@ -206,7 +219,9 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
   // Gemini AI ile Ayrıştır (Çoklu Görsel + Metin)
   const handleAiAyristir = async (otomatikKaydet: boolean = false) => {
     if (!hamMetin.trim() && gorseller.length === 0) {
-      setHata('Lütfen WhatsApp grubundaki metin notunu yazın veya en az bir ürün ekran görüntüsü / fotoğrafı yükleyin.');
+      setHata(
+        'Lütfen WhatsApp grubundaki metin notunu yazın veya en az bir ürün ekran görüntüsü / fotoğrafı yükleyin.'
+      );
       return;
     }
 
@@ -215,7 +230,7 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
     setBasari(false);
 
     try {
-      const response = await fetch('/api/ayristir-siparis', {
+      const response = await apiFetch('/api/ayristir-siparis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -229,15 +244,19 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
           gorsel_base64: gorseller[0]?.base64 || null,
           gorsel_mime_type: gorseller[0]?.mimeType || 'image/jpeg',
           otomatik_kaydet: otomatikKaydet,
-          tenant_id: seciliFirmaId && seciliFirmaId !== 'all' ? seciliFirmaId : 'kanada_shopper_baku',
+          tenant_id: seciliFirmaId && seciliFirmaId !== 'all' ? seciliFirmaId : undefined,
         }),
       });
 
       if (!response.ok) {
         if (response.status === 413) {
-          throw new Error('Yüklənən şəkillərin həcmi server limitini aşır (4.5MB). Zəhmət olmasa şəkilləri azaldın və ya bir-bir yükləyin.');
+          throw new Error(
+            'Yüklənən şəkillərin həcmi server limitini aşır (4.5MB). Zəhmət olmasa şəkilləri azaldın və ya bir-bir yükləyin.'
+          );
         } else if (response.status === 504) {
-          throw new Error('Süni intellekt analizi vaxt aşımına uğradı (Vercel Timeout). Zəhmət olmasa təkrar cəhd edin.');
+          throw new Error(
+            'Süni intellekt analizi vaxt aşımına uğradı (Vercel Timeout). Zəhmət olmasa təkrar cəhd edin.'
+          );
         } else if (response.status === 429) {
           throw new Error('Süni intellekt sorğu limiti aşılıb. Zəhmət olmasa bir qədər gözləyin.');
         }
@@ -248,7 +267,9 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
       try {
         data = JSON.parse(responseText);
       } catch (parseErr) {
-        throw new Error('Sunucu JSON yanıtı vermedi. Şəbəkə bağlantısını yoxlayın və ya təkrar cəhd edin.');
+        throw new Error(
+          'Sunucu JSON yanıtı vermedi. Şəbəkə bağlantısını yoxlayın və ya təkrar cəhd edin.'
+        );
       }
 
       if (!response.ok || !data.basarili) {
@@ -278,12 +299,14 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
     setYukleniyor(true);
     setHata(null);
     try {
-      const res = await fetch('/api/siparisler', {
+      const res = await apiFetch('/api/siparisler', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...ayristirilanTaslak,
-          tenant_id: ayristirilanTaslak.tenant_id || (seciliFirmaId && seciliFirmaId !== 'all' ? seciliFirmaId : 'kanada_shopper_baku'),
+          tenant_id:
+            ayristirilanTaslak.tenant_id ||
+            (seciliFirmaId && seciliFirmaId !== 'all' ? seciliFirmaId : undefined),
         }),
       });
       const text = await res.text();
@@ -302,7 +325,9 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
         setHamMetin('');
         tumGorselleriTemizle();
       } else {
-        throw new Error(data.hata || data.error || data.message || 'Veritabanına kayıt sırasında bir hata oluştu.');
+        throw new Error(
+          data.hata || data.error || data.message || 'Veritabanına kayıt sırasında bir hata oluştu.'
+        );
       }
     } catch (e: any) {
       setHata(e.message || 'Veritabanına kayıt sırasında bir hata oluştu.');
@@ -325,7 +350,14 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
               Birden Fazla Ekran Görüntüsü & Sohbet Notu ile Hızlı Giriş
             </h2>
             <p className="text-xs text-slate-300 mt-1.5 max-w-3xl leading-relaxed">
-              Tek bir müşterinin birden fazla siparişi varsa (Örn: ayakkabı + çanta) ya da ürün ekran görüntüsü ve ödeme dekontunu birlikte eklemek istiyorsanız, <strong>birden fazla görseli tek seferde yükleyebilir</strong> veya klavyenizden <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-amber-300 font-mono">Ctrl+V</kbd> ile ardı ardına yapıştırabilirsiniz. Google Gemini tüm görselleri tek seferde analiz eder.
+              Tek bir müşterinin birden fazla siparişi varsa (Örn: ayakkabı + çanta) ya da ürün
+              ekran görüntüsü ve ödeme dekontunu birlikte eklemek istiyorsanız,{' '}
+              <strong>birden fazla görseli tek seferde yükleyebilir</strong> veya klavyenizden{' '}
+              <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-amber-300 font-mono">
+                Ctrl+V
+              </kbd>{' '}
+              ile ardı ardına yapıştırabilirsiniz. Google Gemini tüm görselleri tek seferde analiz
+              eder.
             </p>
           </div>
 
@@ -349,8 +381,12 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-black text-xs flex items-center justify-center">1</span>
-                <h3 className="text-sm font-bold text-slate-900">Ürün Fotoğrafları & Ekran Görüntüleri</h3>
+                <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-black text-xs flex items-center justify-center">
+                  1
+                </span>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Ürün Fotoğrafları & Ekran Görüntüleri
+                </h3>
               </div>
               <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
                 Çoklu Seçim Desteklenir
@@ -382,7 +418,12 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                   Fotoğrafları veya Ekran Görüntülerini Buraya Sürükleyin ya da Tıklayın
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1 max-w-md mx-auto">
-                  Aynı anda <strong>birden fazla dosya</strong> seçebilirsiniz. WhatsApp'tan aldığınız ekran görüntülerini sırayla <kbd className="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold text-slate-700">Ctrl + V</kbd> ile ardı ardına yapıştırabilirsiniz!
+                  Aynı anda <strong>birden fazla dosya</strong> seçebilirsiniz. WhatsApp'tan
+                  aldığınız ekran görüntülerini sırayla{' '}
+                  <kbd className="px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold text-slate-700">
+                    Ctrl + V
+                  </kbd>{' '}
+                  ile ardı ardına yapıştırabilirsiniz!
                 </p>
                 <div className="mt-2.5 inline-flex items-center gap-2 text-[10px] text-emerald-700 bg-emerald-100/60 font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
                   <Images className="w-3 h-3" />
@@ -478,7 +519,9 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
             <div className="pt-2">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-black text-xs flex items-center justify-center">2</span>
+                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-black text-xs flex items-center justify-center">
+                    2
+                  </span>
                   <label htmlFor="ham-metin" className="text-sm font-bold text-slate-900">
                     WhatsApp Grubu Mesajı veya Müşteri Notu
                   </label>
@@ -561,7 +604,9 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
             {basari && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="font-bold">Sipariş başarıyla işlendi ve veritabanına eklendi!</span>
+                <span className="font-bold">
+                  Sipariş başarıyla işlendi ve veritabanına eklendi!
+                </span>
               </div>
             )}
 
@@ -581,7 +626,9 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 text-amber-400" />
-                    {gorseller.length > 1 ? `${gorseller.length} Görseli ve Notu Analiz Et` : 'Görselleri & Notu Analiz Et'}
+                    {gorseller.length > 1
+                      ? `${gorseller.length} Görseli ve Notu Analiz Et`
+                      : 'Görselleri & Notu Analiz Et'}
                   </>
                 )}
               </button>
@@ -609,7 +656,12 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
               </div>
               {ayristirilanTaslak && (
                 <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md text-[10px] font-extrabold">
-                  %{(ayristirilanTaslak.ai_guven_skoru ? ayristirilanTaslak.ai_guven_skoru * 100 : 96).toFixed(0)} Güven
+                  %
+                  {(ayristirilanTaslak.ai_guven_skoru
+                    ? ayristirilanTaslak.ai_guven_skoru * 100
+                    : 96
+                  ).toFixed(0)}{' '}
+                  Güven
                 </span>
               )}
             </div>
@@ -619,11 +671,12 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                 <div className="w-12 h-12 rounded-2xl bg-white shadow-xs border border-slate-200 text-slate-400 flex items-center justify-center mx-auto">
                   <MessageSquare className="w-6 h-6" />
                 </div>
-                <div className="text-xs font-bold text-slate-700">
-                  Henüz Bir Analiz Yapılmadı
-                </div>
+                <div className="text-xs font-bold text-slate-700">Henüz Bir Analiz Yapılmadı</div>
                 <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
-                  Sol taraftan ürün fotoğraflarını / ekran görüntülerini yükleyin (birden fazla ekleyebilirsiniz) ve notunuzu yazdıktan sonra <strong>"Analiz Et"</strong> butonuna basın. Tek bir müşteriye ait birden fazla ürün kalemi ve toplam tutar burada otomatik olarak listelenecektir.
+                  Sol taraftan ürün fotoğraflarını / ekran görüntülerini yükleyin (birden fazla
+                  ekleyebilirsiniz) ve notunuzu yazdıktan sonra <strong>"Analiz Et"</strong>{' '}
+                  butonuna basın. Tek bir müşteriye ait birden fazla ürün kalemi ve toplam tutar
+                  burada otomatik olarak listelenecektir.
                 </p>
               </div>
             ) : (
@@ -644,9 +697,13 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                 {/* Müşteri ve Ürün Başlığı */}
                 <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Müşteri</span>
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Müşteri
+                    </span>
                     <div className="text-right">
-                      <span className="text-xs font-extrabold text-slate-900 block">{ayristirilanTaslak.musteri_adi}</span>
+                      <span className="text-xs font-extrabold text-slate-900 block">
+                        {ayristirilanTaslak.musteri_adi}
+                      </span>
                       {ayristirilanTaslak.musteri_durumu === 'MEVCUT_MUSTERI' && (
                         <span className="inline-block mt-0.5 px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[9px] font-bold">
                           ✓ Kayıtlı Müşteri ({ayristirilanTaslak.musteri_tipi || 'SADIK_MUSTERI'})
@@ -657,30 +714,46 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
 
                   {ayristirilanTaslak.telefon_numarasi && (
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Telefon</span>
-                      <span className="font-semibold text-slate-800">{ayristirilanTaslak.telefon_numarasi}</span>
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        Telefon
+                      </span>
+                      <span className="font-semibold text-slate-800">
+                        {ayristirilanTaslak.telefon_numarasi}
+                      </span>
                     </div>
                   )}
 
                   {(ayristirilanTaslak.teslimat_sehri || ayristirilanTaslak.teslimat_adresi) && (
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Teslimat</span>
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        Teslimat
+                      </span>
                       <span className="font-semibold text-slate-800 text-right max-w-[200px] truncate">
-                        {ayristirilanTaslak.teslimat_sehri || 'Bakü'} {ayristirilanTaslak.teslimat_adresi ? `(${ayristirilanTaslak.teslimat_adresi})` : ''}
+                        {ayristirilanTaslak.teslimat_sehri || 'Bakü'}{' '}
+                        {ayristirilanTaslak.teslimat_adresi
+                          ? `(${ayristirilanTaslak.teslimat_adresi})`
+                          : ''}
                       </span>
                     </div>
                   )}
 
                   <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Genel Tanım</span>
-                    <span className="text-xs font-bold text-emerald-700 text-right max-w-[230px]">{ayristirilanTaslak.urun_aciklamasi}</span>
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Genel Tanım
+                    </span>
+                    <span className="text-xs font-bold text-emerald-700 text-right max-w-[230px]">
+                      {ayristirilanTaslak.urun_aciklamasi}
+                    </span>
                   </div>
 
                   {(!ayristirilanTaslak.urunler || ayristirilanTaslak.urunler.length <= 1) && (
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Beden / Renk</span>
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        Beden / Renk
+                      </span>
                       <span className="text-xs font-semibold text-slate-800">
-                        {ayristirilanTaslak.beden_veya_olcu || 'Standart'} • {ayristirilanTaslak.renk || 'Belirtilmedi'}
+                        {ayristirilanTaslak.beden_veya_olcu || 'Standart'} •{' '}
+                        {ayristirilanTaslak.renk || 'Belirtilmedi'}
                       </span>
                     </div>
                   )}
@@ -700,15 +773,20 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                     </div>
                     <div className="divide-y divide-emerald-100 text-xs">
                       {ayristirilanTaslak.urunler.map((u: any, idx: number) => {
-                        const gorsel = u.urun_gorseli || u.orijinal_gorsel_url || (Array.isArray(ayristirilanTaslak.gorsel_urlleri) ? ayristirilanTaslak.gorsel_urlleri[idx] : undefined);
+                        const gorsel =
+                          u.urun_gorseli ||
+                          u.orijinal_gorsel_url ||
+                          (Array.isArray(ayristirilanTaslak.gorsel_urlleri)
+                            ? ayristirilanTaslak.gorsel_urlleri[idx]
+                            : undefined);
                         return (
                           <div key={idx} className="py-2.5 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2.5 min-w-0">
                               {gorsel ? (
-                                <img 
-                                  src={gorsel} 
-                                  alt={u.urun_adi || u.urun_aciklamasi} 
-                                  className="w-11 h-11 object-contain rounded-lg border border-emerald-200 bg-white p-0.5 shrink-0 shadow-xs" 
+                                <img
+                                  src={gorsel}
+                                  alt={u.urun_adi || u.urun_aciklamasi}
+                                  className="w-11 h-11 object-contain rounded-lg border border-emerald-200 bg-white p-0.5 shrink-0 shadow-xs"
                                 />
                               ) : (
                                 <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
@@ -716,7 +794,9 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                                 </span>
                               )}
                               <div className="min-w-0 flex-1 space-y-1">
-                                <span className="font-bold text-slate-900 block truncate">{u.urun_adi || u.urun_aciklamasi}</span>
+                                <span className="font-bold text-slate-900 block truncate">
+                                  {u.urun_adi || u.urun_aciklamasi}
+                                </span>
                                 <div className="text-[10px] text-slate-500 flex flex-wrap items-center gap-1.5">
                                   <span>{u.adet} Adet</span>
                                   {u.beden_veya_olcu && <span>• Beden: {u.beden_veya_olcu}</span>}
@@ -744,7 +824,7 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                                 )}
                               </div>
                             </div>
-                            {(u.tutar || u.birim_fiyat) ? (
+                            {u.tutar || u.birim_fiyat ? (
                               <span className="font-extrabold text-emerald-800 text-xs shrink-0 bg-white px-2 py-1 rounded-md border border-emerald-100">
                                 {u.tutar || u.birim_fiyat} {ayristirilanTaslak.para_birimi || 'AZN'}
                               </span>
@@ -788,13 +868,18 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-bold text-slate-700">🇨🇦 Kanada Takip / Kod</span>
+                      <span className="text-[10px] font-bold text-slate-700">
+                        🇨🇦 Kanada Takip / Kod
+                      </span>
                       <button
                         type="button"
                         onClick={() =>
                           setAyristirilanTaslak({
                             ...ayristirilanTaslak,
-                            kanada_takip_kodu: uretKanadaTakipKodu(ayristirilanTaslak.urun_aciklamasi, 'TOR'),
+                            kanada_takip_kodu: uretKanadaTakipKodu(
+                              ayristirilanTaslak.urun_aciklamasi,
+                              'TOR'
+                            ),
                           })
                         }
                         className="text-[9px] font-bold text-rose-600 hover:text-rose-800 flex items-center gap-0.5 cursor-pointer"
@@ -819,7 +904,9 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-bold text-slate-700">✈️ Kargo Konşimento</span>
+                      <span className="text-[10px] font-bold text-slate-700">
+                        ✈️ Kargo Konşimento
+                      </span>
                       <button
                         type="button"
                         onClick={() =>
@@ -852,7 +939,9 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                 {/* Yüklenen Görsellerin Mini Şeridi */}
                 {gorseller.length > 0 && (
                   <div className="flex items-center gap-2 p-2 bg-slate-100 rounded-xl overflow-x-auto">
-                    <span className="text-[10px] font-bold text-slate-500 shrink-0 px-1">Görseller ({gorseller.length}):</span>
+                    <span className="text-[10px] font-bold text-slate-500 shrink-0 px-1">
+                      Görseller ({gorseller.length}):
+                    </span>
                     {gorseller.map((g, idx) => (
                       <img
                         key={g.id}
@@ -874,7 +963,9 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                     </div>
                   </div>
                   <div className="p-3 bg-emerald-50 rounded-xl text-center border border-emerald-100">
-                    <div className="text-[10px] font-bold text-emerald-700 uppercase">Alınan Beh</div>
+                    <div className="text-[10px] font-bold text-emerald-700 uppercase">
+                      Alınan Beh
+                    </div>
                     <div className="text-sm font-extrabold text-emerald-700 mt-0.5">
                       {ayristirilanTaslak.alinan_tutar} {ayristirilanTaslak.para_birimi || 'AZN'}
                     </div>
@@ -911,7 +1002,11 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                     className="w-full text-xs p-2.5 rounded-lg border border-amber-300 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 font-medium leading-relaxed"
                   />
                   <p className="text-[10px] text-amber-800 leading-tight">
-                    💡 <em>AI müşteri mesajından veya gruptan özel sürücü, kargo istememe veya hediye talimatlarını otomatik çeker. İsterseniz buradan düzenleyebilirsiniz.</em>
+                    💡{' '}
+                    <em>
+                      AI müşteri mesajından veya gruptan özel sürücü, kargo istememe veya hediye
+                      talimatlarını otomatik çeker. İsterseniz buradan düzenleyebilirsiniz.
+                    </em>
                   </p>
                 </div>
 
@@ -923,12 +1018,13 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                 )}
 
                 {/* Eksik Bilgi Uyarısı */}
-                {ayristirilanTaslak.eksik_bilgiler && ayristirilanTaslak.eksik_bilgiler.length > 0 && (
-                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 flex items-center gap-2">
-                    <Info className="w-3.5 h-3.5 shrink-0" />
-                    <span>Eksik Bilgiler: {ayristirilanTaslak.eksik_bilgiler.join(', ')}</span>
-                  </div>
-                )}
+                {ayristirilanTaslak.eksik_bilgiler &&
+                  ayristirilanTaslak.eksik_bilgiler.length > 0 && (
+                    <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 flex items-center gap-2">
+                      <Info className="w-3.5 h-3.5 shrink-0" />
+                      <span>Eksik Bilgiler: {ayristirilanTaslak.eksik_bilgiler.join(', ')}</span>
+                    </div>
+                  )}
 
                 {/* Hata Bildirimi (Taslak Altı) */}
                 {hata && (
@@ -968,10 +1064,23 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
               Çoklu Ekran Görüntüsü & Müşteri İpuçları
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              • <strong>Aynı Anda Birden Fazla Seçim:</strong> Dosya seçici açıldığında <kbd className="px-1 py-0.2 bg-slate-800 border border-slate-700 rounded text-slate-300">Ctrl</kbd> veya <kbd className="px-1 py-0.2 bg-slate-800 border border-slate-700 rounded text-slate-300">Shift</kbd> tuşuna basılı tutarak tüm ekran görüntülerini birden seçebilirsiniz.
+              • <strong>Aynı Anda Birden Fazla Seçim:</strong> Dosya seçici açıldığında{' '}
+              <kbd className="px-1 py-0.2 bg-slate-800 border border-slate-700 rounded text-slate-300">
+                Ctrl
+              </kbd>{' '}
+              veya{' '}
+              <kbd className="px-1 py-0.2 bg-slate-800 border border-slate-700 rounded text-slate-300">
+                Shift
+              </kbd>{' '}
+              tuşuna basılı tutarak tüm ekran görüntülerini birden seçebilirsiniz.
             </p>
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              • <strong>Ardı Ardına Yapıştırma:</strong> WhatsApp'tan bir ayakkabı ekran görüntüsü kopyalayıp <kbd className="px-1 py-0.2 bg-slate-800 border border-slate-700 rounded text-slate-300">Ctrl+V</kbd> yapın, ardından çantayı kopyalayıp tekrar yapıştırın. Hepsi galeriye eklenir.
+              • <strong>Ardı Ardına Yapıştırma:</strong> WhatsApp'tan bir ayakkabı ekran görüntüsü
+              kopyalayıp{' '}
+              <kbd className="px-1 py-0.2 bg-slate-800 border border-slate-700 rounded text-slate-300">
+                Ctrl+V
+              </kbd>{' '}
+              yapın, ardından çantayı kopyalayıp tekrar yapıştırın. Hepsi galeriye eklenir.
             </p>
           </div>
         </div>

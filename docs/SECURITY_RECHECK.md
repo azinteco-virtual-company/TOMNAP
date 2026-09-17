@@ -1,3 +1,5 @@
+> 17 Eylül 2026 devam paketi: oturum/yetki değişiklikleri ve güncel durum [SESSION_SECURITY.md](SESSION_SECURITY.md) içinde. Aşağıdaki Faz 1 sonuçları tarihsel inceleme kaydıdır.
+
 # TOMNAP — İkinci inceleme ve iyileştirme planı
 
 Tarih: 17 Eylül 2026. İnceleme temeli: `90b8eaed6419b4f982c1e1fdd608e85144553026`.

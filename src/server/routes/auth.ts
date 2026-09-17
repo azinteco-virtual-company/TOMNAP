@@ -10,6 +10,7 @@ import { davetlerVeritabani } from './firmalar';
 import { sifreHashle, sifreDogrula } from '../services/crypto';
 import { supabase } from '../services/supabase';
 import { DavetKaydi, KullaniciKaydi } from '../types';
+import { createSession, readSession, revokeSession } from '../services/sessions';
 
 const router = Router();
 
@@ -368,207 +369,138 @@ router.post(['/auth/sifre-belirle', '/firmalar/davet/katil'], async (req, res) =
   }
 });
 
-// POST /api/auth/giris — İdentifikator (E-poçt / Telefon) və Şifrə ilə Giriş
+// Login identifiers are exact emails or full phone numbers. Neither names nor
+// boutique labels are authentication identities, and SQL wildcard syntax is not
+// accepted as an identifier pattern.
+function normalizePhone(value: string): string {
+  if (!/^[+\d\s().-]+$/.test(value)) return '';
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 15 ? digits : '';
+}
+
+async function findLoginUser(identifier: string): Promise<KullaniciKaydi | undefined> {
+  const email = identifier.toLowerCase();
+  const phone = normalizePhone(identifier);
+  const emailMatches = (user: KullaniciKaydi) => user.email?.toLowerCase() === email;
+  const phoneMatches = (user: KullaniciKaydi) =>
+    !!phone && normalizePhone(user.telefon || '') === phone;
+  if (!supabase) {
+    const matches = kullanicilarVeritabani.filter(
+      (user) => emailMatches(user) || phoneMatches(user)
+    );
+    // Ambiguous identifiers cannot select whichever account happens to be first.
+    return matches.length === 1 ? { ...matches[0] } : undefined;
+  }
+  if (email.includes('@') && email.length <= 254) {
+    const escapedEmail = email.replace(/[\\%_]/g, (character) => `\\${character}`);
+    const { data, error } = await supabase
+      .from('kullanicilar')
+      .select('*')
+      .ilike('email', escapedEmail)
+      .maybeSingle();
+    if (error) throw error;
+    return data && emailMatches(data) ? data : undefined;
+  }
+  if (phone) {
+    // Digits-only patterns support legacy formatted phone values; the final
+    // normalized equality check prevents partial-number authentication.
+    const pattern = `%${phone.split('').join('%')}%`;
+    const { data, error } = await supabase
+      .from('kullanicilar')
+      .select('*')
+      .ilike('telefon', pattern);
+    if (error) throw error;
+    const matches = (data || []).filter(phoneMatches);
+    return matches.length === 1 ? matches[0] : undefined;
+  }
+  return undefined;
+}
+
 router.post(['/auth/giris', '/firmalar/giris'], async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   try {
     const { identifikator, email, kullaniciAdi, telefon, kod, sifre } = req.body || {};
-    const girisMetni = String(
-      identifikator || email || kullaniciAdi || telefon || kod || ''
-    ).trim();
-    const sifreMetni = typeof sifre === 'string' ? sifre : '';
-
-    if (!girisMetni) {
-      return res.status(400).json({
+    const identifier = identifikator || email || kullaniciAdi || telefon || kod;
+    if (typeof identifier !== 'string' || !identifier.trim() || identifier.length > 254) {
+      return res
+        .status(400)
+        .json({ basarili: false, hata: 'E-poçt ünvanınızı və ya telefon nömrənizi daxil edin.' });
+    }
+    if (typeof sifre !== 'string' || !sifre || sifre.length > 1024) {
+      return res.status(400).json({ basarili: false, hata: 'Zəhmət olmasa şifrənizi daxil edin.' });
+    }
+    const user = await findLoginUser(identifier.trim());
+    if (!user) {
+      return res
+        .status(404)
+        .json({ basarili: false, hata: 'Bu məlumatlara uyğun aktiv istifadəçi tapılmadı.' });
+    }
+    if (user.durum !== 'AKTIF') {
+      return res.status(403).json({
         basarili: false,
-        hata: 'Zəhmət olmasa e-poçt ünvanınızı və ya telefon nömrənizi daxil edin.',
+        hata:
+          user.durum === 'BEKLEMEDE_SIFRE'
+            ? 'Hesabınız hələ aktivləşdirilməyib. E-poçt ünvanınıza göndərilən linkdən şifrənizi təyin edin.'
+            : 'Hesabınız aktiv deyil.',
       });
     }
-
-    const lower = girisMetni.toLowerCase();
-
-    // 1. Super Admin Girişi (Kod və ya Parol ilə)
-    if (lower === 'admin2026' || (lower === 'admin' && sifreMetni === 'admin2026')) {
-      return res.json({
-        basarili: true,
-        tip: 'super_admin',
-        rol: 'SUPER_ADMIN',
-        tenantId: 'all',
-        mesaj: 'Səlahiyyətli Super Admin girişi təsdiqləndi.',
-      });
+    if (!user.sifre_hash || !sifreDogrula(sifre, user.sifre_hash)) {
+      return res.status(401).json({ basarili: false, hata: 'Daxil edilmiş şifrə yanlışdır.' });
     }
-
-    // 2. Canlı Təqdimat Demo Girişi (Toxunulmaz)
-    if (
-      lower === 'tomnap2026' ||
-      lower === 'tomnap' ||
-      (lower === 'demo' && sifreMetni === 'tomnap2026')
-    ) {
-      return res.json({
-        basarili: true,
-        tip: 'demo',
-        rol: 'SUPER_ADMIN',
-        tenantId: 'demo_sandbox',
-        mesaj: 'Canlı Sandbox Demo Mühitinə keçid edildi.',
-      });
-    }
-
-    // Normal istifadəçi üçün şifrə mütləqdir
-    if (!sifreMetni) {
-      return res.status(400).json({
-        basarili: false,
-        hata: 'Zəhmət olmasa şifrənizi daxil edin.',
-      });
-    }
-
-    const reqDigits = girisMetni.replace(/[^0-9]/g, '');
-
-    // 3. İstifadəçilər bazasında axtarış (Email və ya Telefon)
-    let tapilanKullanici: KullaniciKaydi | undefined = supabase
-      ? undefined
-      : kullanicilarVeritabani.find((u) => {
-          const emailMatch = u.email && u.email.toLowerCase() === lower;
-          const uDigits = String(u.telefon || '').replace(/[^0-9]/g, '');
-          const phoneMatch =
-            reqDigits.length >= 7 &&
-            uDigits.length >= 7 &&
-            (reqDigits.endsWith(uDigits.slice(-7)) || uDigits.endsWith(reqDigits.slice(-7)));
-
-          return emailMatch || phoneMatch;
-        });
-
-    // Supabase varsa etibarlı axtarış (Email, Telefon və ya Butik adı)
-    if (!tapilanKullanici && supabase) {
-      try {
-        let sbUser: any = null;
-
-        // A. Email ilə axtarış
-        if (lower.includes('@')) {
-          const { data, error } = await supabase
-            .from('kullanicilar')
-            .select('*')
-            .ilike('email', lower)
-            .maybeSingle();
-          if (error) throw error;
-          if (data) sbUser = data;
-        }
-
-        // B. Telefon ilə axtarış
-        if (!sbUser && reqDigits.length >= 7) {
-          const { data, error } = await supabase
-            .from('kullanicilar')
-            .select('*')
-            .ilike('telefon', `%${reqDigits.slice(-7)}%`)
-            .maybeSingle();
-          if (error) throw error;
-          if (data) sbUser = data;
-        }
-
-        // C. Ad Soyad ilə axtarış
-        if (!sbUser) {
-          const { data, error } = await supabase
-            .from('kullanicilar')
-            .select('*')
-            .ilike('ad_soyad', lower)
-            .maybeSingle();
-          if (error) throw error;
-          if (data) sbUser = data;
-        }
-
-        // D. Butik Adı ilə axtarış (İstifadəçi butik adını yazıbsa, həmin butikin PATRON istifadəçisini tap)
-        if (!sbUser) {
-          const { data: matchedFirma, error: firmaError } = await supabase
-            .from('firmalar')
-            .select('id')
-            .or(`ad.ilike.%${girisMetni}%,sahip_email.ilike.%${lower}%`)
-            .limit(1)
-            .maybeSingle();
-
-          if (firmaError) throw firmaError;
-          if (matchedFirma) {
-            const { data: patronUser, error: patronError } = await supabase
-              .from('kullanicilar')
-              .select('*')
-              .eq('tenant_id', matchedFirma.id)
-              .eq('rol', 'PATRON')
-              .maybeSingle();
-            if (patronError) throw patronError;
-            if (patronUser) sbUser = patronUser;
-          }
-        }
-
-        if (sbUser) {
-          tapilanKullanici = {
-            id: sbUser.id,
-            tenant_id: sbUser.tenant_id,
-            ad_soyad: sbUser.ad_soyad,
-            email: sbUser.email,
-            telefon: sbUser.telefon,
-            rol: sbUser.rol,
-            sifre_hash: sbUser.sifre_hash,
-            durum: sbUser.durum,
-            aktivasyon_token: sbUser.aktivasyon_token,
-            token_gecerlilik: sbUser.token_gecerlilik,
-            olusturma_tarihi: sbUser.olusturma_tarihi,
-          };
-        }
-      } catch {
-        return res.status(503).json({
-          basarili: false,
-          hata: 'Giriş hazırda yoxlanıla bilmir. Daha sonra yenidən cəhd edin.',
-        });
-      }
-    }
-
-    // Əgər istifadəçi tapıldısa
-    if (tapilanKullanici) {
-      // Aktivasiya gözləyirsə
-      if (tapilanKullanici.durum !== 'AKTIF') {
-        return res.status(403).json({
-          basarili: false,
-          hata:
-            tapilanKullanici.durum === 'BEKLEMEDE_SIFRE'
-              ? 'Hesabınız hələ aktivləşdirilməyib. Zəhmət olmasa e-poçt ünvanınıza göndərilən təhlükəsiz linkə keçid edərək şifrənizi təyin edin.'
-              : 'Hesabınız aktiv deyil.',
-        });
-      }
-
-      // Şifrə yoxlanışı
-      if (!tapilanKullanici.sifre_hash || !sifreDogrula(sifreMetni, tapilanKullanici.sifre_hash)) {
-        return res.status(401).json({
-          basarili: false,
-          hata: 'Daxil edilmiş şifrə yanlışdır. Zəhmət olmasa yenidən cəhd edin.',
-        });
-      }
-
-      const firma = await findFirma(tapilanKullanici.tenant_id);
-
-      return res.json({
-        basarili: true,
-        tip: 'butik',
-        rol: tapilanKullanici.rol,
-        tenantId: tapilanKullanici.tenant_id,
-        kullanici: {
-          id: tapilanKullanici.id,
-          adSoyad: tapilanKullanici.ad_soyad,
-          email: tapilanKullanici.email,
-          telefon: tapilanKullanici.telefon,
-          rol: tapilanKullanici.rol,
-          tenantId: tapilanKullanici.tenant_id,
-        },
-        firma,
-        mesaj: `Xoş gəldiniz, ${tapilanKullanici.ad_soyad}!`,
-      });
-    }
-
-    return res.status(404).json({
-      basarili: false,
-      hata: 'Bu məlumatlara uyğun aktiv istifadəçi və ya butik tapılmadı. Zəhmət olmasa e-poçt / nömrənizi yoxlayın və ya qeydiyyatdan keçin.',
+    const firma = user.rol === 'SUPER_ADMIN' ? undefined : await findFirma(user.tenant_id);
+    const session = await createSession(user, res);
+    const tenantId = user.rol === 'SUPER_ADMIN' ? 'all' : user.tenant_id;
+    return res.json({
+      basarili: true,
+      tip: user.rol === 'SUPER_ADMIN' ? 'super_admin' : 'butik',
+      rol: user.rol,
+      tenantId,
+      kullanici: {
+        id: user.id,
+        adSoyad: user.ad_soyad,
+        email: user.email,
+        telefon: user.telefon,
+        rol: user.rol,
+        tenantId,
+      },
+      firma,
+      ...session,
+      mesaj: `Xoş gəldiniz, ${user.ad_soyad}!`,
     });
   } catch {
-    res.status(503).json({
+    return res.status(503).json({
       basarili: false,
       hata: 'Giriş hazırda yoxlanıla bilmir. Daha sonra yenidən cəhd edin.',
     });
+  }
+});
+
+router.get('/auth/oturum', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const session = req.auth || (await readSession(req));
+    if (!session) return res.status(401).json({ basarili: false, hata: 'Giriş tələb olunur.' });
+    return res.json({
+      basarili: true,
+      kullanici: session.kullanici,
+      csrfToken: session.csrfToken,
+      expiresAt: session.expiresAt,
+    });
+  } catch {
+    return res.status(503).json({ basarili: false, hata: 'Oturum hazırda yoxlanıla bilmir.' });
+  }
+});
+
+// The application authentication middleware requires an active session and its
+// CSRF token before this state-changing endpoint can be reached.
+router.post('/auth/cikis', async (req, res) => {
+  try {
+    await revokeSession(req, res);
+    return res.json({ basarili: true });
+  } catch {
+    return res
+      .status(503)
+      .json({ basarili: false, hata: 'Oturum ləğv edilə bilmədi. Yenidən cəhd edin.' });
   }
 });
 

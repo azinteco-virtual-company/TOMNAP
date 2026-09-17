@@ -7,6 +7,7 @@ import { PORT, UPLOADS_DIR } from './config';
 import { apiKeyAuth } from './middleware/auth';
 import {
   genelApiLimiter,
+  girisLimiter,
   aiEndpointLimiter,
   veritabaniYonetimLimiter,
 } from './middleware/rateLimiter';
@@ -35,7 +36,7 @@ export function createApp() {
   app.use(
     helmet({
       contentSecurityPolicy: false, // SPA için CSP'yi devre dışı bırak (Vite dev server uyumu)
-      crossOriginResourcePolicy: { policy: 'cross-origin' }, // Görsel servisi için
+      crossOriginResourcePolicy: { policy: 'same-origin' }, // Görsel servisi için
       crossOriginEmbedderPolicy: false,
     })
   );
@@ -56,8 +57,19 @@ export function createApp() {
   app.use(express.json({ limit: '25mb' }));
   app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-  // 4. API Key Kimlik Doğrulama (tüm /api/* route'larına uygulanır)
+  // Limit anonymous authentication attempts before password hashing.
+  app.use(
+    [
+      '/api/auth/giris',
+      '/api/firmalar/giris',
+      '/api/auth/sifre-belirle',
+      '/api/firmalar/davet/katil',
+      '/api/firmalar/kayit',
+    ],
+    girisLimiter
+  );
   app.use(apiKeyAuth());
+  app.get(['/health', '/api/health'], (_req, res) => res.json({ basarili: true }));
 
   // 5. Genel API Rate Limiter (150 istek / 15 dk)
   app.use('/api/', genelApiLimiter);
@@ -81,12 +93,6 @@ export function createApp() {
   } catch {
     // Read-only filesystem (məs. Vercel Lambda /var/task)
   }
-
-  // Görseller için ek CORS başlıkları (Helmet'ın üzerine)
-  app.use('/uploads', (req, res, next) => {
-    res.header('Cross-Origin-Resource-Policy', 'cross-origin');
-    next();
-  });
 
   // Uploads ve Görsel Servisi
   app.get('/uploads/:dosyaAdi', serveUploadedImage);

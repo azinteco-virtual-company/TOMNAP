@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto';
 import { Router, Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -129,9 +130,68 @@ function uploadPath(dosyaAdi: string): string {
   return candidate;
 }
 
+function imagePrefix(tenantId: string) {
+  return `t_${createHash('sha256').update(tenantId).digest('hex').slice(0, 24)}_`;
+}
+
+function ownedUploadPath(req: Request, name: string): string {
+  if (!req.auth || !req.tenantId) throw new PublicResourceError('Oturum gerekli.', 401);
+  const candidate = uploadPath(name);
+  if (
+    !/^t_[a-f0-9]{24}_[a-f0-9]{32}\.(png|jpg|webp)$/.test(name) ||
+    (!(req.auth.role === 'SUPER_ADMIN' && req.tenantId === 'all') &&
+      !name.startsWith(imagePrefix(req.tenantId)))
+  ) {
+    throw new PublicResourceError('Görsel bulunamadı.', 404);
+  }
+  return candidate;
+}
+
+export function storeTenantImage(req: Request, base64: string, declaredMime?: string) {
+  if (!req.auth || !req.tenantId || req.tenantId === 'all')
+    throw new PublicResourceError('Görsel için bir firma seçin.', 403);
+  if (typeof base64 !== 'string') throw new PublicResourceError('Geçersiz görsel.', 400);
+  const parsed = decodeImage(base64, declaredMime);
+  const name = `${imagePrefix(req.tenantId)}${randomBytes(16).toString('hex')}.${parsed.ext}`;
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(uploadPath(name), parsed.buffer, { flag: 'wx', mode: 0o600 });
+  return {
+    url: `/uploads/${name}`,
+    mimeType: parsed.mimeType,
+    base64: parsed.buffer.toString('base64'),
+  };
+}
+
+// Check references in products, image arrays and serialized META notes alike.
+// Unowned legacy files must be migrated explicitly; guessing ownership leaks data.
+export async function assertTenantImageReferences(req: Request, payload: unknown): Promise<void> {
+  const pending: unknown[] = [payload];
+  let count = 0;
+  while (pending.length) {
+    if (++count > 100000) throw new PublicResourceError('İstek çok karmaşık.', 413);
+    const value = pending.pop();
+    if (value && typeof value === 'object') pending.push(...Object.values(value));
+    if (typeof value !== 'string') continue;
+    const normalized = value.replace(/\\\//g, '/');
+    for (const match of normalized.matchAll(/(?:\/api)?\/uploads\/([^\s"'<>?#\\]+)/g)) {
+      let name: string;
+      try {
+        name = decodeURIComponent(match[1]);
+      } catch {
+        throw new PublicResourceError('Geçersiz görsel.', 400);
+      }
+      const file = ownedUploadPath(req, name);
+      if (!fs.existsSync(file) || !fs.statSync(file).isFile())
+        throw new PublicResourceError('Görsel bulunamadı.', 404);
+    }
+  }
+}
+
 export function serveUploadedImage(req: Request, res: Response) {
   try {
-    const file = uploadPath(req.params.dosyaAdi);
+    const file = ownedUploadPath(req, req.params.dosyaAdi);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.vary('Cookie');
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
       return res.status(404).send('Görsel bulunamadı.');
     }
@@ -153,10 +213,8 @@ router.post('/upload-gorsel', (req, res) => {
       return res.status(400).json({ basarili: false, hata: 'Geçersiz görsel verisi' });
     }
 
-    const image = decodeImage(base64, mimeType);
-    const benzersizAd = `urun_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${image.ext}`;
-    const dosyaYolu = path.join(UPLOADS_DIR, benzersizAd);
-    fs.writeFileSync(dosyaYolu, image.buffer);
+    const stored = storeTenantImage(req, base64, mimeType);
+    const benzersizAd = path.basename(stored.url);
 
     res.json({
       basarili: true,
@@ -199,7 +257,7 @@ router.get('/proxy-gorsel', async (req, res) => {
 
     const image = inspectImage(Buffer.from(await resp.arrayBuffer()), contentType.split(';')[0]);
     res.setHeader('Content-Type', image.mimeType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Cache-Control', 'private, no-store');
     res.send(image.buffer);
   } catch (err: any) {
     res
@@ -308,6 +366,7 @@ Yanıtını YALNIZCA aşağıdaki JSON formatında döndür (başka açıklama e
 router.post('/gorselden-urun-ara', async (req, res) => {
   try {
     const { gorsel, mevcut_urun_adi, ek_ipucu } = req.body;
+    await assertTenantImageReferences(req, gorsel);
     if (!gorsel || typeof gorsel !== 'string') {
       return res.status(400).json({ basarili: false, hata: 'Aranacak görsel verisi bulunamadı.' });
     }
@@ -327,7 +386,7 @@ router.post('/gorselden-urun-ara', async (req, res) => {
       base64Data = image.buffer.toString('base64');
     } else if (gorsel.startsWith('/uploads/')) {
       const dosyaAdi = gorsel.replace('/uploads/', '');
-      const dosyaYolu = uploadPath(dosyaAdi);
+      const dosyaYolu = ownedUploadPath(req, dosyaAdi);
       if (fs.existsSync(dosyaYolu)) {
         const stat = fs.statSync(dosyaYolu);
         if (!stat.isFile()) throw new PublicResourceError('Geçersiz görsel dosyası.');
@@ -513,12 +572,10 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
     const { siparis_id, urun_indeksi, katalog_gorsel_url, urun_sayfasi_url, resmi_urun_adi } =
       req.body;
     if (!siparis_id || urun_indeksi === undefined || !katalog_gorsel_url) {
-      return res
-        .status(400)
-        .json({
-          basarili: false,
-          hata: 'siparis_id, urun_indeksi ve katalog_gorsel_url gereklidir.',
-        });
+      return res.status(400).json({
+        basarili: false,
+        hata: 'siparis_id, urun_indeksi ve katalog_gorsel_url gereklidir.',
+      });
     }
 
     // SSRF Koruması: Dış URL verilmişse veritabanına sorgu atmadan önce doğrula
@@ -535,20 +592,34 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
       }
     }
 
+    if (!req.tenantId || req.tenantId === 'all')
+      return res.status(403).json({ basarili: false, hata: 'Firma seçin.' });
+    if (!Number.isInteger(urun_indeksi) || urun_indeksi < 0)
+      return res.status(400).json({ basarili: false, hata: 'Geçersiz ürün indeksi.' });
     let mevcutSiparis: any = null;
     if (supabase) {
-      const { data } = await supabase.from('siparisler').select('*').eq('id', siparis_id).single();
-      if (data) mevcutSiparis = data;
-    }
-    if (!mevcutSiparis) {
-      mevcutSiparis = siparislerVeritabani.find((s) => s.id === siparis_id);
+      const { data, error } = await supabase
+        .from('siparisler')
+        .select('*')
+        .eq('id', siparis_id)
+        .eq('tenant_id', req.tenantId)
+        .maybeSingle();
+      if (error)
+        return res.status(503).json({ basarili: false, hata: 'Veritabanı kullanılamıyor.' });
+      mevcutSiparis = data;
+    } else {
+      mevcutSiparis = siparislerVeritabani.find(
+        (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+      );
     }
 
     if (!mevcutSiparis) {
       return res.status(404).json({ basarili: false, hata: 'Sipariş bulunamadı.' });
     }
 
+    await assertTenantImageReferences(req, req.body);
     const formatli = formatlaSiparis(mevcutSiparis);
+    await assertTenantImageReferences(req, formatli);
     const guncelUrunler = [...(formatli.urunler || [])];
 
     if (!guncelUrunler[urun_indeksi]) {
@@ -573,11 +644,7 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
     }
 
     if (kaydedilecekGorselUrl.startsWith('data:image/')) {
-      const image = decodeImage(kaydedilecekGorselUrl);
-      const dosyaAdi = `kirpinti_${Date.now()}_${urun_indeksi}.${image.ext}`;
-      const dosyaYolu = path.join(UPLOADS_DIR, dosyaAdi);
-      fs.writeFileSync(dosyaYolu, image.buffer);
-      kaydedilecekGorselUrl = `/uploads/${dosyaAdi}`;
+      kaydedilecekGorselUrl = storeTenantImage(req, kaydedilecekGorselUrl).url;
     } else if (
       kaydedilecekGorselUrl.startsWith('http://') ||
       kaydedilecekGorselUrl.startsWith('https://')
@@ -603,10 +670,11 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
         if (response.ok && contentType.startsWith('image/')) {
           const arrayBuffer = await response.arrayBuffer();
           const image = inspectImage(Buffer.from(arrayBuffer), contentType.split(';')[0]);
-          const dosyaAdi = `katalog_${Date.now()}_${urun_indeksi}.${image.ext}`;
-          const dosyaYolu = path.join(UPLOADS_DIR, dosyaAdi);
-          fs.writeFileSync(dosyaYolu, image.buffer);
-          kaydedilecekGorselUrl = `/uploads/${dosyaAdi}`;
+          kaydedilecekGorselUrl = storeTenantImage(
+            req,
+            image.buffer.toString('base64'),
+            image.mimeType
+          ).url;
         }
       } catch (fetchErr) {
         if (fetchErr instanceof PublicResourceError) {
@@ -635,9 +703,11 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
         .from('siparisler')
         .update(sbPayload)
         .eq('id', siparis_id)
+        .eq('tenant_id', req.tenantId)
         .select()
         .single();
-      if (error) console.error('Supabase katalog görseli güncelleme hatası:', error.message);
+      if (error || !data)
+        return res.status(503).json({ basarili: false, hata: 'Görsel değişikliği kaydedilemedi.' });
       if (data) {
         return res.json({
           basarili: true,
@@ -647,7 +717,9 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
       }
     }
 
-    const idx = siparislerVeritabani.findIndex((s) => s.id === siparis_id);
+    const idx = siparislerVeritabani.findIndex(
+      (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+    );
     if (idx !== -1) {
       siparislerVeritabani[idx].urunler = guncelUrunler;
     }
@@ -675,20 +747,34 @@ router.post('/urun-orijinal-gorsele-don', async (req, res) => {
         .json({ basarili: false, hata: 'siparis_id ve urun_indeksi gereklidir.' });
     }
 
+    if (!req.tenantId || req.tenantId === 'all')
+      return res.status(403).json({ basarili: false, hata: 'Firma seçin.' });
+    if (!Number.isInteger(urun_indeksi) || urun_indeksi < 0)
+      return res.status(400).json({ basarili: false, hata: 'Geçersiz ürün indeksi.' });
     let mevcutSiparis: any = null;
     if (supabase) {
-      const { data } = await supabase.from('siparisler').select('*').eq('id', siparis_id).single();
-      if (data) mevcutSiparis = data;
-    }
-    if (!mevcutSiparis) {
-      mevcutSiparis = siparislerVeritabani.find((s) => s.id === siparis_id);
+      const { data, error } = await supabase
+        .from('siparisler')
+        .select('*')
+        .eq('id', siparis_id)
+        .eq('tenant_id', req.tenantId)
+        .maybeSingle();
+      if (error)
+        return res.status(503).json({ basarili: false, hata: 'Veritabanı kullanılamıyor.' });
+      mevcutSiparis = data;
+    } else {
+      mevcutSiparis = siparislerVeritabani.find(
+        (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+      );
     }
 
     if (!mevcutSiparis) {
       return res.status(404).json({ basarili: false, hata: 'Sipariş bulunamadı.' });
     }
 
+    await assertTenantImageReferences(req, req.body);
     const formatli = formatlaSiparis(mevcutSiparis);
+    await assertTenantImageReferences(req, formatli);
     const guncelUrunler = [...(formatli.urunler || [])];
 
     if (!guncelUrunler[urun_indeksi]) {
@@ -717,9 +803,11 @@ router.post('/urun-orijinal-gorsele-don', async (req, res) => {
         .from('siparisler')
         .update(sbPayload)
         .eq('id', siparis_id)
+        .eq('tenant_id', req.tenantId)
         .select()
         .single();
-      if (error) console.error('Supabase orijinal görsele dönme hatası:', error.message);
+      if (error || !data)
+        return res.status(503).json({ basarili: false, hata: 'Görsel değişikliği kaydedilemedi.' });
       if (data) {
         return res.json({
           basarili: true,
@@ -729,7 +817,9 @@ router.post('/urun-orijinal-gorsele-don', async (req, res) => {
       }
     }
 
-    const idx = siparislerVeritabani.findIndex((s) => s.id === siparis_id);
+    const idx = siparislerVeritabani.findIndex(
+      (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+    );
     if (idx !== -1) {
       siparislerVeritabani[idx].urunler = guncelUrunler;
     }
@@ -741,7 +831,9 @@ router.post('/urun-orijinal-gorsele-don', async (req, res) => {
     });
   } catch (err: any) {
     console.error('Orijinal görsele dönme hatası:', err);
-    res.status(500).json({ basarili: false, hata: err.message });
+    res
+      .status(err instanceof PublicResourceError ? err.status : 500)
+      .json({ basarili: false, hata: err.message });
   }
 });
 

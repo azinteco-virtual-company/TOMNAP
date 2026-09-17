@@ -8,19 +8,59 @@ import { supabase } from '../services/supabase';
 const router = Router();
 
 // Desteklenen Sağlayıcılar ve Ülkeler Listesi
-const DESTEKLENEN_SAGLAYICILAR: Array<{ id: KargoSaglayiciTipi; ad: string; aciklama: string; durum: 'AKTIF' | 'GENISLETILEBILIR' }> = [
-  { id: 'ARAMEX', ad: 'Aramex International', aciklama: 'Kanada ➔ Bakü ana hava kargo hattı (REST API v2 Canlı & Batch)', durum: 'AKTIF' },
-  { id: 'DHL', ad: 'DHL Express', aciklama: 'Qlobal ekspres kurye şəbəkəsi və hava yolu daşımaları', durum: 'GENISLETILEBILIR' },
-  { id: 'UPS', ad: 'UPS Worldwide', aciklama: 'Şimali Amerika və Avropa mərkəzli geniş lojistika şəbəkəsi', durum: 'GENISLETILEBILIR' },
-  { id: 'FEDEX', ad: 'FedEx Cross-Border', aciklama: 'ABŞ və Asiya istiqamətli beynəlxalq parsel xidməti', durum: 'GENISLETILEBILIR' },
-  { id: 'MANUEL', ad: 'Fərdi / Özəl Karqo', aciklama: 'Kargo kodu və çəkinin əl ilə daxil edildiyi ənənəvi rejim', durum: 'AKTIF' },
+const DESTEKLENEN_SAGLAYICILAR: Array<{
+  id: KargoSaglayiciTipi;
+  ad: string;
+  aciklama: string;
+  durum: 'AKTIF' | 'GENISLETILEBILIR';
+}> = [
+  {
+    id: 'ARAMEX',
+    ad: 'Aramex International',
+    aciklama: 'Kanada ➔ Bakü ana hava kargo hattı (REST API v2 Canlı & Batch)',
+    durum: 'AKTIF',
+  },
+  {
+    id: 'DHL',
+    ad: 'DHL Express',
+    aciklama: 'Qlobal ekspres kurye şəbəkəsi və hava yolu daşımaları',
+    durum: 'GENISLETILEBILIR',
+  },
+  {
+    id: 'UPS',
+    ad: 'UPS Worldwide',
+    aciklama: 'Şimali Amerika və Avropa mərkəzli geniş lojistika şəbəkəsi',
+    durum: 'GENISLETILEBILIR',
+  },
+  {
+    id: 'FEDEX',
+    ad: 'FedEx Cross-Border',
+    aciklama: 'ABŞ və Asiya istiqamətli beynəlxalq parsel xidməti',
+    durum: 'GENISLETILEBILIR',
+  },
+  {
+    id: 'MANUEL',
+    ad: 'Fərdi / Özəl Karqo',
+    aciklama: 'Kargo kodu və çəkinin əl ilə daxil edildiyi ənənəvi rejim',
+    durum: 'AKTIF',
+  },
 ];
 
-const DESTEKLENEN_ULKELER: Array<{ kod: CikisUlkesi; ad: string; bayrak: string; anaHavalimani: string }> = [
+const DESTEKLENEN_ULKELER: Array<{
+  kod: CikisUlkesi;
+  ad: string;
+  bayrak: string;
+  anaHavalimani: string;
+}> = [
   { kod: 'CA', ad: 'Kanada', bayrak: '🇨🇦', anaHavalimani: 'Toronto Pearson (YYZ)' },
   { kod: 'US', ad: 'ABŞ (Amerika)', bayrak: '🇺🇸', anaHavalimani: 'New York (JFK) / Chicago (ORD)' },
   { kod: 'JP', ad: 'Yaponiya', bayrak: '🇯🇵', anaHavalimani: 'Tokyo Narita (NRT)' },
-  { kod: 'GB', ad: 'Böyük Britaniya (İngiltərə)', bayrak: '🇬🇧', anaHavalimani: 'London Heathrow (LHR)' },
+  {
+    kod: 'GB',
+    ad: 'Böyük Britaniya (İngiltərə)',
+    bayrak: '🇬🇧',
+    anaHavalimani: 'London Heathrow (LHR)',
+  },
   { kod: 'DE', ad: 'Almaniya', bayrak: '🇩🇪', anaHavalimani: 'Frankfurt (FRA)' },
   { kod: 'TR', ad: 'Türkiyə', bayrak: '🇹🇷', anaHavalimani: 'İstanbul (IST)' },
   { kod: 'AE', ad: 'BƏƏ (Birləşmiş Ərəb Əmirlikləri)', bayrak: '🇦🇪', anaHavalimani: 'Dubai (DXB)' },
@@ -81,7 +121,9 @@ router.post('/kargo/ayarlar', (req, res) => {
 router.post('/kargo/test', async (req, res) => {
   try {
     const { tenantId = 'kanada_shopper_baku', ayarlar } = req.body;
-    const testAyar = ayarlar ? { ...kargoMerkezi.getAyarlar(tenantId), ...ayarlar } : kargoMerkezi.getAyarlar(tenantId);
+    const testAyar = ayarlar
+      ? { ...kargoMerkezi.getAyarlar(tenantId), ...ayarlar, tenantId }
+      : kargoMerkezi.getAyarlar(tenantId);
 
     const sonuc = await kargoMerkezi.baglantiTesti(testAyar);
     res.json(sonuc);
@@ -100,7 +142,12 @@ router.post('/kargo/takip', async (req, res) => {
   try {
     const { takipNolari, tenantId = 'kanada_shopper_baku' } = req.body;
     if (!Array.isArray(takipNolari) || takipNolari.length === 0) {
-      return res.status(400).json({ basarili: false, hata: 'Zəhmət olmasa ən azı bir izləmə (AWB) nömrəsi daxil edin.' });
+      return res
+        .status(400)
+        .json({
+          basarili: false,
+          hata: 'Zəhmət olmasa ən azı bir izləmə (AWB) nömrəsi daxil edin.',
+        });
     }
 
     const sonuclar = await kargoMerkezi.takipEt(takipNolari, tenantId);
@@ -120,9 +167,10 @@ router.post('/kargo/senkronize-et', async (req, res) => {
     const { tenantId = 'all' } = req.body;
     const sonuc = await kargoMerkezi.topluSenkronizeEt(tenantId);
     res.json({
-      mesaj: sonuc.guncellenenSayi > 0
-        ? `${sonuc.sorgulananSayi} kargodan ${sonuc.guncellenenSayi} ədədinin statusu yeniləndi!`
-        : `${sonuc.sorgulananSayi} aktiv kargo yoxlandı, bütün statuslar aktualdır.`,
+      mesaj:
+        sonuc.guncellenenSayi > 0
+          ? `${sonuc.sorgulananSayi} kargodan ${sonuc.guncellenenSayi} ədədinin statusu yeniləndi!`
+          : `${sonuc.sorgulananSayi} aktiv kargo yoxlandı, bütün statuslar aktualdır.`,
       ...sonuc,
     });
   } catch (err: any) {
@@ -133,11 +181,21 @@ router.post('/kargo/senkronize-et', async (req, res) => {
 // 6. POST /api/kargo/manifesto-yukle — Aramex Daily Dispatch / Excel İçe Aktarma
 router.post('/kargo/manifesto-yukle', async (req, res) => {
   try {
-    const { dosya_base64, dosya_adi = 'manifest.xlsx', tenantId = 'kanada_shopper_baku', otomatik_esle = true } = req.body;
+    const {
+      dosya_base64,
+      dosya_adi = 'manifest.xlsx',
+      tenantId = 'kanada_shopper_baku',
+      otomatik_esle = true,
+    } = req.body;
 
     if (!dosya_base64) {
-      return res.status(400).json({ basarili: false, hata: 'Excel və ya CSV fayl məzmunu (base64) tələb olunur.' });
+      return res
+        .status(400)
+        .json({ basarili: false, hata: 'Excel və ya CSV fayl məzmunu (base64) tələb olunur.' });
     }
+
+    if (typeof dosya_base64 !== 'string' || dosya_base64.length > 14 * 1024 * 1024)
+      return res.status(413).json({ basarili: false, hata: 'Manifesto en fazla 10 MB olabilir.' });
 
     // Base64'ten Buffer oluştur
     const base64Data = dosya_base64.replace(/^data:.*?;base64,/, '');
@@ -158,12 +216,21 @@ router.post('/kargo/manifesto-yukle', async (req, res) => {
     if (otomatik_esle && sonuc.satirlar.length > 0) {
       const simdiIso = new Date().toISOString();
 
+      let adaylar = siparislerVeritabani;
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('siparisler')
+          .select('*')
+          .eq('tenant_id', tenantId);
+        if (error) return res.status(503).json({ basarili: false, hata: 'Siparişler okunamadı.' });
+        adaylar = data || [];
+      }
       for (const satir of sonuc.satirlar) {
         const aliciTemiz = satir.aliciAdi.toLowerCase().replace(/[^a-z0-9]/g, '');
         const telTemiz = (satir.telefon || '').replace(/[^\d]/g, '').slice(-7);
 
-        const bulunan = siparislerVeritabani.find((s) => {
-          if (tenantId && tenantId !== 'all' && (s.tenant_id || 'kanada_shopper_baku') !== tenantId) {
+        const bulunan = adaylar.find((s) => {
+          if (s.tenant_id !== tenantId) {
             return false;
           }
           // Telefon son 7 hane eşleşmesi
@@ -172,7 +239,10 @@ router.post('/kargo/manifesto-yukle', async (req, res) => {
           }
           // İsim benzerliği eşleşmesi
           const sMusteriTemiz = (s.musteri_adi || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (aliciTemiz.length >= 4 && (sMusteriTemiz.includes(aliciTemiz) || aliciTemiz.includes(sMusteriTemiz))) {
+          if (
+            aliciTemiz.length >= 4 &&
+            (sMusteriTemiz.includes(aliciTemiz) || aliciTemiz.includes(sMusteriTemiz))
+          ) {
             return true;
           }
           return false;
@@ -183,7 +253,10 @@ router.post('/kargo/manifesto-yukle', async (req, res) => {
           if (satir.agirlikKg) {
             bulunan.kargo_agirligi_kg = satir.agirlikKg;
           }
-          if (bulunan.lojistik_durumu === 'KANADA_SATINALIM_BEKLIYOR' || bulunan.lojistik_durumu === 'KANADA_DEPO') {
+          if (
+            bulunan.lojistik_durumu === 'KANADA_SATINALIM_BEKLIYOR' ||
+            bulunan.lojistik_durumu === 'KANADA_DEPO'
+          ) {
             bulunan.lojistik_durumu = 'ULUSLARARASI_KARGO';
           }
           bulunan.guncellenme_tarihi = simdiIso;
@@ -199,8 +272,22 @@ router.post('/kargo/manifesto-yukle', async (req, res) => {
           if (supabase) {
             try {
               const payload = hazirlaSupabasePayload(bulunan);
-              supabase.from('siparisler').update(payload).eq('id', bulunan.id).then();
-            } catch {}
+              const { data, error } = await supabase
+                .from('siparisler')
+                .update(payload)
+                .eq('id', bulunan.id)
+                .eq('tenant_id', tenantId)
+                .select('id')
+                .maybeSingle();
+              if (error || !data)
+                return res
+                  .status(503)
+                  .json({ basarili: false, hata: 'Manifesto değişikliği kaydedilemedi.' });
+            } catch {
+              return res
+                .status(503)
+                .json({ basarili: false, hata: 'Manifesto değişikliği kaydedilemedi.' });
+            }
           }
         }
       }

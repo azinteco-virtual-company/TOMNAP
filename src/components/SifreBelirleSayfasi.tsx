@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -19,7 +20,7 @@ import { KullaniciRolu } from '../types';
 export const SifreBelirleSayfasi: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { setSeciliFirmaId, setAktifRol, setBildirim } = useAppStore();
+  const { setBildirim } = useAppStore();
 
   const [token, setToken] = useState<string>('');
   const [tokenBilgisi, setTokenBilgisi] = useState<any>(null);
@@ -45,7 +46,7 @@ export const SifreBelirleSayfasi: React.FC = () => {
     }
     setToken(t);
 
-    fetch(`/api/auth/token-kontrol/${encodeURIComponent(t)}`)
+    apiFetch(`/api/auth/token-kontrol/${encodeURIComponent(t)}`)
       .then((r) => r.json())
       .then((data) => {
         if (!data.basarili) {
@@ -73,7 +74,7 @@ export const SifreBelirleSayfasi: React.FC = () => {
 
     setGonderiliyor(true);
     try {
-      const res = await fetch('/api/auth/sifre-belirle', {
+      const res = await apiFetch('/api/auth/sifre-belirle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -92,19 +93,7 @@ export const SifreBelirleSayfasi: React.FC = () => {
 
       setTamamlandi(true);
 
-      const tid = data.kullanici?.tenantId || tokenBilgisi?.tenantId;
-      const rol = data.kullanici?.rol || tokenBilgisi?.rol || 'PATRON';
-
-      try {
-        sessionStorage.setItem('tomnap_access_granted', 'true');
-        localStorage.setItem('tomnap_access_granted', 'true');
-        if (tid) localStorage.setItem('tomnap_aktif_tenant', tid);
-        if (rol) localStorage.setItem('tomnap_aktif_rol', rol);
-      } catch {}
-
-      if (tid) setSeciliFirmaId(tid);
-      if (rol) setAktifRol(rol as KullaniciRolu);
-      setBildirim('Şifrəniz uğurla təyin edildi. İş masanıza xoş gəldiniz!');
+      setBildirim('Şifrəniz təyin edildi. Şəxsi hesabınızla daxil olun.');
     } catch (err: any) {
       alert(err.message || 'Xəta baş verdi');
     } finally {
@@ -180,7 +169,7 @@ export const SifreBelirleSayfasi: React.FC = () => {
                 onClick={() => navigate('/app')}
                 className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
               >
-                <span>İş Masasına Keçid Et</span>
+                <span>Şəxsi hesabımla daxil ol</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/apiClient';
 import { UrunAlani } from '../types';
 
 /**
@@ -71,17 +72,7 @@ export async function cropImageFromBox(
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    ctx.drawImage(
-      img,
-      x1,
-      y1,
-      cropW,
-      cropH,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
+    ctx.drawImage(img, x1, y1, cropW, cropH, 0, 0, canvas.width, canvas.height);
 
     return canvas.toDataURL('image/jpeg', 0.92);
   } catch (err) {
@@ -118,7 +109,7 @@ export async function smartAutoCropScreenshot(imageSrc: string): Promise<string>
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, x1, y1, cropW, cropH, 0, 0, canvas.width, canvas.height);
 
-      return canvas.toDataURL('image/jpeg', 0.90);
+      return canvas.toDataURL('image/jpeg', 0.9);
     }
     return imageSrc;
   } catch {
@@ -138,7 +129,7 @@ export async function sunucuyaGorselYukle(
     const mimeMatch = base64Data.match(/^data:(image\/\w+);base64,/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
-    const res = await fetch('/api/upload-gorsel', {
+    const res = await apiFetch('/api/upload-gorsel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

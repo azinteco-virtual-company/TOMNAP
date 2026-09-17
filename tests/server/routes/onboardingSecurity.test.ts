@@ -79,6 +79,14 @@ describe('Onboarding trust boundaries', () => {
     const count = davetlerVeritabani.length;
     db.client = {
       from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: { id: firmalarVeritabani[0].id, ad: 'Fixture', onay_durumu: 'AKTIF' },
+              error: null,
+            }),
+          }),
+        }),
         insert: () => ({
           select: () => ({
             maybeSingle: async () => ({ data: null, error: { message: 'unavailable' } }),

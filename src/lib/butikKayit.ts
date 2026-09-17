@@ -1,3 +1,4 @@
+import { apiFetch } from './apiClient';
 export interface ButikKayitBilgileri {
   ad: string;
   sehir: string;
@@ -22,7 +23,7 @@ export async function butikKaydet(
   bilgiler: ButikKayitBilgileri,
   hataMesaji: string
 ): Promise<ButikKayitSonucu> {
-  const response = await fetch('/api/firmalar/kayit', {
+  const response = await apiFetch('/api/firmalar/kayit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(bilgiler),

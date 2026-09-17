@@ -1,27 +1,28 @@
+import { apiFetch } from '../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { OnayBekleyenMesaj, Siparis } from '../types';
-import { 
-  Inbox, 
-  Sparkles, 
-  CheckCircle2, 
-  XCircle, 
-  Edit3, 
-  MessageSquare, 
-  Send, 
-  User, 
-  Smartphone, 
-  MapPin, 
-  DollarSign, 
-  Tag, 
-  Clock, 
-  ArrowLeft, 
-  RefreshCw, 
-  Check, 
+import {
+  Inbox,
+  Sparkles,
+  CheckCircle2,
+  XCircle,
+  Edit3,
+  MessageSquare,
+  Send,
+  User,
+  Smartphone,
+  MapPin,
+  DollarSign,
+  Tag,
+  Clock,
+  ArrowLeft,
+  RefreshCw,
+  Check,
   AlertCircle,
   PlusCircle,
   Search,
   Filter,
-  Store
+  Store,
 } from 'lucide-react';
 
 interface OnayBekleyenlerSayfasiProps {
@@ -66,7 +67,9 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
   // Test mesajı simülasyonu
   const [simulasyonMetni, setSimulasyonMetni] = useState('');
   const [simulasyonGonderen, setSimulasyonGonderen] = useState('');
-  const [simulasyonKaynak, setSimulasyonKaynak] = useState<'INSTAGRAM_DM' | 'WHATSAPP'>('INSTAGRAM_DM');
+  const [simulasyonKaynak, setSimulasyonKaynak] = useState<'INSTAGRAM_DM' | 'WHATSAPP'>(
+    'INSTAGRAM_DM'
+  );
   const [simulasyonYukleniyor, setSimulasyonYukleniyor] = useState(false);
   const [islemYapiliyor, setIslemYapiliyor] = useState(false);
 
@@ -74,17 +77,18 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
   const inboxGetir = async () => {
     try {
       setYukleniyor(true);
-      const url = seciliFirmaId && seciliFirmaId !== 'all'
-        ? `/api/inbox?tenant_id=${encodeURIComponent(seciliFirmaId)}`
-        : '/api/inbox';
-      const res = await fetch(url);
+      const url =
+        seciliFirmaId && seciliFirmaId !== 'all'
+          ? `/api/inbox?tenant_id=${encodeURIComponent(seciliFirmaId)}`
+          : '/api/inbox';
+      const res = await apiFetch(url);
       const data = await res.json();
       if (data.basarili && Array.isArray(data.mesajlar)) {
         const bekleyenler = data.mesajlar.filter((m: OnayBekleyenMesaj) => m.durum === 'BEKLEMEDE');
         setInboxListesi(bekleyenler);
         if (bekleyenler.length > 0) {
           // Eğer seçili mesaj listede yoksa ilkini seç
-          if (!seciliMesaj || !bekleyenler.some(m => m.id === seciliMesaj.id)) {
+          if (!seciliMesaj || !bekleyenler.some((m) => m.id === seciliMesaj.id)) {
             seciliMesajAyarla(bekleyenler[0]);
           }
         } else {
@@ -132,20 +136,21 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
   const handleOnayla = async (mesajId: string) => {
     try {
       setIslemYapiliyor(true);
-      const res = await fetch(`/api/inbox/${mesajId}/onayla`, {
+      const res = await apiFetch(`/api/inbox/${mesajId}/onayla`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           duzeltilmis_siparis: duzenlemeForm,
-          tenant_id: seciliFirmaId && seciliFirmaId !== 'all' ? seciliFirmaId : (seciliMesaj?.tenant_id || 'kanada_shopper_baku'),
+          tenant_id:
+            seciliFirmaId && seciliFirmaId !== 'all' ? seciliFirmaId : seciliMesaj?.tenant_id,
         }),
       });
       const data = await res.json();
       if (data.basarili && data.siparis) {
         onSiparisOnaylandi(data.siparis);
         if (onYenile) onYenile();
-        
-        const guncel = inboxListesi.filter(m => m.id !== mesajId);
+
+        const guncel = inboxListesi.filter((m) => m.id !== mesajId);
         setInboxListesi(guncel);
         if (guncel.length > 0) {
           seciliMesajAyarla(guncel[0]);
@@ -164,9 +169,9 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
   const handleReddet = async (mesajId: string) => {
     try {
       setIslemYapiliyor(true);
-      await fetch(`/api/inbox/${mesajId}/reddet`, { method: 'POST' });
+      await apiFetch(`/api/inbox/${mesajId}/reddet`, { method: 'POST' });
       if (onYenile) onYenile();
-      const guncel = inboxListesi.filter(m => m.id !== mesajId);
+      const guncel = inboxListesi.filter((m) => m.id !== mesajId);
       setInboxListesi(guncel);
       if (guncel.length > 0) {
         seciliMesajAyarla(guncel[0]);
@@ -187,19 +192,19 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
 
     try {
       setSimulasyonYukleniyor(true);
-      const res = await fetch('/api/webhook/siparis', {
+      const res = await apiFetch('/api/webhook/siparis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mesaj: simulasyonMetni,
           gonderen: simulasyonGonderen || '@instagram_musteri',
           kaynak: simulasyonKaynak,
-          tenant_id: seciliFirmaId && seciliFirmaId !== 'all' ? seciliFirmaId : 'kanada_shopper_baku',
+          tenant_id: seciliFirmaId && seciliFirmaId !== 'all' ? seciliFirmaId : undefined,
         }),
       });
       const data = await res.json();
       if (data.basarili && data.inbox) {
-        setInboxListesi(prev => [data.inbox, ...prev]);
+        setInboxListesi((prev) => [data.inbox, ...prev]);
         seciliMesajAyarla(data.inbox);
         setSimulasyonMetni('');
         setSimulasyonGonderen('');
@@ -222,7 +227,10 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
         m.mesaj_icerigi,
         m.oneri_siparis?.musteri_adi,
         m.oneri_siparis?.urun_aciklamasi,
-      ].filter(Boolean).join(' ').toLowerCase();
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
       if (!str.includes(q)) return false;
     }
     return true;
@@ -252,7 +260,8 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-1">
-              Instagram DM və ya WhatsApp danışıqlarında <strong>#SİPARİŞ</strong> / <strong>#ONAY</strong> etiketi ilə avtomatik çıxarılan AI sifariş qaralamaları
+              Instagram DM və ya WhatsApp danışıqlarında <strong>#SİPARİŞ</strong> /{' '}
+              <strong>#ONAY</strong> etiketi ilə avtomatik çıxarılan AI sifariş qaralamaları
             </p>
           </div>
         </div>
@@ -322,7 +331,7 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
                     : 'text-slate-600 hover:bg-slate-200/70'
                 }`}
               >
-                Instagram ({inboxListesi.filter(m => m.kaynak === 'INSTAGRAM_DM').length})
+                Instagram ({inboxListesi.filter((m) => m.kaynak === 'INSTAGRAM_DM').length})
               </button>
               <button
                 type="button"
@@ -333,7 +342,7 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
                     : 'text-slate-600 hover:bg-slate-200/70'
                 }`}
               >
-                WhatsApp ({inboxListesi.filter(m => m.kaynak === 'WHATSAPP').length})
+                WhatsApp ({inboxListesi.filter((m) => m.kaynak === 'WHATSAPP').length})
               </button>
             </div>
           </div>
@@ -357,9 +366,7 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
                     key={mesaj.id}
                     onClick={() => seciliMesajAyarla(mesaj)}
                     className={`p-4 cursor-pointer transition-all ${
-                      secili
-                        ? 'bg-violet-50/90 border-l-4 border-violet-600'
-                        : 'hover:bg-slate-50'
+                      secili ? 'bg-violet-50/90 border-l-4 border-violet-600' : 'hover:bg-slate-50'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1.5">
@@ -373,13 +380,16 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
                         >
                           {mesaj.kaynak === 'INSTAGRAM_DM' ? '📸 Instagram DM' : '💬 WhatsApp'}
                         </span>
-                        <span className="font-bold text-slate-900 text-xs">
-                          {mesaj.gonderen}
-                        </span>
+                        <span className="font-bold text-slate-900 text-xs">{mesaj.gonderen}</span>
                       </div>
                       <span className="text-[10px] text-slate-400 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {mesaj.tarih ? new Date(mesaj.tarih).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' }) : ''}
+                        {mesaj.tarih
+                          ? new Date(mesaj.tarih).toLocaleTimeString('az-AZ', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : ''}
                       </span>
                     </div>
 
@@ -393,12 +403,12 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
 
                     <div className="mt-2 flex items-center justify-between text-[11px]">
                       <span className="font-bold text-slate-700">
-                        {oneri.toplam_tutar ? `${oneri.toplam_tutar} AZN` : 'Qiymət təyin olunmayıb'}
+                        {oneri.toplam_tutar
+                          ? `${oneri.toplam_tutar} AZN`
+                          : 'Qiymət təyin olunmayıb'}
                       </span>
                       {oneri.musteri_adi && (
-                        <span className="text-slate-500">
-                          {oneri.musteri_adi}
-                        </span>
+                        <span className="text-slate-500">{oneri.musteri_adi}</span>
                       )}
                     </div>
                   </div>
@@ -453,38 +463,54 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
                     /* Düzenleme Formu */
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>
-                        <label className="font-semibold text-slate-700 block mb-1">Müştəri Adı</label>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Müştəri Adı
+                        </label>
                         <input
                           type="text"
                           value={duzenlemeForm.musteri_adi}
-                          onChange={(e) => setDuzenlemeForm({ ...duzenlemeForm, musteri_adi: e.target.value })}
+                          onChange={(e) =>
+                            setDuzenlemeForm({ ...duzenlemeForm, musteri_adi: e.target.value })
+                          }
                           className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                         />
                       </div>
                       <div>
-                        <label className="font-semibold text-slate-700 block mb-1">Telefon Nömrəsi</label>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Telefon Nömrəsi
+                        </label>
                         <input
                           type="text"
                           value={duzenlemeForm.telefon_numarasi}
-                          onChange={(e) => setDuzenlemeForm({ ...duzenlemeForm, telefon_numarasi: e.target.value })}
+                          onChange={(e) =>
+                            setDuzenlemeForm({ ...duzenlemeForm, telefon_numarasi: e.target.value })
+                          }
                           className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                         />
                       </div>
                       <div className="sm:col-span-2">
-                        <label className="font-semibold text-slate-700 block mb-1">Məhsul Təsviri</label>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Məhsul Təsviri
+                        </label>
                         <input
                           type="text"
                           value={duzenlemeForm.urun_aciklamasi}
-                          onChange={(e) => setDuzenlemeForm({ ...duzenlemeForm, urun_aciklamasi: e.target.value })}
+                          onChange={(e) =>
+                            setDuzenlemeForm({ ...duzenlemeForm, urun_aciklamasi: e.target.value })
+                          }
                           className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                         />
                       </div>
                       <div>
-                        <label className="font-semibold text-slate-700 block mb-1">Ölçü / Bədən</label>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Ölçü / Bədən
+                        </label>
                         <input
                           type="text"
                           value={duzenlemeForm.beden_veya_olcu}
-                          onChange={(e) => setDuzenlemeForm({ ...duzenlemeForm, beden_veya_olcu: e.target.value })}
+                          onChange={(e) =>
+                            setDuzenlemeForm({ ...duzenlemeForm, beden_veya_olcu: e.target.value })
+                          }
                           className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                         />
                       </div>
@@ -493,34 +519,54 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
                         <input
                           type="text"
                           value={duzenlemeForm.renk}
-                          onChange={(e) => setDuzenlemeForm({ ...duzenlemeForm, renk: e.target.value })}
+                          onChange={(e) =>
+                            setDuzenlemeForm({ ...duzenlemeForm, renk: e.target.value })
+                          }
                           className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                         />
                       </div>
                       <div>
-                        <label className="font-semibold text-slate-700 block mb-1">Toplam Qiymət (AZN)</label>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Toplam Qiymət (AZN)
+                        </label>
                         <input
                           type="number"
                           value={duzenlemeForm.toplam_tutar}
-                          onChange={(e) => setDuzenlemeForm({ ...duzenlemeForm, toplam_tutar: Number(e.target.value) })}
+                          onChange={(e) =>
+                            setDuzenlemeForm({
+                              ...duzenlemeForm,
+                              toplam_tutar: Number(e.target.value),
+                            })
+                          }
                           className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                         />
                       </div>
                       <div>
-                        <label className="font-semibold text-slate-700 block mb-1">Alınan İlkin Ödəniş (AZN)</label>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Alınan İlkin Ödəniş (AZN)
+                        </label>
                         <input
                           type="number"
                           value={duzenlemeForm.alinan_tutar}
-                          onChange={(e) => setDuzenlemeForm({ ...duzenlemeForm, alinan_tutar: Number(e.target.value) })}
+                          onChange={(e) =>
+                            setDuzenlemeForm({
+                              ...duzenlemeForm,
+                              alinan_tutar: Number(e.target.value),
+                            })
+                          }
                           className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                         />
                       </div>
                       <div>
-                        <label className="font-semibold text-slate-700 block mb-1">Çatdırılma Şəhəri</label>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Çatdırılma Şəhəri
+                        </label>
                         <input
                           type="text"
                           value={duzenlemeForm.teslimat_sehri}
-                          onChange={(e) => setDuzenlemeForm({ ...duzenlemeForm, teslimat_sehri: e.target.value })}
+                          onChange={(e) =>
+                            setDuzenlemeForm({ ...duzenlemeForm, teslimat_sehri: e.target.value })
+                          }
                           className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                         />
                       </div>
@@ -529,7 +575,9 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
                         <input
                           type="text"
                           value={duzenlemeForm.teslimat_adresi}
-                          onChange={(e) => setDuzenlemeForm({ ...duzenlemeForm, teslimat_adresi: e.target.value })}
+                          onChange={(e) =>
+                            setDuzenlemeForm({ ...duzenlemeForm, teslimat_adresi: e.target.value })
+                          }
                           className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg"
                         />
                       </div>
@@ -577,9 +625,19 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
                           {duzenlemeForm.urun_aciklamasi || 'Məhsul aşkar edilmədi'}
                         </div>
                         <div className="text-slate-600 mt-0.5 flex items-center gap-2">
-                          {duzenlemeForm.beden_veya_olcu && <span>Ölçü: <strong>{duzenlemeForm.beden_veya_olcu}</strong></span>}
-                          {duzenlemeForm.renk && <span>Rəng: <strong>{duzenlemeForm.renk}</strong></span>}
-                          <span>Say: <strong>{duzenlemeForm.adet || 1} ədəd</strong></span>
+                          {duzenlemeForm.beden_veya_olcu && (
+                            <span>
+                              Ölçü: <strong>{duzenlemeForm.beden_veya_olcu}</strong>
+                            </span>
+                          )}
+                          {duzenlemeForm.renk && (
+                            <span>
+                              Rəng: <strong>{duzenlemeForm.renk}</strong>
+                            </span>
+                          )}
+                          <span>
+                            Say: <strong>{duzenlemeForm.adet || 1} ədəd</strong>
+                          </span>
                         </div>
                       </div>
 
@@ -591,7 +649,9 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
                       </div>
 
                       <div className="p-3 bg-amber-50 rounded-xl border border-amber-300">
-                        <div className="text-[11px] text-amber-800 font-bold">Bakıda Qalıq Borc</div>
+                        <div className="text-[11px] text-amber-800 font-bold">
+                          Bakıda Qalıq Borc
+                        </div>
                         <div className="font-extrabold text-amber-900 text-base mt-0.5">
                           {(duzenlemeForm.toplam_tutar - duzenlemeForm.alinan_tutar).toFixed(2)} AZN
                         </div>
@@ -623,7 +683,9 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
                   className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md hover:shadow-lg cursor-pointer flex items-center gap-2"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{islemYapiliyor ? 'Əlavə edilir...' : 'Təsdiqlə və Əsas Sifarişlərə Əlavə Et'}</span>
+                  <span>
+                    {islemYapiliyor ? 'Əlavə edilir...' : 'Təsdiqlə və Əsas Sifarişlərə Əlavə Et'}
+                  </span>
                 </button>
               </div>
             </div>
@@ -632,7 +694,8 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
               <Inbox className="w-12 h-12 mx-auto mb-3 text-slate-300" />
               <div className="font-bold text-slate-700 text-base">Heç bir tələb seçilməyib</div>
               <p className="text-slate-500 mt-1 max-w-sm mx-auto">
-                Soldakı siyahıdan bir müraciətə klikləyərək AI tərəfindən çıxarılan detalları incələyə və təsdiqləyə bilərsiniz.
+                Soldakı siyahıdan bir müraciətə klikləyərək AI tərəfindən çıxarılan detalları
+                incələyə və təsdiqləyə bilərsiniz.
               </p>
             </div>
           )}
@@ -646,11 +709,10 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
             🤖
           </div>
           <div>
-            <h3 className="font-bold text-sm text-slate-900">
-              Canlı Webhook / Sınaq Simulyatoru
-            </h3>
+            <h3 className="font-bold text-sm text-slate-900">Canlı Webhook / Sınaq Simulyatoru</h3>
             <p className="text-xs text-slate-500">
-              Instagram DM və ya WhatsApp danışıq mətnini buraya yapışdıraraq sistemin sifarişi necə avtomatik aşkar etdiyini yoxlayın
+              Instagram DM və ya WhatsApp danışıq mətnini buraya yapışdıraraq sistemin sifarişi necə
+              avtomatik aşkar etdiyini yoxlayın
             </p>
           </div>
         </div>
@@ -658,7 +720,9 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
         <form onSubmit={handleSimulasyonGonder} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Mənbə Kanalı</label>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                Mənbə Kanalı
+              </label>
               <select
                 value={simulasyonKaynak}
                 onChange={(e) => setSimulasyonKaynak(e.target.value as any)}
@@ -669,7 +733,9 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
               </select>
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Göndərən (İstifadəçi / Nömrə)</label>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                Göndərən (İstifadəçi / Nömrə)
+              </label>
               <input
                 type="text"
                 placeholder="@aylin_baku və ya +994501234567"
@@ -706,7 +772,9 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
               onClick={() => {
                 setSimulasyonKaynak('INSTAGRAM_DM');
                 setSimulasyonGonderen('@butik_alici_vip');
-                setSimulasyonMetni(`Salam, ${seciliFirmaAd || 'Kanada'} butikindən Michael Kors dəri çanta sifariş edirəm. Qiymət 190 AZN, 50 AZN beh atdım, qalıq 140 AZN kuryeyə nəğd. Ünvan: Bakı, 28 May. Tel: +994509998877 #SİPARİŞ`);
+                setSimulasyonMetni(
+                  `Salam, ${seciliFirmaAd || 'Kanada'} butikindən Michael Kors dəri çanta sifariş edirəm. Qiymət 190 AZN, 50 AZN beh atdım, qalıq 140 AZN kuryeyə nəğd. Ünvan: Bakı, 28 May. Tel: +994509998877 #SİPARİŞ`
+                );
               }}
               className="px-2.5 py-1 bg-pink-50 hover:bg-pink-100 text-pink-700 rounded-lg text-[11px] font-semibold border border-pink-200 cursor-pointer transition-colors"
             >
@@ -717,7 +785,9 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
               onClick={() => {
                 setSimulasyonKaynak('WHATSAPP');
                 setSimulasyonGonderen('+994502223344');
-                setSimulasyonMetni(`Salam, canlı yayındakı qırmızı midi don üçün yazıram. Qiymət 85 AZN tam ödəniş etdim. Ünvan: Nərimanov, Təbriz küçəsi döngə 2. Tel: +994502223344 #ONAY`);
+                setSimulasyonMetni(
+                  `Salam, canlı yayındakı qırmızı midi don üçün yazıram. Qiymət 85 AZN tam ödəniş etdim. Ünvan: Nərimanov, Təbriz küçəsi döngə 2. Tel: +994502223344 #ONAY`
+                );
               }}
               className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[11px] font-semibold border border-emerald-200 cursor-pointer transition-colors"
             >
@@ -732,7 +802,9 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
               className="px-5 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-300 text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
             >
               <Send className="w-3.5 h-3.5" />
-              <span>{simulasyonYukleniyor ? 'Təhlil edilir...' : 'Gələn Qutusuna Göndər (Simulyasiya)'}</span>
+              <span>
+                {simulasyonYukleniyor ? 'Təhlil edilir...' : 'Gələn Qutusuna Göndər (Simulyasiya)'}
+              </span>
             </button>
           </div>
         </form>
