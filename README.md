@@ -1,3 +1,5 @@
+> Güncel güvenlik/kurulum paketi: [Faz 4 — şifreleme, kurye ve eski görsel geçişi](docs/PHASE4_SECURITY.md). Önceki raporlar kendi fazlarının anlık durumudur.
+
 > **Faz 3 güncellemesi:** [İşlem bütünlüğü, güvenli yedek yükleme ve migration](docs/PERSISTENCE_SECURITY.md).
 
 > **Güncel güvenlik kurulumu:** [Oturum, firma yetkileri ve migration](docs/SESSION_SECURITY.md).
@@ -113,8 +115,9 @@ PORT=3000
 NODE_ENV=development
 
 # Güvenlik & Kimlik Doğrulama
-# API_SECRET_KEY yalnız mevcut kargo şifrelemesi içindir; HTTP oturumu değildir.
-API_SECRET_KEY=mevcut_sifreleme_anahtari
+# Kargo için 32 rastgele baytlık anahtarlar; kurulum/geçiş: docs/PHASE4_SECURITY.md
+CARGO_ENCRYPTION_KEYS={"cargo_2026":"64_HEX_KARAKTERLIK_RASTGELE_ANAHTAR"}
+CARGO_ENCRYPTION_ACTIVE_KEY_ID=cargo_2026
 
 # Google Gemini API
 GEMINI_API_KEY=your_gemini_api_key_here

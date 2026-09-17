@@ -79,6 +79,8 @@ describe('useAppStore (Zustand State Management)', () => {
       alinan_tutar: 200,
       kalan_tutar: 0,
       finans_durumu: 'ODENDI',
+      guncellenme_tarihi: '2026-09-17T12:34:56.000Z',
+      kurye_atama_surumu: 3,
     });
 
     const guncel = useAppStore.getState().siparisler.find((s) => s.id === 'sip-test-102');
@@ -86,7 +88,8 @@ describe('useAppStore (Zustand State Management)', () => {
     expect(guncel?.lojistik_durumu).toBe('TESLIM_EDILDI');
     expect(guncel?.finans_durumu).toBe('ODENDI');
     expect(guncel?.alinan_tutar).toBe(200);
-    expect(guncel?.guncellenme_tarihi).toBeDefined();
+    expect(guncel?.guncellenme_tarihi).toBe('2026-09-17T12:34:56.000Z');
+    expect(guncel?.kurye_atama_surumu).toBe(3);
   });
 
   it('siparisSil: verilen ID li siparişi listeden kaldırmalı', () => {

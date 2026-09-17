@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plane,
   Truck,
@@ -62,6 +62,11 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
   const [bildirim, setBildirim] = useState<{ tip: 'basari' | 'hata'; mesaj: string } | null>(null);
 
   // Form Değerleri
+  const [loadedVersion, setLoadedVersion] = useState<{ tenantId: string; revision: number } | null>(
+    null
+  );
+  const currentTenant = useRef(seciliTenantId);
+  currentTenant.current = seciliTenantId;
   const [saglayici, setSaglayici] = useState<string>('ARAMEX');
   const [cikisUlkesi, setCikisUlkesi] = useState<string>('CA');
   const [cikisSehri, setCikisSehri] = useState<string>('Toronto (YYZ)');
@@ -90,11 +95,23 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
     setTestSonucu(null);
     setBildirim(null);
 
+    const requestedTenant = seciliTenantId;
+    setLoadedVersion(null);
+    setKullaniciAdi('');
+    setSifre('');
+    setHesapNo('');
+    setPin('');
+    setEntity('');
+    setTestModu(true);
+    setTestSonucu(null);
     fetchWithRetry(`/api/kargo/ayarlar?tenant_id=${encodeURIComponent(seciliTenantId)}`)
       .then((res) => res.json())
       .then((data) => {
+        if (currentTenant.current !== requestedTenant) return;
+        if (!data.basarili) throw new Error(data.hata || 'Kargo ayarları yüklenemedi.');
         if (data.basarili && data.ayarlar) {
           const ayar = data.ayarlar;
+          setLoadedVersion({ tenantId: requestedTenant, revision: ayar.revision });
           setSaglayici(ayar.saglayici || 'ARAMEX');
           setCikisUlkesi(ayar.cikisUlkesi || 'CA');
           setCikisSehri(ayar.cikisSehri || 'Toronto (YYZ)');
@@ -136,6 +153,10 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
 
   // Bağlantı Testi (Test Connection)
   const handleBaglantiTesti = async () => {
+    if (!loadedVersion || loadedVersion.tenantId !== seciliTenantId || yukleniyor) {
+      setBildirim({ tip: 'hata', mesaj: 'Önce firma ayarlarını yükleyin.' });
+      return;
+    }
     setTestEdiliyor(true);
     setTestSonucu(null);
     try {
@@ -175,6 +196,10 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
   // Ayarları Kaydet
   const handleKaydet = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!loadedVersion || loadedVersion.tenantId !== seciliTenantId) {
+      setBildirim({ tip: 'hata', mesaj: 'Ayarlar yüklenemedi; sayfayı yenileyin.' });
+      return;
+    }
     setKaydediliyor(true);
     setBildirim(null);
 
@@ -184,6 +209,7 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantId: seciliTenantId,
+          revision: loadedVersion.revision,
           saglayici,
           cikisUlkesi,
           cikisSehri,
@@ -204,6 +230,10 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
 
       const data = await res.json();
       if (data.basarili) {
+        if (currentTenant.current !== seciliTenantId) return;
+        setLoadedVersion({ tenantId: seciliTenantId, revision: data.ayarlar.revision });
+        setSifre(data.ayarlar.kimlikBilgileri.sifre || '');
+        setPin(data.ayarlar.kimlikBilgileri.pin || '');
         setBildirim({ tip: 'basari', mesaj: 'Kargo tənzimləmələri uğurla yadda saxlanıldı!' });
         if (onAyarlarGuncellendi) onAyarlarGuncellendi();
         setTimeout(() => setBildirim(null), 3500);
@@ -295,7 +325,17 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => setSaglayici(p.id)}
+                      onClick={() => {
+                        if (p.id !== saglayici) {
+                          setSaglayici(p.id);
+                          setKullaniciAdi('');
+                          setSifre('');
+                          setHesapNo('');
+                          setPin('');
+                          setEntity('');
+                          setTestModu(true);
+                        }
+                      }}
                       className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative flex flex-col justify-between ${
                         isSelected
                           ? 'border-blue-600 bg-blue-50/50 dark:bg-blue-950/30 dark:border-blue-500 shadow-xs ring-1 ring-blue-500/20'
@@ -463,7 +503,9 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
                   <button
                     type="button"
                     onClick={handleBaglantiTesti}
-                    disabled={testEdiliyor}
+                    disabled={
+                      testEdiliyor || yukleniyor || loadedVersion?.tenantId !== seciliTenantId
+                    }
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
                   >
                     <Activity

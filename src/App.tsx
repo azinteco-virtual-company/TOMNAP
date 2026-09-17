@@ -1,4 +1,4 @@
-import { apiFetch } from './lib/apiClient';
+import { apiFetch, getApiContextVersion } from './lib/apiClient';
 import React, { useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Siparis, KullaniciRolu } from './types';
@@ -20,6 +20,7 @@ import { MimariVeKodPaneli } from './components/MimariVeKodPaneli';
 import { GorselVeAiSiparisMasasi } from './components/GorselVeAiSiparisMasasi';
 import { MusteriRehberi } from './components/MusteriRehberi';
 import { KuryeTeslimatMasasi } from './components/KuryeTeslimatMasasi';
+import { KuryeCalismaAlani } from './components/KuryeCalismaAlani';
 import { KanbanGorunumu } from './components/KanbanGorunumu';
 import { MobilAltNav } from './components/MobilAltNav';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -328,16 +329,11 @@ export default function App() {
 
   if (aktifRol === 'BAKU_KURYE') {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6">
-        <h1 className="text-xl font-semibold">Kuryer hesabı</h1>
-        <p>Kuryer hesabınız üçün sifariş təyinatı rəhbər tərəfindən tamamlanmalıdır.</p>
-        <button
-          className="rounded-lg bg-slate-900 px-4 py-2 text-white"
-          onClick={() => void handleKilidle()}
-        >
-          Hesabdan çıx
-        </button>
-      </main>
+      <KuryeCalismaAlani
+        key={`${session.id}:${session.tenantId}`}
+        userName={session.adSoyad}
+        onLogout={handleKilidle}
+      />
     );
   }
 
@@ -351,14 +347,15 @@ export default function App() {
   const handleDurumGuncelle = async (id: string, guncellemeler: Partial<Siparis>) => {
     // 2. Sunucuya bildirme
     try {
-      await apiFetch(`/api/siparisler/${id}`, {
+      const response = await apiFetch(`/api/siparisler/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(guncellemeler),
       });
-      siparisGuncelle(id, guncellemeler);
-      if (seciliSiparis?.id === id)
-        setSeciliSiparis((onceki) => (onceki ? { ...onceki, ...guncellemeler } : null));
+      const result = await response.json();
+      if (!result.siparis) throw new Error('Server sifarişin son vəziyyətini qaytarmadı.');
+      siparisGuncelle(id, result.siparis);
+      if (seciliSiparis?.id === id) setSeciliSiparis(result.siparis);
       bildirimGoster('Sipariş durumu güncellendi.');
     } catch (err) {
       bildirimGoster('Sifariş yenilənmədi. İcazələrinizi və bağlantını yoxlayın.');
@@ -614,24 +611,14 @@ export default function App() {
           ) : aktifSekme === 'kurye-masasi' ? (
             /* 7. Bakü Kurye & Saha Dağıtım Masası (Mobil Uyumlu) */
             <KuryeTeslimatMasasi
+              key={`${session.id}:${seciliFirmaId}`}
               siparisler={goruntulenenSiparisler}
               seciliKuryeId={seciliKuryeId}
               onKuryeDegistir={setSeciliKuryeId}
-              onSiparisGuncelle={(guncel) => handleDurumGuncelle(guncel.id, guncel)}
               onSiparisDetayAc={(siparis) => setSeciliSiparis(siparis)}
               kullaniciRolu={aktifRol}
               seciliFirmaId={seciliFirmaId}
               seciliFirmaAd={firmalar.find((f) => f.id === seciliFirmaId)?.ad}
-              firmalar={firmalar}
-              onFirmaSec={(id) => {
-                setSeciliFirmaId(id);
-                const secilenFirma = firmalar.find((f) => f.id === id);
-                bildirimGoster(
-                  id === 'all'
-                    ? 'Bütün butiklərin sifarişləri göstərilir'
-                    : `Aktiv butik: ${secilenFirma?.ad || id}`
-                );
-              }}
               onSiparisleriYukle={siparisleriYukle}
             />
           ) : (
@@ -663,6 +650,21 @@ export default function App() {
         siparis={seciliSiparis}
         onKapat={() => setSeciliSiparis(null)}
         onGuncelle={handleDurumGuncelle}
+        onAtamaKaydedildi={(order) => {
+          siparisGuncelle(order.id, order);
+          setSeciliSiparis(order);
+        }}
+        onSiparisYenile={async () => {
+          if (!seciliSiparis) return;
+          const id = seciliSiparis.id;
+          const context = getApiContextVersion();
+          await siparisleriYukle(seciliFirmaId);
+          if (context !== getApiContextVersion())
+            throw new DOMException('Oturum və ya butik dəyişdi.', 'AbortError');
+          const latest = useAppStore.getState().siparisler.find((order) => order.id === id);
+          if (!latest) throw new Error('Sifariş yenilənə bilmədi və ya artıq əlçatan deyil.');
+          setSeciliSiparis(latest);
+        }}
         onWhatsAppAc={(siparis) => setWhatsappSiparis(siparis)}
       />
 

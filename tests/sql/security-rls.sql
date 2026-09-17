@@ -3,7 +3,7 @@ BEGIN;
 DO $$
 DECLARE target text; actor text;
 BEGIN
-  FOREACH target IN ARRAY ARRAY['firmalar','davetler','kullanicilar','siparisler','musteriler','inbox_mesajlar','kuryeler','oturumlar','onboarding_email_jobs','order_maintenance_operations'] LOOP
+  FOREACH target IN ARRAY ARRAY['firmalar','davetler','kullanicilar','siparisler','musteriler','inbox_mesajlar','kuryeler','oturumlar','onboarding_email_jobs','order_maintenance_operations','cargo_settings','legacy_upload_migrations'] LOOP
     IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename=target) THEN
       RAISE EXCEPTION 'Unexpected policy on %', target;
     END IF;

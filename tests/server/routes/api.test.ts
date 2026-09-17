@@ -41,7 +41,21 @@ describe('API Rota Entegrasyon Testleri', () => {
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
     expect(Array.isArray(res.body.kuryeler)).toBe(true);
-    expect(res.body.kuryeler.length).toBe(4);
+    expect(res.body.kuryeler).toEqual([]);
+    const created = await authenticated
+      .post('/api/kuryeler')
+      .send({ ad_soyad: 'Synthetic courier', telefon: '00000000', bolge: 'Test region' });
+    expect(created.status).toBe(201);
+    const reloaded = await authenticated.get('/api/kuryeler');
+    expect(reloaded.status).toBe(200);
+    expect(reloaded.body.kuryeler).toEqual([
+      expect.objectContaining({
+        id: created.body.kurye.id,
+        tenant_id: 'kanada_shopper_baku',
+        kullanici_id: null,
+        toplam_paket_sayisi: 0,
+      }),
+    ]);
   });
 
   it('GET /api/inbox — onay bekleyen gelen kutusunu getirmeli', async () => {

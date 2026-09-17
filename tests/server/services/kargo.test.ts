@@ -100,8 +100,8 @@ describe('Multi-Carrier & Multi-Country Kargo Entegrasyonu Testleri', () => {
       expect(ups.tip).toBe('UPS');
     });
 
-    it('Tenant ayarlarını doğru getirmeli ve şifreleri maskelemeli', () => {
-      const ayar = kargoMerkezi.getAyarlar('kanada_shopper_baku');
+    it('Tenant ayarlarını doğru getirmeli ve şifreleri maskelemeli', async () => {
+      const ayar = await kargoMerkezi.getAyarlar('kanada_shopper_baku');
       expect(ayar.tenantId).toBe('kanada_shopper_baku');
       expect(ayar.saglayici).toBe('ARAMEX');
       expect(ayar.kimlikBilgileri.hesapNo).toBe('');
@@ -128,7 +128,7 @@ describe('Multi-Carrier & Multi-Country Kargo Entegrasyonu Testleri', () => {
       expect(res.body.ayarlar.saglayici).toBe('ARAMEX');
     });
 
-    it('POST /api/kargo/test — bağlantı testi başarılı yanıt vermeli', async () => {
+    it('POST /api/kargo/test — eksik kimlik bilgileriyle bağlantıyı doğrulanmış göstermemeli', async () => {
       const res = await authenticated.post('/api/kargo/test').send({
         tenantId: 'kanada_shopper_baku',
         ayarlar: {
@@ -138,8 +138,9 @@ describe('Multi-Carrier & Multi-Country Kargo Entegrasyonu Testleri', () => {
       });
 
       expect(res.status).toBe(200);
-      expect(res.body.basarili).toBe(true);
+      expect(res.body.basarili).toBe(false);
       expect(res.body.saglayici).toBe('ARAMEX');
+      expect(res.body.detay.mod).toBe('UNCONFIGURED');
       expect(res.body.gecikmeMs).toBeGreaterThanOrEqual(0);
     });
 

@@ -25,7 +25,7 @@ import { kargoMerkezi } from '../../src/server/services/kargo/kargoMerkezi';
 import { supabase } from '../../src/server/services/supabase';
 
 describe('Test environment isolation', () => {
-  it('writes all persisted records and uploads to temporary directories', () => {
+  it('writes all persisted records and uploads to temporary directories', async () => {
     const filenames = [
       'identity.json',
       'firmalar.json',
@@ -46,14 +46,19 @@ describe('Test environment isolation', () => {
 
     firmalariKaydetDosyaya([]);
     kullanicilariKaydetDosyaya([]);
-    kargoMerkezi.kaydetAyarlar({ tenantId: 'isolated-fixture', aktif: false });
+    await kargoMerkezi.kaydetAyarlar({ tenantId: 'isolated-fixture', revision: 0, aktif: false });
     fs.writeFileSync(path.join(UPLOADS_DIR, 'fixture.txt'), 'temporary upload');
 
     expect(JSON.parse(fs.readFileSync(IDENTITY_DOSYA_YOLU, 'utf8'))).toEqual(
       expect.objectContaining({ companies: [], users: [] })
     );
     expect(JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'kargo_ayarlari.json'), 'utf8'))).toEqual(
-      expect.arrayContaining([expect.objectContaining({ tenantId: 'isolated-fixture' })])
+      expect.objectContaining({
+        version: 2,
+        records: expect.arrayContaining([
+          expect.objectContaining({ tenant_id: 'isolated-fixture' }),
+        ]),
+      })
     );
     expect(readProjectFiles()).toEqual(before);
   });

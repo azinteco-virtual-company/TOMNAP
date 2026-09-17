@@ -47,6 +47,7 @@ const order = (tenant: string, id = `order-${tenant}`) => ({
   finans_durumu: 'KISMI_ODEME',
   lojistik_durumu: 'KANADA_DEPO',
   baku_kurye_id: 'kurye-elvin',
+  kurye_atama_surumu: 0,
   eksik_bilgiler: [],
   olusturma_tarihi: '2026-01-01T00:00:00Z',
   urunler: [],
@@ -87,6 +88,7 @@ function database(tables: Record<string, any[]>) {
     tables,
     calls,
     failures,
+    beforeUpdate: undefined as (() => void) | undefined,
     rpc: vi.fn(async (name: string, args: any) => {
       const row = tables.inbox_mesajlar.find(
         (item) => item.id === args.p_inbox_id && item.tenant_id === args.p_tenant_id
@@ -145,6 +147,11 @@ function database(tables: Record<string, any[]>) {
           };
         }
         const records = (tables[table] ||= []);
+        if (operation === 'update' && db.beforeUpdate) {
+          const intervene = db.beforeUpdate;
+          db.beforeUpdate = undefined;
+          intervene();
+        }
         let found = records.filter((r) =>
           filters.every(([kind, key, value]) =>
             kind === 'eq' ? r[key] === value : r[key] !== value
@@ -165,6 +172,7 @@ function database(tables: Record<string, any[]>) {
         if (operation === 'delete') tables[table] = records.filter((r) => !found.includes(r));
         return {
           data: single ? structuredClone(found[0] || null) : structuredClone(found),
+          count: found.length,
           error: null,
         };
       };
@@ -238,10 +246,22 @@ describe('tenant boundaries in core routes', () => {
       expect(result.body[key]).toHaveLength(1);
       expect(JSON.stringify(result.body)).not.toContain('tenant-b');
     }
+    const created = await request(app())
+      .post('/api/kuryeler')
+      .send({ ad_soyad: 'Synthetic courier', telefon: '000', bolge: 'Explicit only' });
+    expect(created.status).toBe(201);
+    expect(
+      (
+        await request(app())
+          .post('/api/siparisler/order-tenant-a/kurye')
+          .send({ kurye_id: created.body.kurye.id, beklenen_atama_surumu: 0 })
+      ).status
+    ).toBe(200);
     const courier = await request(app()).get('/api/kuryeler?tenant_id=all');
-    expect(courier.body.kuryeler.find((r: any) => r.id === 'kurye-elvin').toplam_paket_sayisi).toBe(
-      1
-    );
+    expect(
+      courier.body.kuryeler.find((r: any) => r.id === created.body.kurye.id).toplam_paket_sayisi
+    ).toBe(1);
+    expect(JSON.stringify(courier.body)).not.toContain('tenant-b');
   });
 
   it('honors legacy tenant metadata before exposing an order or aggregate', async () => {
@@ -446,6 +466,36 @@ describe('authoritative database ownership and failure behavior', () => {
     for (const call of calls) expect(call.filters).toContainEqual(['eq', 'tenant_id', 'tenant-a']);
     expect(environment.db.tables.siparisler[1].alinan_tutar).toBe(10);
   });
+
+  it.each(['assignment', 'delivery'])(
+    'does not overwrite a courier %s committed after the order read',
+    async (interleaving) => {
+      const row = environment.db.tables.siparisler[0];
+      environment.db.beforeUpdate = () => {
+        if (interleaving === 'assignment')
+          Object.assign(row, { baku_kurye_id: 'trusted-new-courier', kurye_atama_surumu: 1 });
+        else
+          Object.assign(row, {
+            lojistik_durumu: 'TESLIM_EDILDI',
+            kurye_teslim_alan: 'Recorded recipient',
+            kurye_teslim_kullanici_id: 'trusted-courier-user',
+          });
+      };
+      const result = await request(app())
+        .patch('/api/siparisler/order-tenant-a')
+        .send({ alinan_tutar: 50 });
+      expect(result.status).toBe(409);
+      expect(row.alinan_tutar).toBe(10);
+      if (interleaving === 'assignment')
+        expect(row).toMatchObject({ baku_kurye_id: 'trusted-new-courier', kurye_atama_surumu: 1 });
+      else
+        expect(row).toMatchObject({
+          lojistik_durumu: 'TESLIM_EDILDI',
+          kurye_teslim_alan: 'Recorded recipient',
+          kurye_teslim_kullanici_id: 'trusted-courier-user',
+        });
+    }
+  );
 
   it('cannot mutate foreign DB-only rows and never falls back to stale memory', async () => {
     // A stale local row must not authorize an entity whose DB owner differs.

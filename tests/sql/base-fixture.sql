@@ -80,4 +80,12 @@ CREATE TABLE IF NOT EXISTS public.siparisler (
     is_demo BOOLEAN DEFAULT FALSE
 );
 
-CREATE TABLE public.kuryeler(id text PRIMARY KEY);
+CREATE TABLE public.kuryeler(
+  id varchar(100) PRIMARY KEY,
+  tenant_id varchar(100) DEFAULT 'kanada_shopper_baku',
+  ad_soyad varchar(150) NOT NULL,
+  telefon varchar(50) NOT NULL,
+  bolge varchar(150) NOT NULL,
+  aktif boolean DEFAULT true,
+  olusturma_tarihi timestamptz NOT NULL DEFAULT now()
+);

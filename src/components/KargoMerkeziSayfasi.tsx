@@ -67,6 +67,11 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
   const [testEdiliyor, setTestEdiliyor] = useState(false);
   const [testSonucu, setTestSonucu] = useState<any>(null);
 
+  const [loadedVersion, setLoadedVersion] = useState<{ tenantId: string; revision: number } | null>(
+    null
+  );
+  const currentTenant = useRef(seciliFirmaId);
+  currentTenant.current = seciliFirmaId;
   const [saglayici, setSaglayici] = useState('ARAMEX');
   const [cikisUlkesi, setCikisUlkesi] = useState('CA');
   const [cikisSehri, setCikisSehri] = useState('Toronto (YYZ)');
@@ -87,11 +92,23 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
   // Ayarları Yükle
   const yukleAyarlar = () => {
     setAyarlarYukleniyor(true);
+    const requestedTenant = seciliFirmaId;
+    setLoadedVersion(null);
+    setKullaniciAdi('');
+    setSifre('');
+    setHesapNo('');
+    setPin('');
+    setEntity('');
+    setTestModu(true);
+    setTestSonucu(null);
     fetchWithRetry(`/api/kargo/ayarlar?tenant_id=${encodeURIComponent(seciliFirmaId)}`)
       .then((res) => res.json())
       .then((data) => {
+        if (currentTenant.current !== requestedTenant) return;
+        if (!data.basarili) throw new Error(data.hata || 'Kargo ayarları yüklenemedi.');
         if (data.basarili && data.ayarlar) {
           const a = data.ayarlar;
+          setLoadedVersion({ tenantId: requestedTenant, revision: a.revision });
           setSaglayici(a.saglayici || 'ARAMEX');
           setCikisUlkesi(a.cikisUlkesi || 'CA');
           setCikisSehri(a.cikisSehri || 'Toronto (YYZ)');
@@ -109,7 +126,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
         if (data.desteklenenSaglayicilar) setSaglayicilar(data.desteklenenSaglayicilar);
         if (data.desteklenenUlkeler) setUlkeler(data.desteklenenUlkeler);
       })
-      .catch((err) => console.error('Ayarlar yükleme hatası:', err))
+      .catch((err) => setBildirim({ tip: 'hata', mesaj: err.message }))
       .finally(() => setAyarlarYukleniyor(false));
   };
 
@@ -218,6 +235,10 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
 
   // Bağlantı Testi
   const handleBaglantiTesti = async () => {
+    if (!loadedVersion || loadedVersion.tenantId !== seciliFirmaId || ayarlarYukleniyor) {
+      setBildirim({ tip: 'hata', mesaj: 'Önce firma ayarlarını yükleyin.' });
+      return;
+    }
     setTestEdiliyor(true);
     setTestSonucu(null);
     try {
@@ -246,6 +267,10 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
   // Ayarları Kaydet
   const handleAyarlariKaydet = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!loadedVersion || loadedVersion.tenantId !== seciliFirmaId) {
+      setBildirim({ tip: 'hata', mesaj: 'Ayarlar yüklenemedi; sayfayı yenileyin.' });
+      return;
+    }
     setAyarlarKaydediliyor(true);
     setBildirim(null);
     try {
@@ -254,6 +279,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantId: seciliFirmaId,
+          revision: loadedVersion.revision,
           saglayici,
           cikisUlkesi,
           cikisSehri,
@@ -266,6 +292,10 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
       });
       const data = await res.json();
       if (data.basarili) {
+        if (currentTenant.current !== seciliFirmaId) return;
+        setLoadedVersion({ tenantId: seciliFirmaId, revision: data.ayarlar.revision });
+        setSifre(data.ayarlar.kimlikBilgileri.sifre || '');
+        setPin(data.ayarlar.kimlikBilgileri.pin || '');
         setBildirim({ tip: 'basari', mesaj: 'Kargo tənzimləmələri uğurla yadda saxlanıldı!' });
         setTimeout(() => setBildirim(null), 4000);
       } else {
@@ -790,7 +820,17 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => setSaglayici(p.id)}
+                      onClick={() => {
+                        if (p.id !== saglayici) {
+                          setSaglayici(p.id);
+                          setKullaniciAdi('');
+                          setSifre('');
+                          setHesapNo('');
+                          setPin('');
+                          setEntity('');
+                          setTestModu(true);
+                        }
+                      }}
                       className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                         isSelected
                           ? 'border-blue-600 bg-blue-50/50 dark:bg-blue-950/30 dark:border-blue-500 shadow-xs ring-1 ring-blue-500/20'
@@ -960,7 +1000,9 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                   <button
                     type="button"
                     onClick={handleBaglantiTesti}
-                    disabled={testEdiliyor}
+                    disabled={
+                      testEdiliyor || ayarlarYukleniyor || loadedVersion?.tenantId !== seciliFirmaId
+                    }
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
                   >
                     <Activity

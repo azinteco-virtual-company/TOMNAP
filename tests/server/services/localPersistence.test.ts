@@ -200,46 +200,52 @@ describe('coherent local identity snapshots', () => {
   });
 });
 
-describe('cargo settings commit semantics', () => {
-  it('does not write defaults on load, and preserves a stored empty list', () => {
+describe('cargo settings commit semantics', async () => {
+  it('does not write defaults on load, and preserves a stored empty list', async () => {
     new KargoMerkezi();
     expect(fs.existsSync(cargoFile)).toBe(false);
     fs.writeFileSync(cargoFile, '[]');
     const service = new KargoMerkezi();
-    expect(service.getAyarlar('tenant-empty').kimlikBilgileri.sifre).toBe('');
+    expect((await service.getAyarlar('tenant-empty')).kimlikBilgileri.sifre).toBe('');
     expect(fs.readFileSync(cargoFile, 'utf8')).toBe('[]');
   });
 
-  it('rejects malformed settings and unreadable files without silently restoring defaults', () => {
+  it('rejects malformed settings and unreadable files without silently restoring defaults', async () => {
     fs.writeFileSync(cargoFile, '{bad-settings');
-    expect(() => new KargoMerkezi()).toThrow(JsonStorageError);
+    await expect(new KargoMerkezi().getAyarlar('cargo-tenant')).rejects.toThrow(JsonStorageError);
     fs.writeFileSync(cargoFile, '[]');
     vi.spyOn(fs, 'readFileSync').mockImplementationOnce(() => {
       throw denied();
     });
-    expect(() => new KargoMerkezi()).toThrow(JsonStorageError);
+    await expect(new KargoMerkezi().getAyarlar('cargo-tenant')).rejects.toThrow(JsonStorageError);
   });
 
-  it('does not publish changed provider settings after a failed disk commit', () => {
+  it('does not publish changed provider settings after a failed disk commit', async () => {
     const service = new KargoMerkezi();
-    service.kaydetAyarlar({ tenantId: 'cargo-tenant', aktif: false });
-    const before = service.getAyarlar('cargo-tenant');
+    await service.kaydetAyarlar({ tenantId: 'cargo-tenant', revision: 0, aktif: false });
+    const before = await service.getAyarlar('cargo-tenant');
     const previousDisk = fs.readFileSync(cargoFile, 'utf8');
     const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
       throw denied();
     });
-    expect(() =>
-      service.kaydetAyarlar({ tenantId: 'cargo-tenant', aktif: true, saglayici: 'DHL' })
-    ).toThrow(JsonStorageError);
+    await expect(
+      service.kaydetAyarlar({
+        tenantId: 'cargo-tenant',
+        revision: 1,
+        aktif: true,
+        saglayici: 'DHL',
+      })
+    ).rejects.toThrow(JsonStorageError);
     rename.mockRestore();
-    expect(service.getAyarlar('cargo-tenant')).toEqual(before);
-    expect(new KargoMerkezi().getAyarlar('cargo-tenant')).toEqual(before);
+    expect(await service.getAyarlar('cargo-tenant')).toEqual(before);
+    expect(await new KargoMerkezi().getAyarlar('cargo-tenant')).toEqual(before);
     expect(fs.readFileSync(cargoFile, 'utf8')).toBe(previousDisk);
   });
 
-  it('persists encrypted credentials with mode 0600 and returns detached settings', () => {
+  it('persists encrypted credentials with mode 0600 and returns detached settings', async () => {
     const service = new KargoMerkezi();
-    const saved = service.kaydetAyarlar({
+    const saved = await service.kaydetAyarlar({
+      revision: 0,
       tenantId: 'cargo-tenant',
       kimlikBilgileri: { sifre: 'synthetic-secret', pin: 'synthetic-pin', testModu: true },
     });
@@ -247,10 +253,12 @@ describe('cargo settings commit semantics', () => {
     expect(serialized).not.toContain('synthetic-secret');
     expect(serialized).not.toContain('synthetic-pin');
     expect(fs.statSync(cargoFile).mode & 0o777).toBe(0o600);
-    expect(new KargoMerkezi().getAyarlar('cargo-tenant').kimlikBilgileri.sifre).toBe(
+    expect((await new KargoMerkezi().getAyarlar('cargo-tenant')).kimlikBilgileri.sifre).toBe(
       'synthetic-secret'
     );
     saved.kimlikBilgileri.sifre = 'Caller change';
-    expect(service.getAyarlar('cargo-tenant').kimlikBilgileri.sifre).toBe('synthetic-secret');
+    expect((await service.getAyarlar('cargo-tenant')).kimlikBilgileri.sifre).toBe(
+      'synthetic-secret'
+    );
   });
 });

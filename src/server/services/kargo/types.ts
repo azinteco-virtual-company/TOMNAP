@@ -16,6 +16,7 @@ export interface KargoSaglayiciKimlik {
 }
 
 export interface KargoSaglayiciAyarlari {
+  revision?: number;
   tenantId: string;
   saglayici: KargoSaglayiciTipi;
   aktif: boolean;

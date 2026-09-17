@@ -4177,7 +4177,7 @@ var ALL = [...STAFF, "BAKU_KURYE"];
 var rules = [
   ["GET", /^\/api\/auth\/oturum$/, ALL],
   ["POST", /^\/api\/auth\/cikis$/, ALL],
-  ["GET", /^\/api\/firmalar$/, ALL],
+  ["GET", /^\/api\/firmalar$/, STAFF],
   ["POST", /^\/api\/firmalar\/davet-olustur$/, OWNERS],
   ["POST", /^\/api\/firmalar$/, ["SUPER_ADMIN"]],
   ["PATCH", /^\/api\/firmalar\/[^/]+\/onay$/, ["SUPER_ADMIN"]],
@@ -4202,6 +4202,10 @@ var rules = [
   ["GET", /^\/api\/inbox$/, SALES],
   ["POST", /^\/api\/(inbox\/[^/]+\/(onayla|reddet)|webhook\/siparis)$/, SALES],
   ["GET", /^\/api\/kuryeler$/, [...SHIPPING, "BAKU_FINANS"]],
+  ["POST", /^\/api\/kuryeler(?:\/[^/]+\/kullanici)?$/, OWNERS],
+  ["POST", /^\/api\/siparisler\/[^/]+\/kurye$/, SHIPPING],
+  ["GET", /^\/api\/kurye\/gorevler$/, ["BAKU_KURYE"]],
+  ["POST", /^\/api\/kurye\/gorevler\/[^/]+\/teslim$/, ["BAKU_KURYE"]],
   ["GET", /^\/api\/kargo\/ayarlar$/, SHIPPING],
   ["POST", /^\/api\/kargo\/ayarlar$/, OWNERS],
   ["POST", /^\/api\/kargo\/(test|takip|senkronize-et|manifesto-yukle)$/, SHIPPING],
@@ -4285,7 +4289,7 @@ function sessionAuth() {
       }
       const method = req.method === "HEAD" ? "GET" : req.method;
       if (!rules.some(
-        ([m, path8, roles2]) => m === method && path8.test(req.path) && roles2.includes(auth.role)
+        ([m, path9, roles2]) => m === method && path9.test(req.path) && roles2.includes(auth.role)
       )) {
         res.status(403).json({ basarili: false, hata: "Bu i\u015Flem i\xE7in yetkiniz yok." });
         return;
@@ -4604,7 +4608,7 @@ import { randomUUID } from "node:crypto";
 import { Type } from "@google/genai";
 
 // src/server/routes/gorsel.ts
-import { createHash as createHash2, randomBytes as randomBytes3 } from "node:crypto";
+import { randomBytes as randomBytes4 } from "node:crypto";
 import { Router as Router2 } from "express";
 import path6 from "path";
 import fs3 from "fs";
@@ -4922,9 +4926,9 @@ import http from "node:http";
 import https from "node:https";
 var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 var PublicResourceError = class extends Error {
-  constructor(message, status = 403) {
+  constructor(message, status2 = 403) {
     super(message);
-    this.status = status;
+    this.status = status2;
     this.name = "PublicResourceError";
   }
 };
@@ -4979,11 +4983,11 @@ async function requestOnce(url, deadline, options) {
           if (value !== void 0)
             headers.set(key, Array.isArray(value) ? value.join(", ") : value);
         }
-        const status = incoming.statusCode || 502;
-        if ([301, 302, 303, 307, 308].includes(status)) {
+        const status2 = incoming.statusCode || 502;
+        if ([301, 302, 303, 307, 308].includes(status2)) {
           clearTimeout(timer);
           incoming.destroy();
-          resolve({ status, headers, body: Buffer.alloc(0) });
+          resolve({ status: status2, headers, body: Buffer.alloc(0) });
           return;
         }
         const length = Number(headers.get("content-length"));
@@ -5015,7 +5019,7 @@ async function requestOnce(url, deadline, options) {
         });
         incoming.on("end", () => {
           clearTimeout(timer);
-          resolve({ status, headers, body: Buffer.concat(chunks) });
+          resolve({ status: status2, headers, body: Buffer.concat(chunks) });
         });
         incoming.on(
           "aborted",
@@ -5052,10 +5056,16 @@ async function fetchPublicResource(rawUrl, options = {}) {
       url = new URL(location, url);
       continue;
     }
-    const body = [204, 205, 304].includes(result.status) ? null : new Uint8Array(result.body);
-    return new Response(body, { status: result.status, headers: result.headers });
+    const body2 = [204, 205, 304].includes(result.status) ? null : new Uint8Array(result.body);
+    return new Response(body2, { status: result.status, headers: result.headers });
   }
   throw new PublicResourceError("\xC7ok fazla y\xF6nlendirme.", 502);
+}
+
+// src/server/services/tenantImageNames.ts
+import { createHash as createHash2, randomBytes as randomBytes3 } from "node:crypto";
+function tenantImagePrefix(tenantId) {
+  return `t_${createHash2("sha256").update(tenantId).digest("hex").slice(0, 24)}_`;
 }
 
 // src/server/routes/gorsel.ts
@@ -5153,13 +5163,10 @@ function uploadPath(dosyaAdi) {
   }
   return candidate;
 }
-function imagePrefix(tenantId) {
-  return `t_${createHash2("sha256").update(tenantId).digest("hex").slice(0, 24)}_`;
-}
 function ownedUploadPath(req, name) {
   if (!req.auth || !req.tenantId) throw new PublicResourceError("Oturum gerekli.", 401);
   const candidate = uploadPath(name);
-  if (!/^t_[a-f0-9]{24}_[a-f0-9]{32}\.(png|jpg|webp)$/.test(name) || !(req.auth.role === "SUPER_ADMIN" && req.tenantId === "all") && !name.startsWith(imagePrefix(req.tenantId))) {
+  if (!/^t_[a-f0-9]{24}_[a-f0-9]{32}\.(png|jpg|webp)$/.test(name) || !(req.auth.role === "SUPER_ADMIN" && req.tenantId === "all") && !name.startsWith(tenantImagePrefix(req.tenantId))) {
     throw new PublicResourceError("G\xF6rsel bulunamad\u0131.", 404);
   }
   return candidate;
@@ -5169,7 +5176,7 @@ function storeTenantImage(req, base64, declaredMime) {
     throw new PublicResourceError("G\xF6rsel i\xE7in bir firma se\xE7in.", 403);
   if (typeof base64 !== "string") throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel.", 400);
   const parsed = decodeImage(base64, declaredMime);
-  const name = `${imagePrefix(req.tenantId)}${randomBytes3(16).toString("hex")}.${parsed.ext}`;
+  const name = `${tenantImagePrefix(req.tenantId)}${randomBytes4(16).toString("hex")}.${parsed.ext}`;
   fs3.mkdirSync(UPLOADS_DIR, { recursive: true, mode: 448 });
   fs3.writeFileSync(uploadPath(name), parsed.buffer, { flag: "wx", mode: 384 });
   return {
@@ -5199,6 +5206,35 @@ async function assertTenantImageReferences(req, payload) {
         throw new PublicResourceError("G\xF6rsel bulunamad\u0131.", 404);
     }
   }
+}
+var imageMetadataVersion = (row) => JSON.stringify({
+  urunler: row.urunler,
+  gorsel_urlleri: row.gorsel_urlleri,
+  eksik_bilgiler: row.eksik_bilgiler
+});
+async function saveOrderImageMetadata(req, id, original, formatted, products) {
+  const metadata = hazirlaSupabasePayload({ ...formatted, urunler: products }).eksik_bilgiler;
+  if (supabase) {
+    let query = supabase.from("siparisler").update({ eksik_bilgiler: metadata }).eq("id", id).eq("tenant_id", req.tenantId);
+    for (const field of ["eksik_bilgiler", "urunler", "gorsel_urlleri"]) {
+      if (field !== "eksik_bilgiler" && !Object.hasOwn(original, field)) continue;
+      query = original[field] == null ? query.is(field, null) : query.eq(field, JSON.stringify(original[field]));
+    }
+    const { data, error } = await query.select("*").maybeSingle();
+    if (error) throw new PublicResourceError("G\xF6rsel de\u011Fi\u015Fikli\u011Fi kaydedilemedi.", 503);
+    if (!data) throw new PublicResourceError("G\xF6rsel bilgileri de\u011Fi\u015Fti; sipari\u015Fi yenileyin.", 409);
+    return formatlaSiparis(data);
+  }
+  const index = siparislerVeritabani.findIndex(
+    (row) => row.id === id && row.tenant_id === req.tenantId
+  );
+  if (index === -1) throw new PublicResourceError("Sipari\u015F bulunamad\u0131.", 404);
+  const current = siparislerVeritabani[index];
+  if (imageMetadataVersion(formatlaSiparis(current)) !== imageMetadataVersion(formatted))
+    throw new PublicResourceError("G\xF6rsel bilgileri de\u011Fi\u015Fti; sipari\u015Fi yenileyin.", 409);
+  const updated = formatlaSiparis({ ...current, eksik_bilgiler: metadata, urunler: products });
+  siparislerVeritabani[index] = updated;
+  return updated;
 }
 function serveUploadedImage(req, res) {
   try {
@@ -5610,31 +5646,16 @@ router2.post("/katalog-gorseli-kaydet", async (req, res) => {
       urun_sayfasi_url: urun_sayfasi_url || mevcutUrun.urun_sayfasi_url,
       resmi_urun_adi: resmi_urun_adi || mevcutUrun.resmi_urun_adi
     };
-    const sbPayload = hazirlaSupabasePayload({
-      ...formatli,
-      urunler: guncelUrunler
-    });
-    if (supabase) {
-      const { data, error } = await supabase.from("siparisler").update(sbPayload).eq("id", siparis_id).eq("tenant_id", req.tenantId).select().single();
-      if (error || !data)
-        return res.status(503).json({ basarili: false, hata: "G\xF6rsel de\u011Fi\u015Fikli\u011Fi kaydedilemedi." });
-      if (data) {
-        return res.json({
-          basarili: true,
-          siparis: formatlaSiparis(data),
-          mesaj: "Orijinal web katalog g\xF6rseli kaydedildi!"
-        });
-      }
-    }
-    const idx = siparislerVeritabani.findIndex(
-      (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+    const saved = await saveOrderImageMetadata(
+      req,
+      siparis_id,
+      mevcutSiparis,
+      formatli,
+      guncelUrunler
     );
-    if (idx !== -1) {
-      siparislerVeritabani[idx].urunler = guncelUrunler;
-    }
     res.json({
       basarili: true,
-      siparis: { ...formatli, urunler: guncelUrunler },
+      siparis: saved,
       mesaj: "Orijinal web katalog g\xF6rseli kaydedildi!"
     });
   } catch (err) {
@@ -5682,31 +5703,16 @@ router2.post("/urun-orijinal-gorsele-don", async (req, res) => {
       urun_sayfasi_url: void 0,
       resmi_urun_adi: void 0
     };
-    const sbPayload = hazirlaSupabasePayload({
-      ...formatli,
-      urunler: guncelUrunler
-    });
-    if (supabase) {
-      const { data, error } = await supabase.from("siparisler").update(sbPayload).eq("id", siparis_id).eq("tenant_id", req.tenantId).select().single();
-      if (error || !data)
-        return res.status(503).json({ basarili: false, hata: "G\xF6rsel de\u011Fi\u015Fikli\u011Fi kaydedilemedi." });
-      if (data) {
-        return res.json({
-          basarili: true,
-          siparis: formatlaSiparis(data),
-          mesaj: "Orijinal ekran g\xF6r\xFCnt\xFCs\xFC ba\u015Far\u0131yla geri y\xFCklendi."
-        });
-      }
-    }
-    const idx = siparislerVeritabani.findIndex(
-      (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+    const saved = await saveOrderImageMetadata(
+      req,
+      siparis_id,
+      mevcutSiparis,
+      formatli,
+      guncelUrunler
     );
-    if (idx !== -1) {
-      siparislerVeritabani[idx].urunler = guncelUrunler;
-    }
     res.json({
       basarili: true,
-      siparis: { ...formatli, urunler: guncelUrunler },
+      siparis: saved,
       mesaj: "Orijinal ekran g\xF6r\xFCnt\xFCs\xFC ba\u015Far\u0131yla geri y\xFCklendi."
     });
   } catch (err) {
@@ -5723,24 +5729,24 @@ var rowTenant = (row) => {
   const legacy = Array.isArray(row.eksik_bilgiler) ? row.eksik_bilgiler.filter((item) => typeof item === "string" && item.startsWith("META:tenant_id=")).at(-1) : void 0;
   return legacy?.slice("META:tenant_id=".length) || "kanada_shopper_baku";
 };
-var belongs = (row, tenant) => tenant === "all" || rowTenant(row) === tenant;
+var belongs = (row, tenant2) => tenant2 === "all" || rowTenant(row) === tenant2;
 function tenantFor(req, mutation = false) {
-  const tenant = req.tenantId;
-  if (!tenant || mutation && tenant === "all")
+  const tenant2 = req.tenantId;
+  if (!tenant2 || mutation && tenant2 === "all")
     throw new PublicResourceError("Bir butik se\xE7ilmelidir.", 400);
-  return tenant;
+  return tenant2;
 }
-var dbActive = (tenant) => !!supabase && tenant !== "demo_sandbox";
-var memoryOrders = (tenant) => tenant === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
-async function scopedCustomers(tenant) {
-  if (!dbActive(tenant)) return musterilerVeritabani.filter((m) => belongs(m, tenant));
-  const { data, error } = await supabase.from("musteriler").select("*").eq("tenant_id", tenant);
+var dbActive = (tenant2) => !!supabase && tenant2 !== "demo_sandbox";
+var memoryOrders = (tenant2) => tenant2 === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+async function scopedCustomers(tenant2) {
+  if (!dbActive(tenant2)) return musterilerVeritabani.filter((m) => belongs(m, tenant2));
+  const { data, error } = await supabase.from("musteriler").select("*").eq("tenant_id", tenant2);
   if (error) throw new PublicResourceError("M\xFC\u015Fteriler okunamad\u0131.", 503);
-  return (data || []).filter((m) => belongs(m, tenant));
+  return (data || []).filter((m) => belongs(m, tenant2));
 }
-async function validateCustomerReference(tenant, id) {
+async function validateCustomerReference(tenant2, id) {
   if (!id) return;
-  if (typeof id !== "string" || !(await scopedCustomers(tenant)).some((m) => m.id === id))
+  if (typeof id !== "string" || !(await scopedCustomers(tenant2)).some((m) => m.id === id))
     throw new PublicResourceError("M\xFC\u015Fteri bulunamad\u0131.", 404);
 }
 var orderFailure = (res, error) => res.status(error instanceof PublicResourceError ? error.status : 503).json({
@@ -5749,23 +5755,23 @@ var orderFailure = (res, error) => res.status(error instanceof PublicResourceErr
 });
 router3.get("/siparisler", async (req, res) => {
   try {
-    const tenant = tenantFor(req);
+    const tenant2 = tenantFor(req);
     let orders;
-    if (dbActive(tenant)) {
+    if (dbActive(tenant2)) {
       let query = supabase.from("siparisler").select("*");
-      if (tenant !== "all") query = query.eq("tenant_id", tenant);
+      if (tenant2 !== "all") query = query.eq("tenant_id", tenant2);
       const { data, error } = await query.order("olusturma_tarihi", { ascending: false });
       if (error) throw new PublicResourceError("Sipari\u015Fler okunamad\u0131.", 503);
-      orders = (data || []).filter((s) => belongs(s, tenant)).map(formatlaSiparis);
+      orders = (data || []).filter((s) => belongs(s, tenant2)).map(formatlaSiparis);
     } else {
-      orders = memoryOrders(tenant).filter((s) => belongs(s, tenant)).map(formatlaSiparis);
+      orders = memoryOrders(tenant2).filter((s) => belongs(s, tenant2)).map(formatlaSiparis);
     }
     res.json({
       basarili: true,
-      kaynak: tenant === "demo_sandbox" ? "demo_sandbox" : dbActive(tenant) ? "supabase" : "bellek",
+      kaynak: tenant2 === "demo_sandbox" ? "demo_sandbox" : dbActive(tenant2) ? "supabase" : "bellek",
       toplam: orders.length,
       siparisler: orders,
-      ...tenant === "demo_sandbox" ? { isDemo: true } : {}
+      ...tenant2 === "demo_sandbox" ? { isDemo: true } : {}
     });
   } catch (error) {
     orderFailure(res, error);
@@ -6137,9 +6143,14 @@ ${urunNotOzeti}`;
 });
 router3.post("/siparisler", async (req, res) => {
   try {
-    const tenant = tenantFor(req, true);
+    const tenant2 = tenantFor(req, true);
     const yeniVeri = req.body;
-    await validateCustomerReference(tenant, yeniVeri.musteri_id);
+    if (["baku_kurye_id", "baku_kurye_adi", "baku_kurye_bolgesi"].some((key) => yeniVeri?.[key]))
+      throw new PublicResourceError(
+        "Kuryeyi sipari\u015F kaydedildikten sonra atama i\u015Flemiyle se\xE7in.",
+        400
+      );
+    await validateCustomerReference(tenant2, yeniVeri.musteri_id);
     await assertTenantImageReferences(req, yeniVeri);
     if (!yeniVeri || !yeniVeri.urun_aciklamasi || !yeniVeri.musteri_adi) {
       return res.status(400).json({ basarili: false, hata: "M\xFC\u015Fteri ad\u0131 ve \xFCr\xFCn a\xE7\u0131klamas\u0131 zorunludur." });
@@ -6150,8 +6161,8 @@ router3.post("/siparisler", async (req, res) => {
     if (!Number.isFinite(toplam) || !Number.isFinite(alinan) || toplam < 0 || alinan < 0)
       throw new PublicResourceError("Ge\xE7ersiz tutar.", 400);
     const dbPayload = {
-      tenant_id: tenant,
-      is_demo: tenant === "demo_sandbox",
+      tenant_id: tenant2,
+      is_demo: tenant2 === "demo_sandbox",
       musteri_id: yeniVeri.musteri_id || "",
       baku_kurye_id: yeniVeri.baku_kurye_id || null,
       baku_kurye_adi: yeniVeri.baku_kurye_adi || null,
@@ -6183,7 +6194,7 @@ router3.post("/siparisler", async (req, res) => {
       urunler: Array.isArray(yeniVeri.urunler) ? yeniVeri.urunler : [],
       gorsel_urlleri: Array.isArray(yeniVeri.gorsel_urlleri) ? yeniVeri.gorsel_urlleri : []
     };
-    if (tenant === "demo_sandbox") {
+    if (tenant2 === "demo_sandbox") {
       const demoSiparis = formatlaSiparis({
         id: "sip-demo-" + randomUUID(),
         olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
@@ -6195,7 +6206,7 @@ router3.post("/siparisler", async (req, res) => {
       demoSiparislerVeritabani.unshift(demoSiparis);
       return res.json({ basarili: true, kaynak: "demo_sandbox", siparis: demoSiparis });
     }
-    if (dbActive(tenant)) {
+    if (dbActive(tenant2)) {
       try {
         const sbPayload = hazirlaSupabasePayload(dbPayload);
         const { data, error } = await supabase.from("siparisler").insert(sbPayload).select().single();
@@ -6299,18 +6310,18 @@ var purchaseFields = /* @__PURE__ */ new Set([
   "baku_kurye_bolgesi",
   "kargo_agirligi_kg"
 ]);
-async function ownedOrder(tenant, id) {
-  if (dbActive(tenant)) {
-    const { data, error } = await supabase.from("siparisler").select("*").eq("id", id).eq("tenant_id", tenant).maybeSingle();
+async function ownedOrder(tenant2, id) {
+  if (dbActive(tenant2)) {
+    const { data, error } = await supabase.from("siparisler").select("*").eq("id", id).eq("tenant_id", tenant2).maybeSingle();
     if (error) throw new PublicResourceError("Sipari\u015F okunamad\u0131.", 503);
-    return data && belongs(data, tenant) ? data : void 0;
+    return data && belongs(data, tenant2) ? data : void 0;
   }
-  return memoryOrders(tenant).find((s) => s.id === id && belongs(s, tenant));
+  return memoryOrders(tenant2).find((s) => s.id === id && belongs(s, tenant2));
 }
 router3.patch("/siparisler/:id", async (req, res) => {
   try {
-    const tenant = tenantFor(req, true);
-    const existing = await ownedOrder(tenant, req.params.id);
+    const tenant2 = tenantFor(req, true);
+    const existing = await ownedOrder(tenant2, req.params.id);
     if (!existing) return res.status(404).json({ basarili: false, hata: "Sipari\u015F bulunamad\u0131." });
     const formatted = formatlaSiparis(existing);
     const role = req.auth?.role;
@@ -6320,10 +6331,19 @@ router3.patch("/siparisler/:id", async (req, res) => {
     const updates = {};
     for (const [key, value] of Object.entries(req.body)) {
       if (key === "tenant_id" || key === "tenantId") {
-        if (value !== tenant) throw new PublicResourceError("Sipari\u015F ba\u015Fka butike ta\u015F\u0131namaz.", 403);
+        if (value !== tenant2) throw new PublicResourceError("Sipari\u015F ba\u015Fka butike ta\u015F\u0131namaz.", 403);
         continue;
       }
       if (JSON.stringify(value) === JSON.stringify(formatted[key])) continue;
+      if ([
+        "baku_kurye_id",
+        "baku_kurye_adi",
+        "baku_kurye_bolgesi",
+        "kurye_atama_surumu",
+        "kurye_teslim_kullanici_id",
+        "kurye_teslim_alan"
+      ].includes(key))
+        throw new PublicResourceError("Kurye atamas\u0131 i\xE7in kurye atama i\u015Flemini kullan\u0131n.", 403);
       if (key === "kalan_tutar") continue;
       if (!allowed.has(key))
         throw new PublicResourceError("Bu alan\u0131 de\u011Fi\u015Ftirme yetkiniz yok: " + key, 403);
@@ -6331,13 +6351,13 @@ router3.patch("/siparisler/:id", async (req, res) => {
     }
     if (updates.eksik_bilgiler !== void 0 && (!Array.isArray(updates.eksik_bilgiler) || updates.eksik_bilgiler.some((v) => typeof v !== "string" || v.startsWith("META:"))))
       throw new PublicResourceError("Ge\xE7ersiz eksik bilgi listesi.", 400);
-    await validateCustomerReference(tenant, updates.musteri_id);
+    await validateCustomerReference(tenant2, updates.musteri_id);
     await assertTenantImageReferences(req, updates);
     const changed = {
       ...formatted,
       ...updates,
       id: existing.id,
-      tenant_id: tenant,
+      tenant_id: tenant2,
       guncellenme_tarihi: (/* @__PURE__ */ new Date()).toISOString()
     };
     for (const key of ["toplam_tutar", "alinan_tutar", "adet"]) {
@@ -6347,17 +6367,30 @@ router3.patch("/siparisler/:id", async (req, res) => {
     }
     changed.kalan_tutar = Math.max(0, changed.toplam_tutar - changed.alinan_tutar);
     changed.finans_durumu = changed.alinan_tutar >= changed.toplam_tutar && changed.toplam_tutar > 0 ? "ODENDI" : changed.alinan_tutar > 0 ? "KISMI_ODEME" : "BEKLIYOR";
-    if (dbActive(tenant)) {
-      const { data, error } = await supabase.from("siparisler").update(hazirlaSupabasePayload(changed)).eq("id", existing.id).eq("tenant_id", tenant).select("*").single();
-      if (error || !data) throw new PublicResourceError("Sipari\u015F g\xFCncellenemedi.", 503);
+    if (dbActive(tenant2)) {
+      const payload = hazirlaSupabasePayload(changed);
+      for (const key of ["baku_kurye_id", "baku_kurye_adi", "baku_kurye_bolgesi"])
+        delete payload[key];
+      const { data, error } = await supabase.from("siparisler").update(payload).eq("id", existing.id).eq("tenant_id", tenant2).eq("kurye_atama_surumu", Number(formatted.kurye_atama_surumu || 0)).eq("lojistik_durumu", formatted.lojistik_durumu).select("*").maybeSingle();
+      if (error) throw new PublicResourceError("Sipari\u015F g\xFCncellenemedi.", 503);
+      if (!data)
+        throw new PublicResourceError(
+          "Sipari\u015Fin atamas\u0131 veya durumu de\u011Fi\u015Fti. Listeyi yenileyin.",
+          409
+        );
       return res.json({ basarili: true, kaynak: "supabase", siparis: formatlaSiparis(data) });
     }
-    const pool = memoryOrders(tenant);
-    const index = pool.findIndex((s) => s.id === existing.id && belongs(s, tenant));
+    const pool = memoryOrders(tenant2);
+    const index = pool.findIndex((s) => s.id === existing.id && belongs(s, tenant2));
+    if (index < 0 || Number(pool[index].kurye_atama_surumu || 0) !== Number(formatted.kurye_atama_surumu || 0) || pool[index].lojistik_durumu !== formatted.lojistik_durumu)
+      throw new PublicResourceError(
+        "Sipari\u015Fin atamas\u0131 veya durumu de\u011Fi\u015Fti. Listeyi yenileyin.",
+        409
+      );
     pool[index] = formatlaSiparis(changed);
     res.json({
       basarili: true,
-      kaynak: tenant === "demo_sandbox" ? "demo_sandbox" : "bellek",
+      kaynak: tenant2 === "demo_sandbox" ? "demo_sandbox" : "bellek",
       siparis: pool[index]
     });
   } catch (error) {
@@ -6366,16 +6399,16 @@ router3.patch("/siparisler/:id", async (req, res) => {
 });
 router3.delete("/siparisler/:id", async (req, res) => {
   try {
-    const tenant = tenantFor(req, true);
-    const existing = await ownedOrder(tenant, req.params.id);
+    const tenant2 = tenantFor(req, true);
+    const existing = await ownedOrder(tenant2, req.params.id);
     if (!existing) return res.status(404).json({ basarili: false, hata: "Sipari\u015F bulunamad\u0131." });
-    if (dbActive(tenant)) {
-      const { error } = await supabase.from("siparisler").delete().eq("id", existing.id).eq("tenant_id", tenant);
+    if (dbActive(tenant2)) {
+      const { error } = await supabase.from("siparisler").delete().eq("id", existing.id).eq("tenant_id", tenant2);
       if (error) throw new PublicResourceError("Sipari\u015F silinemedi.", 503);
     } else {
-      const pool = memoryOrders(tenant);
+      const pool = memoryOrders(tenant2);
       pool.splice(
-        pool.findIndex((s) => s.id === existing.id && belongs(s, tenant)),
+        pool.findIndex((s) => s.id === existing.id && belongs(s, tenant2)),
         1
       );
     }
@@ -6401,14 +6434,14 @@ router3.post("/demo/sifirla", (req, res) => {
 });
 router3.post("/siparisler/tumunu-uluslararasi-kargo-yap", async (req, res) => {
   try {
-    const tenant = tenantFor(req, true);
-    if (dbActive(tenant)) {
-      const { error } = await supabase.from("siparisler").update({ lojistik_durumu: "ULUSLARARASI_KARGO" }).eq("tenant_id", tenant).neq("lojistik_durumu", "TESLIM_EDILDI");
+    const tenant2 = tenantFor(req, true);
+    if (dbActive(tenant2)) {
+      const { error } = await supabase.from("siparisler").update({ lojistik_durumu: "ULUSLARARASI_KARGO" }).eq("tenant_id", tenant2).neq("lojistik_durumu", "TESLIM_EDILDI");
       if (error) throw new PublicResourceError("Sipari\u015Fler g\xFCncellenemedi.", 503);
     } else {
-      const pool = memoryOrders(tenant);
+      const pool = memoryOrders(tenant2);
       for (let index = 0; index < pool.length; index++)
-        if (belongs(pool[index], tenant) && pool[index].lojistik_durumu !== "TESLIM_EDILDI")
+        if (belongs(pool[index], tenant2) && pool[index].lojistik_durumu !== "TESLIM_EDILDI")
           pool[index] = { ...pool[index], lojistik_durumu: "ULUSLARARASI_KARGO" };
     }
     res.json({ basarili: true, mesaj: "Se\xE7ili butikin sipari\u015Fleri g\xFCncellendi." });
@@ -6427,24 +6460,24 @@ var rowTenant2 = (row) => {
   const legacy = Array.isArray(row.eksik_bilgiler) ? row.eksik_bilgiler.filter((item) => typeof item === "string" && item.startsWith("META:tenant_id=")).at(-1) : void 0;
   return legacy?.slice("META:tenant_id=".length) || "kanada_shopper_baku";
 };
-var belongs2 = (row, tenant) => tenant === "all" || rowTenant2(row) === tenant;
+var belongs2 = (row, tenant2) => tenant2 === "all" || rowTenant2(row) === tenant2;
 function tenantFor2(req, mutation = false) {
-  const tenant = req.tenantId;
-  if (!tenant || mutation && tenant === "all")
+  const tenant2 = req.tenantId;
+  if (!tenant2 || mutation && tenant2 === "all")
     throw Object.assign(new Error("Bir butik se\xE7ilmelidir."), { status: 400 });
-  return tenant;
+  return tenant2;
 }
-async function rows(table, tenant) {
-  if (tenant === "demo_sandbox")
-    return table === "siparisler" ? demoSiparislerVeritabani.map(formatlaSiparis) : musterilerVeritabani.filter((r) => r.tenant_id === tenant);
+async function rows(table, tenant2) {
+  if (tenant2 === "demo_sandbox")
+    return table === "siparisler" ? demoSiparislerVeritabani.map(formatlaSiparis) : musterilerVeritabani.filter((r) => r.tenant_id === tenant2);
   if (supabase) {
     let query = supabase.from(table).select("*");
-    if (tenant !== "all") query = query.eq("tenant_id", tenant);
+    if (tenant2 !== "all") query = query.eq("tenant_id", tenant2);
     const { data, error } = await query;
     if (error) throw error;
-    return (data || []).filter((r) => belongs2(r, tenant)).map((r) => table === "siparisler" ? formatlaSiparis(r) : r);
+    return (data || []).filter((r) => belongs2(r, tenant2)).map((r) => table === "siparisler" ? formatlaSiparis(r) : r);
   }
-  return (table === "musteriler" ? musterilerVeritabani : siparislerVeritabani).filter((r) => belongs2(r, tenant)).map((r) => table === "siparisler" ? formatlaSiparis(r) : r);
+  return (table === "musteriler" ? musterilerVeritabani : siparislerVeritabani).filter((r) => belongs2(r, tenant2)).map((r) => table === "siparisler" ? formatlaSiparis(r) : r);
 }
 var phone = (value) => String(value || "").replace(/\s+/g, "");
 function matches(customer, order) {
@@ -6457,10 +6490,10 @@ var fail = (res, error) => res.status(error.status || 503).json({
 });
 router4.get("/musteriler", async (req, res) => {
   try {
-    const tenant = tenantFor2(req);
+    const tenant2 = tenantFor2(req);
     const [customers, orders] = await Promise.all([
-      rows("musteriler", tenant),
-      rows("siparisler", tenant)
+      rows("musteriler", tenant2),
+      rows("siparisler", tenant2)
     ]);
     for (const order of orders) {
       if (!order.musteri_adi || customers.some((c) => matches(c, order))) continue;
@@ -6499,10 +6532,10 @@ router4.get("/musteriler", async (req, res) => {
 });
 router4.get("/musteriler/:id/siparisler", async (req, res) => {
   try {
-    const tenant = tenantFor2(req);
+    const tenant2 = tenantFor2(req);
     const [customers, orders] = await Promise.all([
-      rows("musteriler", tenant),
-      rows("siparisler", tenant)
+      rows("musteriler", tenant2),
+      rows("siparisler", tenant2)
     ]);
     let customer = customers.find((c) => c.id === req.params.id);
     if (!customer) {
@@ -6529,11 +6562,11 @@ router4.get("/musteriler/:id/siparisler", async (req, res) => {
 });
 router4.post("/musteriler", async (req, res) => {
   try {
-    const tenant = tenantFor2(req, true);
+    const tenant2 = tenantFor2(req, true);
     const { id, ad_soyad, telefon, instagram_kullanici_adi, sehir, adres, musteri_tipi, notlar } = req.body;
     if (typeof ad_soyad !== "string" || !ad_soyad.trim())
       return res.status(400).json({ basarili: false, hata: "M\xFC\u015Fteri ad\u0131 zorunludur." });
-    const existing = id ? (await rows("musteriler", tenant)).find((c) => c.id === id) : void 0;
+    const existing = id ? (await rows("musteriler", tenant2)).find((c) => c.id === id) : void 0;
     if (id && !existing)
       return res.status(404).json({ basarili: false, hata: "M\xFC\u015Fteri bulunamad\u0131." });
     const customer = {
@@ -6546,7 +6579,7 @@ router4.post("/musteriler", async (req, res) => {
         son_siparis_tarihi: (/* @__PURE__ */ new Date()).toISOString()
       },
       ad_soyad: ad_soyad.trim(),
-      tenant_id: tenant,
+      tenant_id: tenant2,
       musteri_tipi: musteri_tipi || existing?.musteri_tipi || "TANIMADIK"
     };
     for (const [key, value] of Object.entries({
@@ -6557,13 +6590,13 @@ router4.post("/musteriler", async (req, res) => {
       notlar
     }))
       if (value !== void 0) customer[key] = value;
-    if (supabase && tenant !== "demo_sandbox") {
-      const query = existing ? supabase.from("musteriler").update(customer).eq("id", existing.id).eq("tenant_id", tenant) : supabase.from("musteriler").insert(customer);
+    if (supabase && tenant2 !== "demo_sandbox") {
+      const query = existing ? supabase.from("musteriler").update(customer).eq("id", existing.id).eq("tenant_id", tenant2) : supabase.from("musteriler").insert(customer);
       const { data, error } = await query.select("*").single();
       if (error || !data) throw error || new Error("M\xFC\u015Fteri kaydedilmedi.");
       return res.json({ basarili: true, musteri: data });
     }
-    const index = musterilerVeritabani.findIndex((c) => c.id === customer.id && belongs2(c, tenant));
+    const index = musterilerVeritabani.findIndex((c) => c.id === customer.id && belongs2(c, tenant2));
     if (index >= 0) musterilerVeritabani[index] = customer;
     else musterilerVeritabani.unshift(customer);
     res.json({ basarili: true, musteri: customer });
@@ -6583,14 +6616,14 @@ var rowTenant3 = (row) => {
   const legacy = Array.isArray(row.eksik_bilgiler) ? row.eksik_bilgiler.filter((item) => typeof item === "string" && item.startsWith("META:tenant_id=")).at(-1) : void 0;
   return legacy?.slice("META:tenant_id=".length) || "kanada_shopper_baku";
 };
-var belongs3 = (row, tenant) => tenant === "all" || rowTenant3(row) === tenant;
+var belongs3 = (row, tenant2) => tenant2 === "all" || rowTenant3(row) === tenant2;
 function tenantFor3(req, mutation = false) {
-  const tenant = req.tenantId;
-  if (!tenant || mutation && tenant === "all")
+  const tenant2 = req.tenantId;
+  if (!tenant2 || mutation && tenant2 === "all")
     throw new PublicResourceError("Bir butik se\xE7ilmelidir.", 400);
-  return tenant;
+  return tenant2;
 }
-var dbActive2 = (tenant) => !!supabase && tenant !== "demo_sandbox";
+var dbActive2 = (tenant2) => !!supabase && tenant2 !== "demo_sandbox";
 var inboxFailure = (res, error) => res.status(error instanceof PublicResourceError ? error.status : 503).json({
   basarili: false,
   hata: error instanceof PublicResourceError ? error.message : "Gelen kutusu i\u015Flemi tamamlanamad\u0131."
@@ -6600,25 +6633,25 @@ var mappedInbox = (row) => ({
   gelis_tarihi: row.gelis_tarihi || row.olusturma_tarihi,
   oneri_siparis: { ...row.oneri_siparis || {}, tenant_id: rowTenant3(row) }
 });
-async function ownedInbox(tenant, id) {
-  if (dbActive2(tenant)) {
-    const { data, error } = await supabase.from("inbox_mesajlar").select("*").eq("id", id).eq("tenant_id", tenant).maybeSingle();
+async function ownedInbox(tenant2, id) {
+  if (dbActive2(tenant2)) {
+    const { data, error } = await supabase.from("inbox_mesajlar").select("*").eq("id", id).eq("tenant_id", tenant2).maybeSingle();
     if (error) throw new PublicResourceError("Mesaj okunamad\u0131.", 503);
-    return data && belongs3(data, tenant) ? mappedInbox(data) : void 0;
+    return data && belongs3(data, tenant2) ? mappedInbox(data) : void 0;
   }
-  return onayBekleyenler.find((m) => m.id === id && belongs3(m, tenant));
+  return onayBekleyenler.find((m) => m.id === id && belongs3(m, tenant2));
 }
 router5.get("/inbox", async (req, res) => {
   try {
-    const tenant = tenantFor3(req);
+    const tenant2 = tenantFor3(req);
     let messages;
-    if (dbActive2(tenant)) {
+    if (dbActive2(tenant2)) {
       let query = supabase.from("inbox_mesajlar").select("*");
-      if (tenant !== "all") query = query.eq("tenant_id", tenant);
+      if (tenant2 !== "all") query = query.eq("tenant_id", tenant2);
       const { data, error } = await query;
       if (error) throw new PublicResourceError("Gelen kutusu okunamad\u0131.", 503);
-      messages = (data || []).filter((m) => belongs3(m, tenant)).map(mappedInbox);
-    } else messages = onayBekleyenler.filter((m) => belongs3(m, tenant)).map(mappedInbox);
+      messages = (data || []).filter((m) => belongs3(m, tenant2)).map(mappedInbox);
+    } else messages = onayBekleyenler.filter((m) => belongs3(m, tenant2)).map(mappedInbox);
     res.json({
       basarili: true,
       toplam: messages.filter((m) => m.durum === "BEKLEMEDE").length,
@@ -6752,10 +6785,10 @@ function approvalOrderId(tenantId, inboxId) {
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
 function transitionFailure(error) {
-  const status = error?.code === "PT404" ? 404 : error?.code === "PT409" ? 409 : ["PT400", "22P02", "22003", "23514", "23502"].includes(error?.code || "") ? 400 : 503;
+  const status2 = error?.code === "PT404" ? 404 : error?.code === "PT409" ? 409 : ["PT400", "22P02", "22003", "23514", "23502"].includes(error?.code || "") ? 400 : 503;
   throw new PublicResourceError(
-    status === 404 ? "Mesaj bulunamad\u0131." : status === 409 ? "Mesaj karar\u0131 de\u011Fi\u015Ftirilemez veya onayl\u0131 sipari\u015F art\u0131k yok." : status === 400 ? "Ge\xE7ersiz sipari\u015F verisi." : "Mesaj karar\u0131 kaydedilemedi.",
-    status
+    status2 === 404 ? "Mesaj bulunamad\u0131." : status2 === 409 ? "Mesaj karar\u0131 de\u011Fi\u015Ftirilemez veya onayl\u0131 sipari\u015F art\u0131k yok." : status2 === 400 ? "Ge\xE7ersiz sipari\u015F verisi." : "Mesaj karar\u0131 kaydedilemedi.",
+    status2
   );
 }
 async function approveDatabase(tenantId, inboxId, orderId, payload) {
@@ -6884,10 +6917,10 @@ router5.post("/inbox/:id/onayla", async (req, res) => {
 });
 router5.post("/inbox/:id/reddet", async (req, res) => {
   try {
-    const tenant = tenantFor3(req, true);
-    if (dbActive2(tenant)) {
+    const tenant2 = tenantFor3(req, true);
+    if (dbActive2(tenant2)) {
       const { data, error } = await supabase.rpc("tomnap_reject_inbox", {
-        p_tenant_id: tenant,
+        p_tenant_id: tenant2,
         p_inbox_id: req.params.id
       });
       if (error) transitionFailure(error);
@@ -6900,7 +6933,7 @@ router5.post("/inbox/:id/reddet", async (req, res) => {
       });
     }
     const inbox = onayBekleyenler.find(
-      (item) => item.id === req.params.id && belongs3(item, tenant)
+      (item) => item.id === req.params.id && belongs3(item, tenant2)
     );
     if (!inbox) throw new PublicResourceError("Mesaj bulunamad\u0131.", 404);
     if (inbox.durum === "REDDEDILDI")
@@ -6920,48 +6953,65 @@ import { Router as Router6 } from "express";
 import { randomUUID as randomUUID5 } from "node:crypto";
 
 // src/server/services/crypto.ts
-import crypto from "crypto";
-var ALGORITHM = "aes-256-gcm";
-var IV_LENGTH = 12;
-var PREFIX = "enc:";
-function getKey() {
-  const secret = API_SECRET_KEY || "tomnap_default_internal_secure_key_2026";
-  return crypto.createHash("sha256").update(secret).digest();
-}
-function sifreleMetin(metin) {
-  if (!metin || typeof metin !== "string") return "";
-  if (metin.startsWith(PREFIX)) return metin;
+import crypto from "node:crypto";
+var EncryptionError = class extends Error {
+  constructor(message = "Kargo \u015Fifreleme anahtar\u0131 veya kay\u0131t b\xFCt\xFCnl\xFC\u011F\xFC do\u011Frulanamad\u0131.") {
+    super(message);
+    this.status = 503;
+    this.name = "EncryptionError";
+  }
+};
+function keyring() {
   try {
-    const iv = crypto.randomBytes(IV_LENGTH);
-    const key = getKey();
-    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-    let encrypted = cipher.update(metin, "utf-8", "hex");
-    encrypted += cipher.final("hex");
-    const authTag = cipher.getAuthTag().toString("hex");
-    return `${PREFIX}${iv.toString("hex")}:${authTag}:${encrypted}`;
-  } catch (err) {
-    console.error("\u015Eifreleme hatas\u0131:", err);
-    return metin;
+    const keys = JSON.parse(process.env.CARGO_ENCRYPTION_KEYS || "null");
+    const active = process.env.CARGO_ENCRYPTION_ACTIVE_KEY_ID || "";
+    if (!keys || typeof keys !== "object" || Array.isArray(keys) || !/^[A-Za-z0-9_-]{1,40}$/.test(active) || !Object.hasOwn(keys, active))
+      throw new Error();
+    for (const [id, key] of Object.entries(keys))
+      if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) || typeof key !== "string" || !/^[a-f0-9]{64}$/i.test(key))
+        throw new Error();
+    return { keys, active };
+  } catch {
+    throw new EncryptionError();
   }
 }
-function cozMetin(sifreliMetin) {
-  if (!sifreliMetin || typeof sifreliMetin !== "string") return "";
-  if (!sifreliMetin.startsWith(PREFIX)) return sifreliMetin;
+function aad(context, id) {
+  if (!context || typeof context.tenantId !== "string" || !context.tenantId || context.tenantId === "all" || typeof context.provider !== "string" || !context.provider)
+    throw new EncryptionError();
+  return Buffer.from(JSON.stringify(["TOMNAP:cargo:v2", id, context.tenantId, context.provider]));
+}
+function sifreleMetin(text2, context) {
+  if (typeof text2 !== "string") throw new EncryptionError();
+  const { keys, active } = keyring();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", Buffer.from(keys[active], "hex"), iv);
+  cipher.setAAD(aad(context, active));
+  const encrypted = Buffer.concat([cipher.update(text2, "utf8"), cipher.final()]);
+  return `enc:v2:${active}:${iv.toString("hex")}:${cipher.getAuthTag().toString("hex")}:${encrypted.toString("hex")}`;
+}
+function cozMetin(envelope, context) {
   try {
-    const parts = sifreliMetin.slice(PREFIX.length).split(":");
-    if (parts.length !== 3) return sifreliMetin;
-    const [ivHex, tagHex, encryptedHex] = parts;
-    const iv = Buffer.from(ivHex, "hex");
-    const authTag = Buffer.from(tagHex, "hex");
-    const key = getKey();
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(authTag);
-    let decrypted = decipher.update(encryptedHex, "hex", "utf-8");
-    decrypted += decipher.final("utf-8");
-    return decrypted;
-  } catch (err) {
-    console.warn("\u015Eifre \xE7\xF6zme uyar\u0131s\u0131 (fallback):", err);
-    return sifreliMetin;
+    if (typeof envelope !== "string") throw new Error();
+    const match = /^enc:v2:([A-Za-z0-9_-]{1,40}):([a-f0-9]{24}):([a-f0-9]{32}):((?:[a-f0-9]{2})*)$/.exec(
+      envelope
+    );
+    if (!match) throw new Error();
+    const [, id, iv, tag, encrypted] = match;
+    const { keys } = keyring();
+    if (!Object.hasOwn(keys, id)) throw new Error();
+    const decipher = crypto.createDecipheriv(
+      "aes-256-gcm",
+      Buffer.from(keys[id], "hex"),
+      Buffer.from(iv, "hex")
+    );
+    decipher.setAAD(aad(context, id));
+    decipher.setAuthTag(Buffer.from(tag, "hex"));
+    return Buffer.concat([
+      decipher.update(Buffer.from(encrypted, "hex")),
+      decipher.final()
+    ]).toString("utf8");
+  } catch {
+    throw new EncryptionError();
   }
 }
 function sifreHashle(sifre) {
@@ -7009,7 +7059,7 @@ function escapeHtml(value) {
   );
 }
 async function sendEmail(params) {
-  const { to, subject, html, text } = params;
+  const { to, subject, html, text: text2 } = params;
   console.log(`
 ================= [TOMNAP EMAIL SERVICE] =================`);
   console.log(`G\xD6ND\u018FR\u0130L\u0130R: ${(/* @__PURE__ */ new Date()).toISOString()}`);
@@ -7028,7 +7078,7 @@ async function sendEmail(params) {
           to: [to],
           subject,
           html,
-          text: text || subject
+          text: text2 || subject
         })
       });
       const resData = await response.json();
@@ -7107,7 +7157,7 @@ function buildActivationEmail(params) {
 </body>
 </html>
   `.trim();
-  const text = `
+  const text2 = `
 H\xF6rm\u0259tli ${params.adSoyad},
 
 "${params.butikAdi}" butikiniz \xFC\xE7\xFCn TOMNAP platformas\u0131nda qeydiyyat u\u011Furla tamamland\u0131.
@@ -7117,7 +7167,7 @@ ${link}
 Bu link 24 saat m\xFCdd\u0259tind\u0259 etibarl\u0131d\u0131r.
 TOMNAP D\u0259st\u0259k Komandas\u0131
   `.trim();
-  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text }, link };
+  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text: text2 }, link };
 }
 function buildInviteEmail(params) {
   const baseUrl = getApplicationUrl();
@@ -7177,7 +7227,7 @@ function buildInviteEmail(params) {
 </body>
 </html>
   `.trim();
-  const text = `
+  const text2 = `
 H\xF6rm\u0259tli ${params.adSoyad || "Komanda \xDCzv\xFC"},
 
 ${params.davetEden || "Butik r\u0259hb\u0259rliyi"} t\u0259r\u0259find\u0259n "${params.butikAdi}" butikinin idar\u0259etm\u0259 masas\u0131na ${rolAdi} olaraq d\u0259v\u0259t edildiniz.
@@ -7186,14 +7236,14 @@ ${link}
 
 TOMNAP D\u0259st\u0259k Komandas\u0131
   `.trim();
-  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text }, link };
+  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text: text2 }, link };
 }
 
 // src/server/services/onboarding.ts
 var OnboardingError = class extends Error {
-  constructor(status, message) {
+  constructor(status2, message) {
     super(message);
-    this.status = status;
+    this.status = status2;
   }
 };
 async function onboardingRpc(name, args) {
@@ -7492,22 +7542,22 @@ router6.get("/firmalar", async (req, res) => {
 });
 router6.post("/firmalar/kayit", async (req, res) => {
   try {
-    const body = req.body || {};
-    const ad = String(body.ad || "").trim();
-    const sahipAdi = String(body.sahipAdi || "").trim();
-    const sahipTelefon = String(body.sahipTelefon || "").trim();
-    const sahipEmail = String(body.sahipEmail || "").trim().toLowerCase();
-    const sehir = String(body.sehir || "Bak\u0131").trim();
-    const paket = body.paket || "PRO";
-    const menseiUlke = String(body.menseiUlke || "CA").trim();
-    const aciklama = String(body.aciklama || "").trim();
+    const body2 = req.body || {};
+    const ad = String(body2.ad || "").trim();
+    const sahipAdi = String(body2.sahipAdi || "").trim();
+    const sahipTelefon = String(body2.sahipTelefon || "").trim();
+    const sahipEmail = String(body2.sahipEmail || "").trim().toLowerCase();
+    const sehir = String(body2.sehir || "Bak\u0131").trim();
+    const paket = body2.paket || "PRO";
+    const menseiUlke = String(body2.menseiUlke || "CA").trim();
+    const aciklama = String(body2.aciklama || "").trim();
     if (!ad || !sahipAdi || !sahipTelefon || !sahipEmail) {
       return res.status(400).json({
         basarili: false,
         hata: "Butik ad\u0131, sahibinin ad\u0131, \u0259laq\u0259 telefonu v\u0259 e-po\xE7t \xFCnvan\u0131 m\xFCtl\u0259qdir."
       });
     }
-    if ([body.ad, body.sahipAdi, body.sahipTelefon, body.sahipEmail].some(
+    if ([body2.ad, body2.sahipAdi, body2.sahipTelefon, body2.sahipEmail].some(
       (value) => typeof value !== "string"
     ) || ad.length > 200 || sahipAdi.length > 150 || sahipEmail.length > 150 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sahipEmail) || !/^[+\d\s().-]+$/.test(sahipTelefon) || !/^\d{7,15}$/.test(sahipTelefon.replace(/\D/g, "")) || sehir.length > 100 || menseiUlke.length > 10) {
       return res.status(400).json({ basarili: false, hata: "Qeydiyyat m\u0259lumatlar\u0131n\u0131n format\u0131n\u0131 yoxlay\u0131n." });
@@ -7802,78 +7852,378 @@ var firmalar_default = router6;
 
 // src/server/routes/kuryeler.ts
 import { Router as Router7 } from "express";
+
+// src/server/services/couriers.ts
+import path7 from "node:path";
+import { randomUUID as randomUUID6 } from "node:crypto";
+var localFile = path7.join(DATA_DIR, "couriers.json");
+var object2 = (value) => !!value && typeof value === "object" && !Array.isArray(value);
+function validRecords(value) {
+  if (!Array.isArray(value)) return false;
+  const ids = /* @__PURE__ */ new Set();
+  const users = /* @__PURE__ */ new Set();
+  return value.every((row) => {
+    if (!object2(row) || !["id", "tenant_id", "ad_soyad", "telefon", "bolge", "olusturma_tarihi"].every(
+      (key) => typeof row[key] === "string"
+    ) || !row.id || !row.tenant_id || row.tenant_id === "all" || typeof row.aktif !== "boolean" || row.kullanici_id !== null && (typeof row.kullanici_id !== "string" || !row.kullanici_id) || ids.has(row.id) || row.kullanici_id && users.has(row.kullanici_id))
+      return false;
+    ids.add(row.id);
+    if (row.kullanici_id) users.add(row.kullanici_id);
+    return true;
+  });
+}
+function localRecords() {
+  if (IS_PRODUCTION || SUPABASE_URL)
+    throw new PublicResourceError("Kurye veritaban\u0131 kullan\u0131lam\u0131yor.", 503);
+  return readJsonFile(localFile, validRecords) || [];
+}
+function scope(tenant2) {
+  if (!tenant2 || tenant2 === "all") throw new PublicResourceError("Bir butik se\xE7ilmelidir.", 400);
+}
+function localOrders(tenant2) {
+  return tenant2 === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+}
+function activeLocalUser(tenant2, id) {
+  const user = kullanicilarVeritabani.find(
+    (u) => u.id === id && u.tenant_id === tenant2 && u.rol === "BAKU_KURYE" && u.durum === "AKTIF"
+  );
+  const company = firmalarVeritabani.find((f) => f.id === tenant2 && f.onayDurumu === "AKTIF");
+  if (!user || !company) throw new PublicResourceError("Aktif kurye kullan\u0131c\u0131s\u0131 bulunamad\u0131.", 404);
+  return user;
+}
+function rpcError(error) {
+  const status2 = error?.code === "PT404" ? 404 : ["PT409", "23505"].includes(error?.code) ? 409 : ["PT400", "22023", "22P02"].includes(error?.code) ? 400 : error?.code === "PT403" ? 403 : 503;
+  throw new PublicResourceError(
+    status2 === 409 ? "Kay\u0131t de\u011Fi\u015Fti veya bu kullan\u0131c\u0131 zaten ba\u015Fka kuryeye ba\u011Fl\u0131. Listeyi yenileyin." : status2 === 404 ? "Kurye veya g\xF6rev bulunamad\u0131." : status2 === 400 ? "Ge\xE7ersiz kurye i\u015Flemi." : "Kurye i\u015Flemi tamamlanamad\u0131.",
+    status2
+  );
+}
+async function rpc(name, args) {
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) rpcError(error);
+  if (!data || typeof data !== "object")
+    throw new PublicResourceError("Kurye i\u015Flemi do\u011Frulanamad\u0131.", 503);
+  return data;
+}
+function deliveryTask(order) {
+  return {
+    id: order.id,
+    musteri_adi: order.musteri_adi,
+    telefon_numarasi: order.telefon_numarasi || "",
+    teslimat_sehri: order.teslimat_sehri || "",
+    teslimat_adresi: order.teslimat_adresi || "",
+    urun_aciklamasi: order.urun_aciklamasi,
+    adet: Number(order.adet || 1),
+    lojistik_durumu: order.lojistik_durumu,
+    kalan_tutar: Number(
+      order.kalan_tutar ?? Math.max(0, Number(order.toplam_tutar || 0) - Number(order.alinan_tutar || 0))
+    ),
+    para_birimi: order.para_birimi || "AZN",
+    kurye_atama_surumu: Number(order.kurye_atama_surumu || 0),
+    teslim_tarihi: order.teslim_tarihi || null,
+    teslim_alan: order.kurye_teslim_alan || order.teslim_alan || null
+  };
+}
+function completeRows(result) {
+  if (result.error) rpcError(result.error);
+  if (typeof result.count !== "number" || !Array.isArray(result.data)) rpcError(null);
+  if (result.count !== result.data.length)
+    throw new PublicResourceError("Kurye y\xF6netimi listesi veritaban\u0131 yan\u0131t s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor.", 409);
+  return result.data;
+}
+async function listCouriers(tenant2, withUsers) {
+  scope(tenant2);
+  let rows2;
+  let orders;
+  let users = [];
+  if (supabase) {
+    const result = await supabase.from("kuryeler").select("*", { count: "exact" }).eq("tenant_id", tenant2);
+    rows2 = completeRows(result);
+    const orderResult = await supabase.from("siparisler").select("id,tenant_id,baku_kurye_id,lojistik_durumu,kalan_tutar", { count: "exact" }).eq("tenant_id", tenant2);
+    orders = completeRows(orderResult);
+    if (withUsers) {
+      const userResult = await supabase.from("kullanicilar").select("id,ad_soyad,email", { count: "exact" }).eq("tenant_id", tenant2).eq("rol", "BAKU_KURYE").eq("durum", "AKTIF");
+      users = completeRows(userResult);
+    }
+  } else {
+    rows2 = localRecords().filter((r) => r.tenant_id === tenant2);
+    orders = localOrders(tenant2).filter((r) => r.tenant_id === tenant2).map(formatlaSiparis);
+    if (withUsers)
+      users = kullanicilarVeritabani.filter((u) => u.tenant_id === tenant2 && u.rol === "BAKU_KURYE" && u.durum === "AKTIF").map(({ id, ad_soyad, email }) => ({ id, ad_soyad, email }));
+  }
+  rows2 = rows2.filter((r) => r.tenant_id === tenant2);
+  const ids = new Set(rows2.map((r) => r.id));
+  return {
+    kuryeler: rows2.map((r) => {
+      const assigned = orders.filter((s) => s.tenant_id === tenant2 && s.baku_kurye_id === r.id);
+      const pending = assigned.filter((s) => s.lojistik_durumu !== "TESLIM_EDILDI");
+      return {
+        ...r,
+        kullanici_id: r.kullanici_id || null,
+        aktif_paket_sayisi: pending.length,
+        toplam_paket_sayisi: assigned.length,
+        toplam_tahsilat_bekleyen: pending.reduce((sum, s) => sum + Number(s.kalan_tutar || 0), 0)
+      };
+    }),
+    atanabilir_kullanicilar: users,
+    eslenmemis_siparisler: orders.filter((s) => s.tenant_id === tenant2 && s.baku_kurye_id && !ids.has(s.baku_kurye_id)).map(({ id, baku_kurye_id }) => ({ id, baku_kurye_id }))
+  };
+}
+async function createCourier(tenant2, input) {
+  scope(tenant2);
+  const row = {
+    ...input,
+    id: "kurye-" + randomUUID6(),
+    tenant_id: tenant2,
+    aktif: true,
+    kullanici_id: null,
+    olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  if (supabase) {
+    const { data, error } = await supabase.from("kuryeler").insert(row).select("*").single();
+    if (error) rpcError(error);
+    if (!data || data.id !== row.id || data.tenant_id !== tenant2)
+      throw new PublicResourceError("Kurye kayd\u0131 do\u011Frulanamad\u0131.", 503);
+    return data;
+  }
+  const rows2 = localRecords();
+  rows2.push(row);
+  writeJsonAtomic(localFile, rows2);
+  return row;
+}
+async function bindCourier(tenant2, id, userId, expected) {
+  scope(tenant2);
+  if (supabase)
+    return rpc("tomnap_bind_courier", {
+      p_tenant_id: tenant2,
+      p_courier_id: id,
+      p_user_id: userId,
+      p_expected_user_id: expected
+    });
+  const rows2 = localRecords();
+  const row = rows2.find(
+    (r) => r.id === id && r.tenant_id === tenant2 && (r.aktif || userId === null)
+  );
+  if (!row) throw new PublicResourceError("Kurye bulunamad\u0131.", 404);
+  if (userId) activeLocalUser(tenant2, userId);
+  if (row.kullanici_id === userId) return { kurye: row, tekrar: true };
+  if (row.kullanici_id !== expected || userId && rows2.some((r) => r.id !== id && r.kullanici_id === userId))
+    rpcError({ code: "PT409" });
+  row.kullanici_id = userId;
+  writeJsonAtomic(localFile, rows2);
+  return { kurye: row, tekrar: false };
+}
+async function assignCourier(tenant2, orderId, courierId, version2) {
+  scope(tenant2);
+  if (supabase) {
+    const result = await rpc("tomnap_assign_courier", {
+      p_tenant_id: tenant2,
+      p_order_id: orderId,
+      p_courier_id: courierId,
+      p_expected_version: version2
+    });
+    if (result.siparis?.tenant_id !== tenant2) rpcError(null);
+    return { ...result, siparis: formatlaSiparis(result.siparis) };
+  }
+  const rows2 = localRecords();
+  const courier = courierId ? rows2.find((r) => r.id === courierId && r.tenant_id === tenant2 && r.aktif) : null;
+  if (courierId && !courier) throw new PublicResourceError("Kurye bulunamad\u0131.", 404);
+  const order = localOrders(tenant2).find((s) => s.id === orderId && s.tenant_id === tenant2);
+  if (!order) throw new PublicResourceError("Sipari\u015F bulunamad\u0131.", 404);
+  const currentVersion = Number(order.kurye_atama_surumu || 0);
+  if ((order.baku_kurye_id || null) === courierId && [version2, version2 + 1].includes(currentVersion))
+    return { siparis: formatlaSiparis(order), tekrar: true };
+  if (currentVersion !== version2) rpcError({ code: "PT409" });
+  if (order.lojistik_durumu === "TESLIM_EDILDI") rpcError({ code: "PT409" });
+  Object.assign(order, {
+    baku_kurye_id: courierId,
+    baku_kurye_adi: courier?.ad_soyad || null,
+    baku_kurye_bolgesi: courier?.bolge || null,
+    kurye_atama_surumu: version2 + 1,
+    guncellenme_tarihi: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  return { siparis: formatlaSiparis(order), tekrar: false };
+}
+async function courierTasks(tenant2, userId) {
+  scope(tenant2);
+  if (supabase) {
+    const result = await rpc("tomnap_courier_tasks", { p_tenant_id: tenant2, p_user_id: userId });
+    if (!Array.isArray(result.gorevler)) rpcError(null);
+    return {
+      kurye: result.kurye ? { id: result.kurye.id, ad_soyad: result.kurye.ad_soyad, bolge: result.kurye.bolge } : null,
+      gorevler: result.gorevler.map(deliveryTask)
+    };
+  }
+  activeLocalUser(tenant2, userId);
+  const courier = localRecords().find(
+    (r) => r.tenant_id === tenant2 && r.kullanici_id === userId && r.aktif
+  );
+  if (!courier) return { kurye: null, gorevler: [] };
+  return {
+    kurye: { id: courier.id, ad_soyad: courier.ad_soyad, bolge: courier.bolge },
+    gorevler: localOrders(tenant2).filter(
+      (s) => s.tenant_id === tenant2 && s.baku_kurye_id === courier.id && (s.lojistik_durumu === "BAKU_DAGITIM_ARKADAS" || s.lojistik_durumu === "TESLIM_EDILDI" && s.kurye_teslim_kullanici_id === userId)
+    ).map(deliveryTask)
+  };
+}
+async function deliverCourierTask(tenant2, userId, orderId, version2, recipient) {
+  scope(tenant2);
+  if (supabase) {
+    const result = await rpc("tomnap_deliver_courier_order", {
+      p_tenant_id: tenant2,
+      p_user_id: userId,
+      p_order_id: orderId,
+      p_expected_version: version2,
+      p_recipient: recipient
+    });
+    if (!result.gorev || typeof result.tekrar !== "boolean") rpcError(null);
+    return { gorev: deliveryTask(result.gorev), tekrar: result.tekrar };
+  }
+  activeLocalUser(tenant2, userId);
+  const courier = localRecords().find(
+    (r) => r.tenant_id === tenant2 && r.kullanici_id === userId && r.aktif
+  );
+  const order = courier && localOrders(tenant2).find(
+    (s) => s.tenant_id === tenant2 && s.id === orderId && s.baku_kurye_id === courier.id
+  );
+  if (!order || !courier) throw new PublicResourceError("G\xF6rev bulunamad\u0131.", 404);
+  if (Number(order.kurye_atama_surumu || 0) !== version2) rpcError({ code: "PT409" });
+  if (order.lojistik_durumu === "TESLIM_EDILDI" && order.kurye_teslim_kullanici_id === userId)
+    return { gorev: deliveryTask(order), tekrar: true };
+  if (order.lojistik_durumu !== "BAKU_DAGITIM_ARKADAS") rpcError({ code: "PT409" });
+  Object.assign(order, {
+    lojistik_durumu: "TESLIM_EDILDI",
+    teslim_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
+    teslim_eden_kisi: courier.ad_soyad,
+    kurye_teslim_alan: recipient,
+    kurye_teslim_kullanici_id: userId
+  });
+  return { gorev: deliveryTask(order), tekrar: false };
+}
+
+// src/server/routes/kuryeler.ts
 var router7 = Router7();
+var owners = /* @__PURE__ */ new Set(["SUPER_ADMIN", "PATRON"]);
+var operators = /* @__PURE__ */ new Set([...owners, "KANADA_SATINALMA"]);
+function requireRole(req, roles2) {
+  if (!req.auth || !roles2.has(req.auth.role))
+    throw new PublicResourceError("Bu i\u015Flem i\xE7in yetkiniz yok.", 403);
+  if (!req.tenantId || req.tenantId === "all")
+    throw new PublicResourceError("Bir butik se\xE7ilmelidir.", 400);
+  return req.tenantId;
+}
+function body(req, allowed) {
+  if (!req.body || typeof req.body !== "object" || Array.isArray(req.body) || Object.keys(req.body).some((key) => ![...allowed, "tenant_id", "tenantId"].includes(key)))
+    throw new PublicResourceError("Ge\xE7ersiz kurye iste\u011Fi.", 400);
+}
+function text(value, max) {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > max)
+    throw new PublicResourceError("Zorunlu alanlar\u0131 kontrol edin.", 400);
+  return value.trim();
+}
+function optionalText(value, max) {
+  if (value === void 0 || value === "") return "";
+  if (typeof value !== "string" || value.trim().length > max)
+    throw new PublicResourceError("Alan uzunlu\u011Funu kontrol edin.", 400);
+  return value.trim();
+}
+function nullableId(value) {
+  if (value === null) return null;
+  if (typeof value !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(value))
+    throw new PublicResourceError("Ge\xE7ersiz kimlik.", 400);
+  return value;
+}
+function version(value) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
+    throw new PublicResourceError("G\xF6rev s\xFCr\xFCm\xFC ge\xE7ersiz. Listeyi yenileyin.", 400);
+  return value;
+}
+function failure(res, error) {
+  res.status(error instanceof PublicResourceError ? error.status : 503).json({
+    basarili: false,
+    hata: error instanceof PublicResourceError ? error.message : "Kurye i\u015Flemi tamamlanamad\u0131."
+  });
+}
 router7.get("/kuryeler", async (req, res) => {
   try {
-    const seciliTenant = req.tenantId;
-    if (!seciliTenant)
-      return res.status(401).json({ basarili: false, hata: "Oturum a\xE7\u0131lmal\u0131d\u0131r." });
-    let source = seciliTenant === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
-    if (supabase && seciliTenant !== "demo_sandbox") {
-      let query = supabase.from("siparisler").select("*");
-      if (seciliTenant !== "all") query = query.eq("tenant_id", seciliTenant);
-      const { data, error } = await query;
-      if (error)
-        return res.status(503).json({ basarili: false, hata: "Kurye sipari\u015Fleri okunamad\u0131." });
-      source = data || [];
-    }
-    const ilgiliSiparisler = source.map(formatlaSiparis).filter((s) => seciliTenant === "all" || s.tenant_id === seciliTenant);
-    const kuryeler = [
-      {
-        id: "kurye-elvin",
-        ad_soyad: "Elvin M\u0259mm\u0259dli",
-        telefon: "+994 50 411 22 33",
-        bolge: "N\u0259rimanov & G\u0259nclik & M\u0259rk\u0259z"
-      },
-      {
-        id: "kurye-resad",
-        ad_soyad: "R\u0259\u015Fad K\u0259rimov",
-        telefon: "+994 55 622 33 44",
-        bolge: "Yasamal & Elml\u0259r & 28 May"
-      },
-      {
-        id: "kurye-vuqar",
-        ad_soyad: "V\xFCqar Ta\u011F\u0131yev",
-        telefon: "+994 70 833 44 55",
-        bolge: "G\u0259nc\u0259 & Q\u0259rb Rayonlar\u0131 (Po\xE7t/Avtova\u011Fzal)"
-      },
-      {
-        id: "ofis-tehvil",
-        ad_soyad: "Ofis / M\u0259rk\u0259zi Evd\u0259n T\u0259hvil",
-        telefon: "+994 50 111 22 33",
-        bolge: "N\u0259simi r., 28 May"
-      }
-    ];
-    const zenginKuryeler = kuryeler.map((k) => {
-      const kuryeSiparisleri = ilgiliSiparisler.filter((s) => {
-        if (s.baku_kurye_id === k.id) return true;
-        const adresVeSehir = `${s.teslimat_sehri || ""} ${s.teslimat_adresi || ""}`.toLowerCase();
-        if (k.id === "kurye-elvin" && (adresVeSehir.includes("n\u0259rimanov") || adresVeSehir.includes("g\u0259nclik") || adresVeSehir.includes("t\u0259briz")))
-          return true;
-        if (k.id === "kurye-resad" && (adresVeSehir.includes("yasamal") || adresVeSehir.includes("elml\u0259r") || adresVeSehir.includes("28 may") || adresVeSehir.includes("i\xE7\u0259ri\u015F\u0259h\u0259r")))
-          return true;
-        if (k.id === "kurye-vuqar" && (adresVeSehir.includes("g\u0259nc\u0259") || adresVeSehir.includes("sumqay\u0131t") || adresVeSehir.includes("rayon")))
-          return true;
-        if (k.id === "ofis-tehvil" && (s.ozel_not?.toLowerCase().includes("s\xFCr\xFCc\xFC") || s.ozel_not?.toLowerCase().includes("\xF6z\xFC") || s.ham_mesaj?.toLowerCase().includes("\xF6z\xFC")))
-          return true;
-        return false;
-      });
-      const bekleyenler = kuryeSiparisleri.filter((s) => s.lojistik_durumu !== "TESLIM_EDILDI");
-      const toplanacakBorc = bekleyenler.reduce((acc, s) => acc + (s.kalan_tutar || 0), 0);
-      return {
-        ...k,
-        tenant_id: seciliTenant || "all",
-        aktif_paket_sayisi: bekleyenler.length,
-        toplam_tahsilat_bekleyen: toplanacakBorc,
-        toplam_paket_sayisi: kuryeSiparisleri.length
-      };
+    const tenant2 = requireRole(req, /* @__PURE__ */ new Set([...operators, "BAKU_FINANS"]));
+    res.json({ basarili: true, ...await listCouriers(tenant2, owners.has(req.auth.role)) });
+  } catch (error) {
+    failure(res, error);
+  }
+});
+router7.post("/kuryeler", async (req, res) => {
+  try {
+    const tenant2 = requireRole(req, owners);
+    body(req, ["ad_soyad", "telefon", "bolge"]);
+    const kurye = await createCourier(tenant2, {
+      ad_soyad: text(req.body.ad_soyad, 150),
+      telefon: optionalText(req.body.telefon, 50),
+      bolge: optionalText(req.body.bolge, 150)
     });
+    res.status(201).json({ basarili: true, kurye });
+  } catch (error) {
+    failure(res, error);
+  }
+});
+router7.post("/kuryeler/:id/kullanici", async (req, res) => {
+  try {
+    const tenant2 = requireRole(req, owners);
+    body(req, ["kullanici_id", "beklenen_kullanici_id"]);
     res.json({
       basarili: true,
-      kuryeler: zenginKuryeler
+      ...await bindCourier(
+        tenant2,
+        req.params.id,
+        nullableId(req.body.kullanici_id),
+        nullableId(req.body.beklenen_kullanici_id)
+      )
     });
-  } catch {
-    res.status(503).json({ basarili: false, hata: "Kurye verileri okunamad\u0131." });
+  } catch (error) {
+    failure(res, error);
+  }
+});
+router7.post("/siparisler/:id/kurye", async (req, res) => {
+  try {
+    const tenant2 = requireRole(req, operators);
+    body(req, ["kurye_id", "beklenen_atama_surumu"]);
+    res.json({
+      basarili: true,
+      ...await assignCourier(
+        tenant2,
+        req.params.id,
+        nullableId(req.body.kurye_id),
+        version(req.body.beklenen_atama_surumu)
+      )
+    });
+  } catch (error) {
+    failure(res, error);
+  }
+});
+router7.get("/kurye/gorevler", async (req, res) => {
+  try {
+    const tenant2 = requireRole(req, /* @__PURE__ */ new Set(["BAKU_KURYE"]));
+    res.json({ basarili: true, ...await courierTasks(tenant2, req.auth.userId) });
+  } catch (error) {
+    failure(res, error);
+  }
+});
+router7.post("/kurye/gorevler/:id/teslim", async (req, res) => {
+  try {
+    const tenant2 = requireRole(req, /* @__PURE__ */ new Set(["BAKU_KURYE"]));
+    body(req, ["beklenen_atama_surumu", "teslim_alan"]);
+    res.json({
+      basarili: true,
+      ...await deliverCourierTask(
+        tenant2,
+        req.auth.userId,
+        req.params.id,
+        version(req.body.beklenen_atama_surumu),
+        text(req.body.teslim_alan, 150)
+      )
+    });
+  } catch (error) {
+    failure(res, error);
   }
 });
 var kuryeler_default = router7;
@@ -7885,13 +8235,13 @@ var router8 = Router8();
 var UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 var localReceipts = /* @__PURE__ */ new Map();
 var tenantOf = (row) => row.tenant_id || formatlaSiparis(row).tenant_id;
-var localRows = (tenant) => tenant === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
-var dbActive3 = (tenant) => !!supabase && tenant !== "demo_sandbox";
+var localRows = (tenant2) => tenant2 === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+var dbActive3 = (tenant2) => !!supabase && tenant2 !== "demo_sandbox";
 function fail2(res, error) {
-  const status = error instanceof PublicResourceError ? error.status : error?.code === "23505" ? 409 : ["22023", "22P02", "23514", "23502"].includes(error?.code) ? 400 : error?.code === "54000" ? 413 : 503;
-  res.status(status).json({
+  const status2 = error instanceof PublicResourceError ? error.status : error?.code === "23505" ? 409 : ["22023", "22P02", "23514", "23502"].includes(error?.code) ? 400 : error?.code === "54000" ? 413 : 503;
+  res.status(status2).json({
     basarili: false,
-    hata: error instanceof PublicResourceError ? error.message : status === 409 ? "\u0130\u015Flem kimli\u011Fi veya sipari\u015F kimli\u011Fi \xE7ak\u0131\u015F\u0131yor. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : status === 400 ? "Yedek verisi ge\xE7ersiz. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : status === 413 ? "Yedek s\u0131n\u0131r\u0131 5000 sipari\u015F / 10 MiB. Daha b\xFCy\xFCk veri i\xE7in veritaban\u0131 yede\u011Fi kullan\u0131n." : "Veritaban\u0131 i\u015Flemi do\u011Frulanamad\u0131. Ayn\u0131 i\u015Flem kimli\u011Fiyle yeniden deneyin."
+    hata: error instanceof PublicResourceError ? error.message : status2 === 409 ? "\u0130\u015Flem kimli\u011Fi veya sipari\u015F kimli\u011Fi \xE7ak\u0131\u015F\u0131yor. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : status2 === 400 ? "Yedek verisi ge\xE7ersiz. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : status2 === 413 ? "Yedek s\u0131n\u0131r\u0131 5000 sipari\u015F / 10 MiB. Daha b\xFCy\xFCk veri i\xE7in veritaban\u0131 yede\u011Fi kullan\u0131n." : "Veritaban\u0131 i\u015Flemi do\u011Frulanamad\u0131. Ayn\u0131 i\u015Flem kimli\u011Fiyle yeniden deneyin."
   });
 }
 function concreteTenant(req) {
@@ -7905,7 +8255,7 @@ function operationKey(req) {
     throw new PublicResourceError("Ge\xE7erli bir i\u015Flem kimli\u011Fi gerekiyor.", 400);
   return key.toLowerCase();
 }
-function prepareRows(rows2, tenant, demo = false) {
+function prepareRows(rows2, tenant2, demo = false) {
   if (!Array.isArray(rows2) || !rows2.length || rows2.length > 5e3 || Buffer.byteLength(JSON.stringify(rows2)) > 10 * 1024 * 1024)
     throw new PublicResourceError(
       "Yedek 1\u20135000 sipari\u015F i\xE7ermeli ve 10 MiB s\u0131n\u0131r\u0131n\u0131 a\u015Fmamal\u0131.",
@@ -7940,7 +8290,7 @@ function prepareRows(rows2, tenant, demo = false) {
       raw.tenantId,
       ...Array.isArray(raw.eksik_bilgiler) ? raw.eksik_bilgiler.filter((x) => typeof x === "string" && x.startsWith("META:tenant_id=")).map((x) => x.slice("META:tenant_id=".length)) : []
     ].filter((x) => x !== void 0);
-    if (!demo && (!claims.length || claims.some((x) => x !== tenant)))
+    if (!demo && (!claims.length || claims.some((x) => x !== tenant2)))
       throw new PublicResourceError("Yedek yaln\u0131zca se\xE7ili firman\u0131n sipari\u015Flerini i\xE7ermeli.", 403);
     if (raw.adet !== void 0 && (typeof raw.adet !== "number" || !Number.isSafeInteger(raw.adet) || raw.adet <= 0))
       throw new PublicResourceError("Sipari\u015F adedi ge\xE7ersiz.", 400);
@@ -7950,7 +8300,7 @@ function prepareRows(rows2, tenant, demo = false) {
     const row = formatlaSiparis(raw);
     if (typeof row.musteri_adi !== "string" || !row.musteri_adi.trim() || typeof row.urun_aciklamasi !== "string" || !row.urun_aciklamasi.trim() || !Number.isSafeInteger(row.adet) || row.adet <= 0 || !Number.isFinite(row.toplam_tutar) || row.toplam_tutar < 0 || !Number.isFinite(row.alinan_tutar) || row.alinan_tutar < 0)
       throw new PublicResourceError("Sipari\u015F ad\u0131, \xFCr\xFCn, adet veya tutar ge\xE7ersiz.", 400);
-    if (dbActive3(tenant) && !UUID.test(raw.id))
+    if (dbActive3(tenant2) && !UUID.test(raw.id))
       throw new PublicResourceError(
         "Veritaban\u0131na y\xFCklenen sipari\u015Fler UUID kimli\u011Fi ta\u015F\u0131mal\u0131. Eski yerel kimlikler \xF6nce e\u015Flenmeli.",
         400
@@ -7961,8 +8311,8 @@ function prepareRows(rows2, tenant, demo = false) {
     const payload = {
       ...hazirlaSupabasePayload({
         ...row,
-        tenant_id: tenant,
-        is_demo: demo || tenant === "demo_sandbox" || row.is_demo === true
+        tenant_id: tenant2,
+        is_demo: demo || tenant2 === "demo_sandbox" || row.is_demo === true
       }),
       id
     };
@@ -7975,22 +8325,22 @@ function prepareRows(rows2, tenant, demo = false) {
     return payload;
   });
 }
-async function maintain(tenant, key, mode, rows2) {
-  if (dbActive3(tenant)) {
+async function maintain(tenant2, key, mode, rows2) {
+  if (dbActive3(tenant2)) {
     const { data, error } = await supabase.rpc("tomnap_restore_orders", {
-      p_tenant_id: tenant,
+      p_tenant_id: tenant2,
       p_operation_id: key,
       p_mode: mode,
       p_orders: rows2
     });
     if (error) throw error;
-    if (!data || data.hedef_tenant !== tenant || typeof data.toplam !== "number")
+    if (!data || data.hedef_tenant !== tenant2 || typeof data.toplam !== "number")
       throw new Error("Invalid operation receipt");
     return { ...data, kaynak: "supabase" };
   }
-  if (!firmalarVeritabani.some((f) => f.id === tenant))
+  if (!firmalarVeritabani.some((f) => f.id === tenant2))
     throw new PublicResourceError("Firma bulunamad\u0131.", 404);
-  const fingerprint2 = createHash4("sha256").update(JSON.stringify({ tenant, mode, rows: rows2 })).digest("hex");
+  const fingerprint2 = createHash4("sha256").update(JSON.stringify({ tenant: tenant2, mode, rows: rows2 })).digest("hex");
   const receipt = localReceipts.get(key);
   if (receipt) {
     if (receipt.fingerprint !== fingerprint2)
@@ -7999,50 +8349,50 @@ async function maintain(tenant, key, mode, rows2) {
   }
   if (localReceipts.size >= 1e4)
     throw new PublicResourceError("Yerel i\u015Flem kay\u0131t s\u0131n\u0131r\u0131na ula\u015F\u0131ld\u0131.", 503);
-  const current = localRows(tenant), ids = new Set(rows2.map((r) => r.id));
+  const current = localRows(tenant2), ids = new Set(rows2.map((r) => r.id));
   if (current.some(
-    (r) => ids.has(UUID.test(r.id) ? r.id.toLowerCase() : r.id) && (mode === "merge" || tenantOf(r) !== tenant)
+    (r) => ids.has(UUID.test(r.id) ? r.id.toLowerCase() : r.id) && (mode === "merge" || tenantOf(r) !== tenant2)
   ))
     throw new PublicResourceError("Y\xFCkleme mevcut sipari\u015F kimli\u011Fiyle \xE7ak\u0131\u015F\u0131yor.", 409);
   const normalized = rows2.map(
     (row) => formatlaSiparis({ ...row, olusturma_tarihi: row.olusturma_tarihi || (/* @__PURE__ */ new Date()).toISOString() })
   );
   const next = [
-    ...current.filter((r) => mode === "merge" || tenantOf(r) !== tenant),
+    ...current.filter((r) => mode === "merge" || tenantOf(r) !== tenant2),
     ...normalized
   ];
-  if (tenant === "demo_sandbox") setDemoSiparislerVeritabani(next);
+  if (tenant2 === "demo_sandbox") setDemoSiparislerVeritabani(next);
   else setSiparislerVeritabani(next);
-  const result = { toplam: rows2.length, hedef_tenant: tenant, tekrar: false, kaynak: "bellek" };
+  const result = { toplam: rows2.length, hedef_tenant: tenant2, tekrar: false, kaynak: "bellek" };
   localReceipts.set(key, { fingerprint: fingerprint2, result });
   return result;
 }
 router8.get("/veritabani/durum", async (req, res) => {
   try {
-    const tenant = req.tenantId;
-    let status;
-    if (dbActive3(tenant)) {
-      const { data, error } = await supabase.rpc("tomnap_order_status", { p_tenant_id: tenant });
+    const tenant2 = req.tenantId;
+    let status2;
+    if (dbActive3(tenant2)) {
+      const { data, error } = await supabase.rpc("tomnap_order_status", { p_tenant_id: tenant2 });
       if (error) throw error;
       if (!data || typeof data.toplam_siparis !== "number") throw new Error("Invalid status");
-      status = data;
+      status2 = data;
     } else {
-      const rows2 = localRows(tenant).filter((r) => tenant === "all" || tenantOf(r) === tenant);
-      status = {
+      const rows2 = localRows(tenant2).filter((r) => tenant2 === "all" || tenantOf(r) === tenant2);
+      status2 = {
         toplam_siparis: rows2.length,
         demo_siparis_sayisi: rows2.filter((r) => r.is_demo === true).length,
         canli_siparis_sayisi: rows2.filter((r) => r.is_demo !== true).length,
         firma_dagilimi: {}
       };
       for (const row of rows2)
-        status.firma_dagilimi[tenantOf(row)] = (status.firma_dagilimi[tenantOf(row)] || 0) + 1;
+        status2.firma_dagilimi[tenantOf(row)] = (status2.firma_dagilimi[tenantOf(row)] || 0) + 1;
     }
     res.json({
       basarili: true,
-      ...status,
-      supabase_bagli: dbActive3(tenant),
-      kaynak: dbActive3(tenant) ? "supabase" : "bellek",
-      rejim: status.toplam_siparis === 0 ? "TEMIZ_CANLI" : status.demo_siparis_sayisi > 0 ? "DEMO_MODU" : "CANLI_MODU"
+      ...status2,
+      supabase_bagli: dbActive3(tenant2),
+      kaynak: dbActive3(tenant2) ? "supabase" : "bellek",
+      rejim: status2.toplam_siparis === 0 ? "TEMIZ_CANLI" : status2.demo_siparis_sayisi > 0 ? "DEMO_MODU" : "CANLI_MODU"
     });
   } catch (error) {
     fail2(res, error);
@@ -8050,10 +8400,10 @@ router8.get("/veritabani/durum", async (req, res) => {
 });
 router8.post("/veritabani/temizle", async (req, res) => {
   try {
-    const tenant = concreteTenant(req);
-    if (req.body.onay_kodu !== `SIL:${tenant}`)
-      throw new PublicResourceError(`Silmek i\xE7in SIL:${tenant} onay\u0131 gerekiyor.`, 403);
-    const result = await maintain(tenant, operationKey(req), "clear", []);
+    const tenant2 = concreteTenant(req);
+    if (req.body.onay_kodu !== `SIL:${tenant2}`)
+      throw new PublicResourceError(`Silmek i\xE7in SIL:${tenant2} onay\u0131 gerekiyor.`, 403);
+    const result = await maintain(tenant2, operationKey(req), "clear", []);
     res.json({ basarili: true, ...result, mesaj: "Se\xE7ili firman\u0131n sipari\u015Fleri temizlendi." });
   } catch (error) {
     fail2(res, error);
@@ -8061,14 +8411,14 @@ router8.post("/veritabani/temizle", async (req, res) => {
 });
 router8.post("/veritabani/demo-yukle", async (req, res) => {
   try {
-    const tenant = concreteTenant(req);
-    if (tenant !== "demo_sandbox")
+    const tenant2 = concreteTenant(req);
+    if (tenant2 !== "demo_sandbox")
       throw new PublicResourceError(
         "Demo verileri yaln\u0131zca demo_sandbox alan\u0131na y\xFCklenebilir.",
         403
       );
-    const rows2 = prepareRows(BASLANGIC_SIPARISLER, tenant, true);
-    const result = await maintain(tenant, operationKey(req), "replace", rows2);
+    const rows2 = prepareRows(BASLANGIC_SIPARISLER, tenant2, true);
+    const result = await maintain(tenant2, operationKey(req), "replace", rows2);
     res.json({ basarili: true, ...result, mesaj: "Demo alan\u0131 s\u0131f\u0131rland\u0131." });
   } catch (error) {
     fail2(res, error);
@@ -8076,26 +8426,26 @@ router8.post("/veritabani/demo-yukle", async (req, res) => {
 });
 router8.get("/veritabani/yedek-al", async (req, res) => {
   try {
-    const tenant = req.tenantId;
+    const tenant2 = req.tenantId;
     let rows2;
-    if (dbActive3(tenant)) {
-      const { data, error } = await supabase.rpc("tomnap_export_orders", { p_tenant_id: tenant });
+    if (dbActive3(tenant2)) {
+      const { data, error } = await supabase.rpc("tomnap_export_orders", { p_tenant_id: tenant2 });
       if (error) throw error;
       if (!Array.isArray(data)) throw new Error("Invalid backup");
       rows2 = data;
-    } else rows2 = localRows(tenant).filter((r) => tenant === "all" || tenantOf(r) === tenant);
+    } else rows2 = localRows(tenant2).filter((r) => tenant2 === "all" || tenantOf(r) === tenant2);
     if (rows2.length > 5e3 || Buffer.byteLength(JSON.stringify(rows2)) > 10 * 1024 * 1024)
       throw { code: "54000" };
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=tomnap_${tenant}_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`
+      `attachment; filename=tomnap_${tenant2}_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`
     );
     res.json({
       proje: "TOMNAP",
       versiyon: "3.0-orders",
       tarih: (/* @__PURE__ */ new Date()).toISOString(),
-      tenant_id: tenant,
-      kaynak: dbActive3(tenant) ? "supabase" : "bellek",
+      tenant_id: tenant2,
+      kaynak: dbActive3(tenant2) ? "supabase" : "bellek",
       toplam_siparis: rows2.length,
       siparisler: rows2.map(formatlaSiparis)
     });
@@ -8105,24 +8455,24 @@ router8.get("/veritabani/yedek-al", async (req, res) => {
 });
 router8.post("/veritabani/yedek-yukle", async (req, res) => {
   try {
-    const tenant = concreteTenant(req), key = operationKey(req);
+    const tenant2 = concreteTenant(req), key = operationKey(req);
     if (req.body.temizleVeYukle !== void 0 && typeof req.body.temizleVeYukle !== "boolean")
       throw new PublicResourceError("Y\xFCkleme bi\xE7imi ge\xE7ersiz.", 400);
     const replace = req.body.temizleVeYukle === true;
-    if (replace && req.body.onay_kodu !== `DEGISTIR:${tenant}`)
-      throw new PublicResourceError(`De\u011Fi\u015Ftirmek i\xE7in DEGISTIR:${tenant} onay\u0131 gerekiyor.`, 403);
-    const rows2 = prepareRows(req.body.siparisler, tenant);
+    if (replace && req.body.onay_kodu !== `DEGISTIR:${tenant2}`)
+      throw new PublicResourceError(`De\u011Fi\u015Ftirmek i\xE7in DEGISTIR:${tenant2} onay\u0131 gerekiyor.`, 403);
+    const rows2 = prepareRows(req.body.siparisler, tenant2);
     for (const row of rows2) {
       const customerId = row.ek_veriler?.musteri_id;
       if (customerId !== void 0 && customerId !== null && customerId !== "") {
         if (typeof customerId !== "string")
           throw new PublicResourceError("M\xFC\u015Fteri kimli\u011Fi ge\xE7ersiz.", 400);
-        if (!dbActive3(tenant) && !musterilerVeritabani.some((m) => m.id === customerId && tenantOf(m) === tenant))
+        if (!dbActive3(tenant2) && !musterilerVeritabani.some((m) => m.id === customerId && tenantOf(m) === tenant2))
           throw new PublicResourceError("Yedekteki m\xFC\u015Fteri se\xE7ili firmada bulunamad\u0131.", 404);
       }
     }
     await assertTenantImageReferences(req, rows2);
-    const result = await maintain(tenant, key, replace ? "replace" : "merge", rows2);
+    const result = await maintain(tenant2, key, replace ? "replace" : "merge", rows2);
     res.json({ basarili: true, ...result, mesaj: "Sipari\u015F yede\u011Fi se\xE7ili firmaya y\xFCklendi." });
   } catch (error) {
     fail2(res, error);
@@ -8136,9 +8486,6 @@ var veritabani_default = router8;
 
 // src/server/routes/kargoEntegrasyon.ts
 import { Router as Router9 } from "express";
-
-// src/server/services/kargo/kargoMerkezi.ts
-import path7 from "path";
 
 // src/server/services/kargo/providers/aramex.ts
 import * as XLSX from "xlsx";
@@ -8262,11 +8609,11 @@ var AramexProvider = class {
     const kimlik = ayarlar.kimlikBilgileri;
     if (!kimlik?.kullaniciAdi || !kimlik?.sifre) {
       return {
-        basarili: true,
-        mesaj: "Aramex simulyasiya v\u0259 demo rejimi aktivdir (R\u0259smi API a\xE7arlar\u0131 daxil edilm\u0259yib).",
+        basarili: false,
+        mesaj: "Aramex ba\u011Flant\u0131s\u0131 yoxlanmad\u0131. \u0130stifad\u0259\xE7i ad\u0131 v\u0259 \u015Fifr\u0259 daxil edin.",
         saglayici: this.tip,
         gecikmeMs: 15,
-        detay: { mod: "SIMULATION", hesapNo: kimlik.hesapNo || "" }
+        detay: { mod: "UNCONFIGURED" }
       };
     }
     try {
@@ -8291,15 +8638,22 @@ var AramexProvider = class {
         signal: AbortSignal.timeout(8e3)
       });
       const gecikmeMs = Date.now() - baslangic;
-      const data = await res.json();
-      if (data?.HasErrors && Array.isArray(data.Notifications) && data.Notifications.length > 0) {
-        const errNotif = data.Notifications[0];
+      if (!res.ok) {
         return {
           basarili: false,
-          mesaj: `Aramex X\u0259tas\u0131: ${errNotif.Message || "Do\u011Frulama u\u011Fursuz oldu"}`,
+          mesaj: `Aramex ba\u011Flant\u0131s\u0131 t\u0259sdiql\u0259nm\u0259di (HTTP ${res.status}).`,
           saglayici: this.tip,
           gecikmeMs,
-          detay: data.Notifications
+          detay: { status: res.status }
+        };
+      }
+      const data = await res.json();
+      if (!data || typeof data !== "object" || Array.isArray(data) || data.HasErrors !== false || !Array.isArray(data.Notifications) || !Array.isArray(data.TrackingResults)) {
+        return {
+          basarili: false,
+          mesaj: "Aramex etibarl\u0131 u\u011Furlu cavab qaytarmad\u0131. Hesab m\u0259lumatlar\u0131n\u0131 yoxlay\u0131n.",
+          saglayici: this.tip,
+          gecikmeMs
         };
       }
       return {
@@ -8309,14 +8663,13 @@ var AramexProvider = class {
         gecikmeMs,
         detay: { endpoint, status: res.status }
       };
-    } catch (err) {
+    } catch {
       const gecikmeMs = Date.now() - baslangic;
       return {
         basarili: false,
-        mesaj: `Ba\u011Flant\u0131 x\u0259tas\u0131: ${err.message}`,
+        mesaj: "Aramex ba\u011Flant\u0131s\u0131 yoxlan\u0131la bilm\u0259di. Ba\u011Flant\u0131n\u0131 v\u0259 xidm\u0259tin v\u0259ziyy\u0259tini yoxlay\u0131n.",
         saglayici: this.tip,
-        gecikmeMs,
-        detay: err.stack
+        gecikmeMs
       };
     }
   }
@@ -8588,35 +8941,237 @@ var UpsProvider = class {
   }
 };
 
-// src/server/services/kargo/kargoMerkezi.ts
-var AYARLAR_DOSYA_YOLU = path7.join(DATA_DIR, "kargo_ayarlari.json");
-var VARSAYILAN_AYARLAR = {
-  tenantId: "kanada_shopper_baku",
-  saglayici: "ARAMEX",
-  aktif: true,
-  cikisUlkesi: "CA",
-  cikisSehri: "Toronto (YYZ)",
-  varisUlkesi: "AZ",
-  varisHavalimani: "Heyd\u0259r \u018Fliyev Beyn\u0259lxalq Hava Liman\u0131 (GYD)",
-  kimlikBilgileri: {
-    kullaniciAdi: "",
-    sifre: "",
-    hesapNo: "",
-    pin: "",
-    entity: "YYZ",
-    testModu: true
-  },
-  otomatikSenkronizasyon: true,
-  guncellenmeTarihi: (/* @__PURE__ */ new Date()).toISOString()
+// src/server/services/kargo/settings.ts
+import path8 from "node:path";
+var CargoSettingsError = class extends Error {
+  constructor(message, status2 = 503) {
+    super(message);
+    this.status = status2;
+    this.name = "CargoSettingsError";
+  }
 };
+var CARGO_SETTINGS_FILE = path8.join(DATA_DIR, "kargo_ayarlari.json");
+var SECRET_FIELDS = ["sifre", "pin", "apiKey", "apiSecret"];
+var credentialFields = [
+  "kullaniciAdi",
+  "sifre",
+  "hesapNo",
+  "pin",
+  "entity",
+  "apiKey",
+  "apiSecret",
+  "testModu"
+];
+var publicFields = [
+  "tenantId",
+  "revision",
+  "saglayici",
+  "aktif",
+  "cikisUlkesi",
+  "cikisSehri",
+  "varisUlkesi",
+  "varisHavalimani",
+  "otomatikSenkronizasyon",
+  "guncellenmeTarihi"
+];
+var object3 = (value) => !!value && typeof value === "object" && !Array.isArray(value);
+function tenant(value) {
+  if (typeof value !== "string" || !value || value === "all" || value.length > 160)
+    throw new CargoSettingsError("Kargo i\u015Flemi i\xE7in firma se\xE7in.", 400);
+}
+function defaultSettings(tenantId) {
+  tenant(tenantId);
+  return {
+    tenantId,
+    revision: 0,
+    saglayici: "ARAMEX",
+    aktif: true,
+    cikisUlkesi: "CA",
+    cikisSehri: "Toronto (YYZ)",
+    varisUlkesi: "AZ",
+    varisHavalimani: "Heyd\u0259r \u018Fliyev Beyn\u0259lxalq Hava Liman\u0131 (GYD)",
+    kimlikBilgileri: {
+      kullaniciAdi: "",
+      sifre: "",
+      hesapNo: "",
+      pin: "",
+      entity: "YYZ",
+      testModu: true
+    },
+    otomatikSenkronizasyon: true,
+    guncellenmeTarihi: ""
+  };
+}
+function validateSettings(value) {
+  if (!object3(value) || Object.keys(value).some((k) => ![...publicFields, "kimlikBilgileri"].includes(k)))
+    throw new CargoSettingsError("Ge\xE7ersiz kargo ayarlar\u0131.", 400);
+  tenant(value.tenantId);
+  if (!["ARAMEX", "DHL", "UPS", "FEDEX", "MANUEL"].includes(value.saglayici) || !Number.isSafeInteger(value.revision) || value.revision < 0 || ["aktif", "otomatikSenkronizasyon"].some((k) => typeof value[k] !== "boolean") || ["cikisUlkesi", "cikisSehri", "varisUlkesi", "varisHavalimani", "guncellenmeTarihi"].some(
+    (k) => typeof value[k] !== "string" || value[k].length > 500
+  ) || !object3(value.kimlikBilgileri) || typeof value.kimlikBilgileri.testModu !== "boolean" || Object.entries(value.kimlikBilgileri).some(
+    ([k, v]) => !credentialFields.includes(k) || k !== "testModu" && (typeof v !== "string" || v.length > 8192)
+  ))
+    throw new CargoSettingsError("Ge\xE7ersiz kargo ayarlar\u0131.", 400);
+}
+function mergeSettings(current, update) {
+  if (!object3(update) || Object.keys(update).some((k) => ![...publicFields, "kimlikBilgileri"].includes(k)) || update.tenantId !== void 0 && update.tenantId !== current.tenantId || update.kimlikBilgileri !== void 0 && !object3(update.kimlikBilgileri))
+    throw new CargoSettingsError("Ge\xE7ersiz kargo ayarlar\u0131.", 400);
+  const changedProvider = update.saglayici !== void 0 && update.saglayici !== current.saglayici;
+  const baseCredentials = changedProvider ? { testModu: true } : current.kimlikBilgileri;
+  const credentials = { ...baseCredentials, ...update.kimlikBilgileri };
+  for (const field of SECRET_FIELDS) {
+    const incoming = update.kimlikBilgileri?.[field];
+    if (!incoming || incoming === "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022") credentials[field] = baseCredentials[field] || "";
+  }
+  const merged = {
+    ...current,
+    ...update,
+    tenantId: current.tenantId,
+    kimlikBilgileri: credentials
+  };
+  validateSettings(merged);
+  return merged;
+}
+function encodeSettings(value) {
+  validateSettings(value);
+  const { tenantId, revision, kimlikBilgileri, ...settings } = value;
+  const encrypted_credentials = sifreleMetin(JSON.stringify(kimlikBilgileri), {
+    tenantId,
+    provider: settings.saglayici
+  });
+  return { tenant_id: tenantId, revision, settings, encrypted_credentials };
+}
+function decodeSettings(row) {
+  try {
+    const kimlikBilgileri = JSON.parse(
+      cozMetin(row.encrypted_credentials, {
+        tenantId: row.tenant_id,
+        provider: row.settings.saglayici
+      })
+    );
+    const result = {
+      ...row.settings,
+      tenantId: row.tenant_id,
+      revision: row.revision,
+      kimlikBilgileri
+    };
+    validateSettings(result);
+    return result;
+  } catch {
+    throw new CargoSettingsError("Kargo kayd\u0131 \xE7\xF6z\xFClemedi; anahtar ve ge\xE7i\u015F durumunu kontrol edin.");
+  }
+}
+function isCargoSnapshot(value) {
+  if (!object3(value) || value.version !== 2 || !Array.isArray(value.records)) return false;
+  const tenants = /* @__PURE__ */ new Set();
+  for (const row of value.records) {
+    if (!object3(row) || typeof row.tenant_id !== "string" || !row.tenant_id || row.tenant_id === "all" || tenants.has(row.tenant_id) || !Number.isSafeInteger(row.revision) || row.revision < 1 || !object3(row.settings) || typeof row.encrypted_credentials !== "string" || !row.encrypted_credentials.startsWith("enc:v2:"))
+      return false;
+    tenants.add(row.tenant_id);
+  }
+  return true;
+}
+function localSnapshot() {
+  const value = readJsonFile(CARGO_SETTINGS_FILE, (x) => true);
+  if (value === void 0 || Array.isArray(value) && value.length === 0)
+    return { version: 2, records: [] };
+  if (!isCargoSnapshot(value))
+    throw new CargoSettingsError("Kargo kay\u0131tlar\u0131 i\xE7in \xE7evrimd\u0131\u015F\u0131 \u015Fifreleme ge\xE7i\u015Fi gerekli.");
+  return value;
+}
+async function loadCargoSettings(tenantId) {
+  tenant(tenantId);
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from("cargo_settings").select("tenant_id,revision,settings,encrypted_credentials").eq("tenant_id", tenantId).maybeSingle();
+      if (error) throw new Error();
+      return data ? decodeSettings(data) : defaultSettings(tenantId);
+    } catch {
+      throw new CargoSettingsError(
+        "Kargo ayarlar\u0131 okunamad\u0131; veritaban\u0131, anahtar ve ge\xE7i\u015F durumunu kontrol edin."
+      );
+    }
+  }
+  const row = localSnapshot().records.find((x) => x.tenant_id === tenantId);
+  return row ? decodeSettings(row) : defaultSettings(tenantId);
+}
+async function saveCargoSettings(update) {
+  tenant(update.tenantId);
+  if (!Number.isSafeInteger(update.revision) || update.revision < 0)
+    throw new CargoSettingsError("Ayar s\xFCr\xFCm\xFC gerekli; sayfay\u0131 yenileyin.", 400);
+  const snapshot = supabase ? void 0 : localSnapshot();
+  const row = snapshot?.records.find((x) => x.tenant_id === update.tenantId);
+  const current = supabase ? await loadCargoSettings(update.tenantId) : row ? decodeSettings(row) : defaultSettings(update.tenantId);
+  if (current.revision !== update.revision)
+    throw new CargoSettingsError("Ayarlar de\u011Fi\u015Fti; yeniden y\xFCkleyip tekrar deneyin.", 409);
+  const next = mergeSettings(current, update);
+  next.revision = update.revision + 1;
+  next.guncellenmeTarihi = (/* @__PURE__ */ new Date()).toISOString();
+  const encoded = encodeSettings(next);
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc("save_cargo_settings", {
+        p_record: encoded,
+        p_expected_revision: update.revision
+      });
+      if (error?.code === "40001")
+        throw new CargoSettingsError("Ayarlar de\u011Fi\u015Fti; yeniden y\xFCkleyip tekrar deneyin.", 409);
+      if (error || !data) throw new CargoSettingsError("Kargo ayarlar\u0131 kaydedilemedi.");
+      return decodeSettings(data);
+    } catch (error) {
+      if (error instanceof CargoSettingsError) throw error;
+      throw new CargoSettingsError("Kargo ayarlar\u0131 kaydedilemedi.");
+    }
+  }
+  snapshot.records = [
+    ...snapshot.records.filter((x) => x.tenant_id !== update.tenantId),
+    encoded
+  ];
+  writeJsonAtomic(CARGO_SETTINGS_FILE, snapshot);
+  return next;
+}
+
+// src/server/services/kargo/orderUpdates.ts
+async function updateCargoOrder(order, changes) {
+  if (!supabase) {
+    const current = siparislerVeritabani.find(
+      (row) => row.id === order.id && row.tenant_id === order.tenant_id
+    );
+    if (!current || current.lojistik_durumu !== order.lojistik_durumu || (current.kurye_atama_surumu ?? 0) !== (order.kurye_atama_surumu ?? 0) || (current.uluslararasi_kargo_kodu || "") !== (order.uluslararasi_kargo_kodu || ""))
+      throw new CargoSettingsError("Sipari\u015F de\u011Fi\u015Fti; yeniden y\xFCkleyip tekrar deneyin.", 409);
+    for (const field of ["lojistik_durumu", "uluslararasi_kargo_kodu", "kargo_agirligi_kg"])
+      if (Object.hasOwn(changes, field)) current[field] = changes[field];
+    if (Object.hasOwn(changes, "kargo_notu"))
+      current.baku_tahsilat_notu = [current.baku_tahsilat_notu, changes.kargo_notu].filter(Boolean).join(" ");
+    current.guncellenme_tarihi = (/* @__PURE__ */ new Date()).toISOString();
+    return;
+  }
+  try {
+    const { data, error } = await supabase.rpc("tomnap_update_cargo_order", {
+      p_tenant_id: order.tenant_id,
+      p_order_id: order.id,
+      p_expected_status: order.lojistik_durumu,
+      p_expected_assignment: order.kurye_atama_surumu ?? 0,
+      p_expected_awb: order.uluslararasi_kargo_kodu || "",
+      p_changes: changes
+    });
+    if (error?.code === "40001" || error?.code === "P0002")
+      throw new CargoSettingsError("Sipari\u015F de\u011Fi\u015Fti; yeniden y\xFCkleyip tekrar deneyin.", 409);
+    if (error || data?.id !== order.id)
+      throw new CargoSettingsError("Kargo g\xFCncellemesi kaydedilemedi.");
+  } catch (error) {
+    if (error instanceof CargoSettingsError) throw error;
+    throw new CargoSettingsError("Kargo g\xFCncellemesi kaydedilemedi.");
+  }
+}
+
+// src/server/services/kargo/kargoMerkezi.ts
 var KargoMerkezi = class {
   constructor() {
     this.providers = /* @__PURE__ */ new Map();
-    this.tenantAyarlari = /* @__PURE__ */ new Map();
     this.kayitSaglayici(new AramexProvider());
     this.kayitSaglayici(new DhlExpressProvider());
     this.kayitSaglayici(new UpsProvider());
-    this.yukleAyarlariDosyadan();
   }
   kayitSaglayici(provider) {
     this.providers.set(provider.tip, provider);
@@ -8624,61 +9179,26 @@ var KargoMerkezi = class {
   getProvider(tip) {
     const provider = this.providers.get(tip);
     if (!provider) {
-      return this.providers.get("ARAMEX");
+      throw new CargoSettingsError("Bu sa\u011Flay\u0131c\u0131 i\xE7in ba\u011Flant\u0131 hen\xFCz desteklenmiyor.", 400);
     }
     return provider;
   }
-  getAyarlar(tenantId) {
-    const tid = tenantId;
-    if (!tid || tid === "all") throw new Error("Kargo i\u015Flemi i\xE7in firma se\xE7in.");
-    const ayar = this.tenantAyarlari.get(tid);
-    if (ayar) {
-      return structuredClone(ayar);
-    }
-    return {
-      ...structuredClone(VARSAYILAN_AYARLAR),
-      tenantId: tid
-    };
+  async getAyarlar(tenantId) {
+    return loadCargoSettings(tenantId);
   }
-  kaydetAyarlar(yeniAyarlar) {
-    const tid = yeniAyarlar.tenantId || "kanada_shopper_baku";
-    const mevcut = this.getAyarlar(tid);
-    const guncel = {
-      ...mevcut,
-      ...yeniAyarlar,
-      tenantId: tid,
-      kimlikBilgileri: {
-        ...mevcut.kimlikBilgileri,
-        ...yeniAyarlar.kimlikBilgileri || {}
-      },
-      guncellenmeTarihi: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    if (yeniAyarlar.kimlikBilgileri && (!yeniAyarlar.kimlikBilgileri.sifre || yeniAyarlar.kimlikBilgileri.sifre === "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022")) {
-      guncel.kimlikBilgileri.sifre = mevcut.kimlikBilgileri.sifre;
-    }
-    if (yeniAyarlar.kimlikBilgileri && (!yeniAyarlar.kimlikBilgileri.pin || yeniAyarlar.kimlikBilgileri.pin === "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022")) {
-      guncel.kimlikBilgileri.pin = mevcut.kimlikBilgileri.pin;
-    }
-    const pending = new Map(this.tenantAyarlari);
-    pending.set(tid, structuredClone(guncel));
-    this.kaydetAyarlariDosyaya(pending);
-    this.tenantAyarlari = pending;
-    return structuredClone(guncel);
+  async kaydetAyarlar(yeniAyarlar) {
+    return saveCargoSettings(yeniAyarlar);
   }
   /**
    * İstemciye (Frontend) gönderilirken şifre ve PIN kodlarını maskeler.
    */
   maskeleAyarlar(ayarlar) {
-    return {
-      ...ayarlar,
-      kimlikBilgileri: {
-        ...ayarlar.kimlikBilgileri,
-        sifre: ayarlar.kimlikBilgileri.sifre ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" : "",
-        pin: ayarlar.kimlikBilgileri.pin ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" : "",
-        sifreTanimli: Boolean(ayarlar.kimlikBilgileri.sifre),
-        pinTanimli: Boolean(ayarlar.kimlikBilgileri.pin)
-      }
-    };
+    const masked = structuredClone(ayarlar);
+    for (const field of SECRET_FIELDS) {
+      masked.kimlikBilgileri[field] = ayarlar.kimlikBilgileri[field] ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" : "";
+      masked.kimlikBilgileri[`${field}Tanimli`] = Boolean(ayarlar.kimlikBilgileri[field]);
+    }
+    return masked;
   }
   /**
    * Canlı Bağlantı Testi
@@ -8691,7 +9211,7 @@ var KargoMerkezi = class {
    * Tekil veya Toplu Canlı AWB Takip Sorgusu
    */
   async takipEt(takipNolari, tenantId) {
-    const ayarlar = this.getAyarlar(tenantId);
+    const ayarlar = await this.getAyarlar(tenantId);
     const provider = this.getProvider(ayarlar.saglayici);
     return provider.topluTakipEt(takipNolari, ayarlar);
   }
@@ -8699,7 +9219,7 @@ var KargoMerkezi = class {
    * Tenant'ın yoldaki tüm aktif kargolarını otomatik Aramex/Kargo API ile senkronize eder.
    */
   async topluSenkronizeEt(tenantId) {
-    const ayarlar = this.getAyarlar(tenantId);
+    const ayarlar = await this.getAyarlar(tenantId);
     const provider = this.getProvider(ayarlar.saglayici);
     let adaylar = siparislerVeritabani;
     if (supabase) {
@@ -8709,7 +9229,7 @@ var KargoMerkezi = class {
     }
     const aktifSiparisler = adaylar.filter(
       (s) => s.tenant_id === tenantId && Boolean(s.uluslararasi_kargo_kodu?.trim()) && s.lojistik_durumu !== "TESLIM_EDILDI"
-    );
+    ).map((order) => structuredClone(order));
     if (aktifSiparisler.length === 0) {
       return {
         basarili: true,
@@ -8737,6 +9257,11 @@ var KargoMerkezi = class {
       if (!guncelleme) continue;
       if (siparis.lojistik_durumu !== guncelleme.durum) {
         const eski = siparis.lojistik_durumu;
+        const note = `[${ayarlar.saglayici} Canl\u0131: ${guncelleme.konum} - ${guncelleme.hamAciklama}]`;
+        await updateCargoOrder(siparis, {
+          lojistik_durumu: guncelleme.durum,
+          ...!siparis.baku_tahsilat_notu?.includes(guncelleme.konum) ? { kargo_notu: note } : {}
+        });
         siparis.lojistik_durumu = guncelleme.durum;
         siparis.guncellenme_tarihi = simdiIso;
         const kargoLog = `[${ayarlar.saglayici} Canl\u0131: ${guncelleme.konum} - ${guncelleme.hamAciklama}]`;
@@ -8751,15 +9276,6 @@ var KargoMerkezi = class {
           yeniDurum: guncelleme.durum,
           konum: guncelleme.konum
         });
-        if (supabase) {
-          try {
-            const payload = hazirlaSupabasePayload(siparis);
-            const { data, error } = await supabase.from("siparisler").update(payload).eq("id", siparis.id).eq("tenant_id", tenantId).select("id").maybeSingle();
-            if (error || !data) throw new Error("Kargo g\xFCncellemesi kaydedilemedi.");
-          } catch {
-            throw new Error("Kargo g\xFCncellemesi kaydedilemedi.");
-          }
-        }
       }
     }
     return {
@@ -8769,60 +9285,12 @@ var KargoMerkezi = class {
       detaylar
     };
   }
-  // Persist settings before publishing them to providers or callers.
-  yukleAyarlariDosyadan() {
-    const valid = (value) => {
-      if (!Array.isArray(value)) return false;
-      const tenants = /* @__PURE__ */ new Set();
-      for (const row of value) {
-        if (!row || typeof row !== "object" || typeof row.tenantId !== "string" || !row.tenantId || row.tenantId === "all" || tenants.has(row.tenantId) || !row.kimlikBilgileri || typeof row.kimlikBilgileri !== "object" || Array.isArray(row.kimlikBilgileri))
-          return false;
-        for (const field of ["kullaniciAdi", "sifre", "hesapNo", "pin", "entity"])
-          if (row.kimlikBilgileri[field] !== void 0 && typeof row.kimlikBilgileri[field] !== "string")
-            return false;
-        tenants.add(row.tenantId);
-      }
-      return true;
-    };
-    const stored = readJsonFile(AYARLAR_DOSYA_YOLU, valid);
-    const loaded = /* @__PURE__ */ new Map();
-    for (const row of stored || []) {
-      const item = structuredClone(row);
-      for (const field of ["sifre", "pin"]) {
-        const encoded = item.kimlikBilgileri[field];
-        if (!encoded) continue;
-        const decoded = cozMetin(encoded);
-        if (encoded.startsWith("enc:") && decoded === encoded)
-          throw new JsonStorageError("Kargo kimlik bilgileri \xE7\xF6z\xFClemedi.");
-        item.kimlikBilgileri[field] = decoded;
-      }
-      loaded.set(item.tenantId, item);
-    }
-    this.tenantAyarlari = loaded;
-  }
-  kaydetAyarlariDosyaya(settings) {
-    const encode = (value) => {
-      if (!value) return "";
-      const encoded = sifreleMetin(value);
-      if (!encoded.startsWith("enc:"))
-        throw new JsonStorageError("Kargo kimlik bilgileri \u015Fifrelenemedi.");
-      return encoded;
-    };
-    const list = Array.from(settings.values()).map((item) => ({
-      ...item,
-      kimlikBilgileri: {
-        ...item.kimlikBilgileri,
-        sifre: encode(item.kimlikBilgileri?.sifre),
-        pin: encode(item.kimlikBilgileri?.pin)
-      }
-    }));
-    writeJsonAtomic(AYARLAR_DOSYA_YOLU, list);
-  }
 };
 var kargoMerkezi = new KargoMerkezi();
 
 // src/server/routes/kargoEntegrasyon.ts
 var router9 = Router9();
+var status = (error) => [400, 409, 503].includes(error?.status) ? error.status : 500;
 var DESTEKLENEN_SAGLAYICILAR = [
   {
     id: "ARAMEX",
@@ -8869,21 +9337,26 @@ var DESTEKLENEN_ULKELER = [
   { kod: "TR", ad: "T\xFCrkiy\u0259", bayrak: "\u{1F1F9}\u{1F1F7}", anaHavalimani: "\u0130stanbul (IST)" },
   { kod: "AE", ad: "B\u018F\u018F (Birl\u0259\u015Fmi\u015F \u018Fr\u0259b \u018Fmirlikl\u0259ri)", bayrak: "\u{1F1E6}\u{1F1EA}", anaHavalimani: "Dubai (DXB)" }
 ];
-router9.get("/kargo/ayarlar", (req, res) => {
-  const tenantId = req.query.tenant_id || "kanada_shopper_baku";
-  const ayarlar = kargoMerkezi.getAyarlar(tenantId);
-  const maskeli = kargoMerkezi.maskeleAyarlar(ayarlar);
-  res.json({
-    basarili: true,
-    ayarlar: maskeli,
-    desteklenenSaglayicilar: DESTEKLENEN_SAGLAYICILAR,
-    desteklenenUlkeler: DESTEKLENEN_ULKELER
-  });
+router9.get("/kargo/ayarlar", async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id || "kanada_shopper_baku";
+    const ayarlar = await kargoMerkezi.getAyarlar(tenantId);
+    const maskeli = kargoMerkezi.maskeleAyarlar(ayarlar);
+    res.json({
+      basarili: true,
+      ayarlar: maskeli,
+      desteklenenSaglayicilar: DESTEKLENEN_SAGLAYICILAR,
+      desteklenenUlkeler: DESTEKLENEN_ULKELER
+    });
+  } catch (err) {
+    res.status(status(err)).json({ basarili: false, hata: err.message });
+  }
 });
-router9.post("/kargo/ayarlar", (req, res) => {
+router9.post("/kargo/ayarlar", async (req, res) => {
   try {
     const {
       tenantId = "kanada_shopper_baku",
+      revision,
       saglayici = "ARAMEX",
       cikisUlkesi = "CA",
       cikisSehri = "Toronto (YYZ)",
@@ -8893,8 +9366,9 @@ router9.post("/kargo/ayarlar", (req, res) => {
       otomatikSenkronizasyon = true,
       aktif = true
     } = req.body;
-    const guncel = kargoMerkezi.kaydetAyarlar({
+    const guncel = await kargoMerkezi.kaydetAyarlar({
       tenantId,
+      revision,
       saglayici,
       cikisUlkesi,
       cikisSehri,
@@ -8910,17 +9384,18 @@ router9.post("/kargo/ayarlar", (req, res) => {
       ayarlar: kargoMerkezi.maskeleAyarlar(guncel)
     });
   } catch (err) {
-    res.status(500).json({ basarili: false, hata: err.message });
+    res.status(status(err)).json({ basarili: false, hata: err.message });
   }
 });
 router9.post("/kargo/test", async (req, res) => {
   try {
     const { tenantId = "kanada_shopper_baku", ayarlar } = req.body;
-    const testAyar = ayarlar ? { ...kargoMerkezi.getAyarlar(tenantId), ...ayarlar, tenantId } : kargoMerkezi.getAyarlar(tenantId);
+    const current = await kargoMerkezi.getAyarlar(tenantId);
+    const testAyar = ayarlar ? mergeSettings(current, ayarlar) : current;
     const sonuc = await kargoMerkezi.baglantiTesti(testAyar);
     res.json(sonuc);
   } catch (err) {
-    res.status(500).json({
+    res.status(status(err)).json({
       basarili: false,
       mesaj: `Ba\u011Flant\u0131 s\u0131na\u011F\u0131 x\u0259tas\u0131: ${err.message}`,
       saglayici: req.body.ayarlar?.saglayici || "ARAMEX",
@@ -8944,7 +9419,7 @@ router9.post("/kargo/takip", async (req, res) => {
       sonuclar
     });
   } catch (err) {
-    res.status(500).json({ basarili: false, hata: err.message });
+    res.status(status(err)).json({ basarili: false, hata: err.message });
   }
 });
 router9.post("/kargo/senkronize-et", async (req, res) => {
@@ -8956,7 +9431,7 @@ router9.post("/kargo/senkronize-et", async (req, res) => {
       ...sonuc
     });
   } catch (err) {
-    res.status(500).json({ basarili: false, hata: err.message });
+    res.status(status(err)).json({ basarili: false, hata: err.message });
   }
 });
 router9.post("/kargo/manifesto-yukle", async (req, res) => {
@@ -8974,7 +9449,7 @@ router9.post("/kargo/manifesto-yukle", async (req, res) => {
       return res.status(413).json({ basarili: false, hata: "Manifesto en fazla 10 MB olabilir." });
     const base64Data = dosya_base64.replace(/^data:.*?;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
-    const ayarlar = kargoMerkezi.getAyarlar(tenantId);
+    const ayarlar = await kargoMerkezi.getAyarlar(tenantId);
     const provider = kargoMerkezi.getProvider(ayarlar.saglayici);
     const sonuc = await provider.manifestoAyristir(buffer, dosya_adi);
     if (!sonuc.basarili) {
@@ -9007,6 +9482,11 @@ router9.post("/kargo/manifesto-yukle", async (req, res) => {
           return false;
         });
         if (bulunan) {
+          const changes = { uluslararasi_kargo_kodu: satir.takipNo };
+          if (satir.agirlikKg) changes.kargo_agirligi_kg = satir.agirlikKg;
+          if (["KANADA_SATINALIM_BEKLIYOR", "KANADA_DEPO"].includes(bulunan.lojistik_durumu))
+            changes.lojistik_durumu = "ULUSLARARASI_KARGO";
+          await updateCargoOrder(bulunan, changes);
           bulunan.uluslararasi_kargo_kodu = satir.takipNo;
           if (satir.agirlikKg) {
             bulunan.kargo_agirligi_kg = satir.agirlikKg;
@@ -9022,16 +9502,6 @@ router9.post("/kargo/manifesto-yukle", async (req, res) => {
             awbNo: satir.takipNo,
             agirlikKg: satir.agirlikKg
           });
-          if (supabase) {
-            try {
-              const payload = hazirlaSupabasePayload(bulunan);
-              const { data, error } = await supabase.from("siparisler").update(payload).eq("id", bulunan.id).eq("tenant_id", tenantId).select("id").maybeSingle();
-              if (error || !data)
-                return res.status(503).json({ basarili: false, hata: "Manifesto de\u011Fi\u015Fikli\u011Fi kaydedilemedi." });
-            } catch {
-              return res.status(503).json({ basarili: false, hata: "Manifesto de\u011Fi\u015Fikli\u011Fi kaydedilemedi." });
-            }
-          }
         }
       }
     }
@@ -9043,14 +9513,14 @@ router9.post("/kargo/manifesto-yukle", async (req, res) => {
       eslesmeler
     });
   } catch (err) {
-    res.status(500).json({ basarili: false, hata: err.message });
+    res.status(status(err)).json({ basarili: false, hata: err.message });
   }
 });
 var kargoEntegrasyon_default = router9;
 
 // src/server/routes/auth.ts
 import { Router as Router10 } from "express";
-import { randomUUID as randomUUID6 } from "node:crypto";
+import { randomUUID as randomUUID7 } from "node:crypto";
 var router10 = Router10();
 function isUnexpired(value) {
   return typeof value === "string" && Date.parse(value) > Date.now();
@@ -9223,10 +9693,10 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
       return res.status(400).json({ basarili: false, hata: "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil." });
     }
     const newUser = {
-      id: "usr_" + randomUUID6(),
+      id: "usr_" + randomUUID7(),
       tenant_id: invite.tenantId,
       ad_soyad: typeof adSoyad === "string" && adSoyad.trim() ? adSoyad.trim() : invite.kullananKisi || "Komanda \xDCzv\xFC",
-      email: userEmail || `invite-${randomUUID6()}@tomnap.internal`,
+      email: userEmail || `invite-${randomUUID7()}@tomnap.internal`,
       telefon: userPhone,
       rol: invite.rol,
       sifre_hash: sifreHashle(sifre),

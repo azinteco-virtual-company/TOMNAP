@@ -168,7 +168,7 @@ export const YanMenu: React.FC<YanMenuProps> = ({
   const canSeeInbox =
     aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'SATIS_SORUMLUSU';
   const canSeeKuryeMasasi =
-    aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'BAKU_KURYE';
+    aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'KANADA_SATINALMA';
   // Patron kesinlikle Sistem & Devir kodlarını GÖREMEZ!
   const canSeeSistemKodlar = aktifRol === 'SUPER_ADMIN';
 

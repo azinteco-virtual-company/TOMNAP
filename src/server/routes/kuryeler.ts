@@ -1,113 +1,141 @@
-import { Router } from 'express';
-import { siparislerVeritabani, demoSiparislerVeritabani } from '../services/state';
-import { supabase } from '../services/supabase';
-import { formatlaSiparis } from '../services/siparisFormatlama';
+import { Router, type Request, type Response } from 'express';
+import { PublicResourceError } from '../services/publicFetch';
+import {
+  listCouriers,
+  createCourier,
+  bindCourier,
+  assignCourier,
+  courierTasks,
+  deliverCourierTask,
+} from '../services/couriers';
 
 const router = Router();
-
-// GET /api/kuryeler — Bakü Kuryeleri (Multi-Tenant Saha Dağıtım Masası)
+const owners = new Set(['SUPER_ADMIN', 'PATRON']);
+const operators = new Set([...owners, 'KANADA_SATINALMA']);
+function requireRole(req: Request, roles: Set<string>) {
+  if (!req.auth || !roles.has(req.auth.role))
+    throw new PublicResourceError('Bu işlem için yetkiniz yok.', 403);
+  if (!req.tenantId || req.tenantId === 'all')
+    throw new PublicResourceError('Bir butik seçilmelidir.', 400);
+  return req.tenantId;
+}
+function body(req: Request, allowed: string[]) {
+  if (
+    !req.body ||
+    typeof req.body !== 'object' ||
+    Array.isArray(req.body) ||
+    Object.keys(req.body).some((key) => ![...allowed, 'tenant_id', 'tenantId'].includes(key))
+  )
+    throw new PublicResourceError('Geçersiz kurye isteği.', 400);
+}
+function text(value: unknown, max: number) {
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > max)
+    throw new PublicResourceError('Zorunlu alanları kontrol edin.', 400);
+  return value.trim();
+}
+function optionalText(value: unknown, max: number) {
+  if (value === undefined || value === '') return '';
+  if (typeof value !== 'string' || value.trim().length > max)
+    throw new PublicResourceError('Alan uzunluğunu kontrol edin.', 400);
+  return value.trim();
+}
+function nullableId(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(value))
+    throw new PublicResourceError('Geçersiz kimlik.', 400);
+  return value;
+}
+function version(value: unknown) {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
+    throw new PublicResourceError('Görev sürümü geçersiz. Listeyi yenileyin.', 400);
+  return value;
+}
+function failure(res: Response, error: unknown) {
+  res.status(error instanceof PublicResourceError ? error.status : 503).json({
+    basarili: false,
+    hata: error instanceof PublicResourceError ? error.message : 'Kurye işlemi tamamlanamadı.',
+  });
+}
 router.get('/kuryeler', async (req, res) => {
   try {
-    const seciliTenant = (req as any).tenantId;
-    if (!seciliTenant)
-      return res.status(401).json({ basarili: false, hata: 'Oturum açılmalıdır.' });
-    let source: any[] =
-      seciliTenant === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani;
-    if (supabase && seciliTenant !== 'demo_sandbox') {
-      let query = supabase.from('siparisler').select('*');
-      if (seciliTenant !== 'all') query = query.eq('tenant_id', seciliTenant);
-      const { data, error } = await query;
-      if (error)
-        return res.status(503).json({ basarili: false, hata: 'Kurye siparişleri okunamadı.' });
-      source = data || [];
-    }
-    const ilgiliSiparisler = source
-      .map(formatlaSiparis)
-      .filter((s) => seciliTenant === 'all' || s.tenant_id === seciliTenant);
-
-    const kuryeler = [
-      {
-        id: 'kurye-elvin',
-        ad_soyad: 'Elvin Məmmədli',
-        telefon: '+994 50 411 22 33',
-        bolge: 'Nərimanov & Gənclik & Mərkəz',
-      },
-      {
-        id: 'kurye-resad',
-        ad_soyad: 'Rəşad Kərimov',
-        telefon: '+994 55 622 33 44',
-        bolge: 'Yasamal & Elmlər & 28 May',
-      },
-      {
-        id: 'kurye-vuqar',
-        ad_soyad: 'Vüqar Tağıyev',
-        telefon: '+994 70 833 44 55',
-        bolge: 'Gəncə & Qərb Rayonları (Poçt/Avtovağzal)',
-      },
-      {
-        id: 'ofis-tehvil',
-        ad_soyad: 'Ofis / Mərkəzi Evdən Təhvil',
-        telefon: '+994 50 111 22 33',
-        bolge: 'Nəsimi r., 28 May',
-      },
-    ];
-
-    const zenginKuryeler = kuryeler.map((k) => {
-      // Bu kuryeye atanmış veya bölgesine düşen ilgili butik siparişleri
-      const kuryeSiparisleri = ilgiliSiparisler.filter((s) => {
-        if (s.baku_kurye_id === k.id) return true;
-        const adresVeSehir = `${s.teslimat_sehri || ''} ${s.teslimat_adresi || ''}`.toLowerCase();
-        if (
-          k.id === 'kurye-elvin' &&
-          (adresVeSehir.includes('nərimanov') ||
-            adresVeSehir.includes('gənclik') ||
-            adresVeSehir.includes('təbriz'))
-        )
-          return true;
-        if (
-          k.id === 'kurye-resad' &&
-          (adresVeSehir.includes('yasamal') ||
-            adresVeSehir.includes('elmlər') ||
-            adresVeSehir.includes('28 may') ||
-            adresVeSehir.includes('içərişəhər'))
-        )
-          return true;
-        if (
-          k.id === 'kurye-vuqar' &&
-          (adresVeSehir.includes('gəncə') ||
-            adresVeSehir.includes('sumqayıt') ||
-            adresVeSehir.includes('rayon'))
-        )
-          return true;
-        if (
-          k.id === 'ofis-tehvil' &&
-          (s.ozel_not?.toLowerCase().includes('sürücü') ||
-            s.ozel_not?.toLowerCase().includes('özü') ||
-            s.ham_mesaj?.toLowerCase().includes('özü'))
-        )
-          return true;
-        return false;
-      });
-
-      const bekleyenler = kuryeSiparisleri.filter((s) => s.lojistik_durumu !== 'TESLIM_EDILDI');
-      const toplanacakBorc = bekleyenler.reduce((acc, s) => acc + (s.kalan_tutar || 0), 0);
-
-      return {
-        ...k,
-        tenant_id: seciliTenant || 'all',
-        aktif_paket_sayisi: bekleyenler.length,
-        toplam_tahsilat_bekleyen: toplanacakBorc,
-        toplam_paket_sayisi: kuryeSiparisleri.length,
-      };
-    });
-
-    res.json({
-      basarili: true,
-      kuryeler: zenginKuryeler,
-    });
-  } catch {
-    res.status(503).json({ basarili: false, hata: 'Kurye verileri okunamadı.' });
+    const tenant = requireRole(req, new Set([...operators, 'BAKU_FINANS']));
+    res.json({ basarili: true, ...(await listCouriers(tenant, owners.has(req.auth!.role))) });
+  } catch (error) {
+    failure(res, error);
   }
 });
-
+router.post('/kuryeler', async (req, res) => {
+  try {
+    const tenant = requireRole(req, owners);
+    body(req, ['ad_soyad', 'telefon', 'bolge']);
+    const kurye = await createCourier(tenant, {
+      ad_soyad: text(req.body.ad_soyad, 150),
+      telefon: optionalText(req.body.telefon, 50),
+      bolge: optionalText(req.body.bolge, 150),
+    });
+    res.status(201).json({ basarili: true, kurye });
+  } catch (error) {
+    failure(res, error);
+  }
+});
+router.post('/kuryeler/:id/kullanici', async (req, res) => {
+  try {
+    const tenant = requireRole(req, owners);
+    body(req, ['kullanici_id', 'beklenen_kullanici_id']);
+    res.json({
+      basarili: true,
+      ...(await bindCourier(
+        tenant,
+        req.params.id,
+        nullableId(req.body.kullanici_id),
+        nullableId(req.body.beklenen_kullanici_id)
+      )),
+    });
+  } catch (error) {
+    failure(res, error);
+  }
+});
+router.post('/siparisler/:id/kurye', async (req, res) => {
+  try {
+    const tenant = requireRole(req, operators);
+    body(req, ['kurye_id', 'beklenen_atama_surumu']);
+    res.json({
+      basarili: true,
+      ...(await assignCourier(
+        tenant,
+        req.params.id,
+        nullableId(req.body.kurye_id),
+        version(req.body.beklenen_atama_surumu)
+      )),
+    });
+  } catch (error) {
+    failure(res, error);
+  }
+});
+router.get('/kurye/gorevler', async (req, res) => {
+  try {
+    const tenant = requireRole(req, new Set(['BAKU_KURYE']));
+    res.json({ basarili: true, ...(await courierTasks(tenant, req.auth!.userId)) });
+  } catch (error) {
+    failure(res, error);
+  }
+});
+router.post('/kurye/gorevler/:id/teslim', async (req, res) => {
+  try {
+    const tenant = requireRole(req, new Set(['BAKU_KURYE']));
+    body(req, ['beklenen_atama_surumu', 'teslim_alan']);
+    res.json({
+      basarili: true,
+      ...(await deliverCourierTask(
+        tenant,
+        req.auth!.userId,
+        req.params.id,
+        version(req.body.beklenen_atama_surumu),
+        text(req.body.teslim_alan, 150)
+      )),
+    });
+  } catch (error) {
+    failure(res, error);
+  }
+});
 export default router;

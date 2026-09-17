@@ -1,64 +1,51 @@
-import { describe, it, expect } from 'vitest';
-import { sifreleMetin, cozMetin } from '../../../src/server/services/crypto';
-
-describe('AES-256-GCM Kriptografi Servisi (crypto.ts)', () => {
-  it('Metni başarıyla şifrelemeli ve enc: ön eki ile dönmeli', () => {
-    const gizliMetin = 'SuperSecretCargoPassword123!#';
-    const sifreli = sifreleMetin(gizliMetin);
-
-    expect(sifreli).not.toBe(gizliMetin);
-    expect(sifreli.startsWith('enc:')).toBe(true);
-    // Format: enc:<iv>:<tag>:<ciphertext>
-    const parts = sifreli.slice(4).split(':');
-    expect(parts.length).toBe(3);
-    expect(parts[0].length).toBe(24); // 12 bytes = 24 hex chars (IV)
-    expect(parts[1].length).toBe(32); // 16 bytes = 32 hex chars (Auth tag)
-  });
-
-  it('Şifrelenmiş metni aslına kayıpsız ve hatasız çözmeli (Round-trip)', () => {
-    const testCases = [
-      'admin@123',
-      'Aramex_Pin_9999',
-      'Xüsusi Şifrə: Bakı-Toronto ✈️ 2026',
-      'Complex symbols: !@#$%^&*()_+~`|}{[]:;?><,./-',
-    ];
-
-    for (const orjinal of testCases) {
-      const sifreli = sifreleMetin(orjinal);
-      const cozulen = cozMetin(sifreli);
-      expect(cozulen).toBe(orjinal);
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { sifreleMetin, cozMetin, EncryptionError } from '../../../src/server/services/crypto';
+const context = { tenantId: 'tenant-a', provider: 'ARAMEX' };
+afterEach(() => vi.unstubAllEnvs());
+describe('Authenticated versioned credential envelopes', () => {
+  it('round-trips Unicode, empty text and enc-prefixed literal secrets without passthrough', () => {
+    for (const text of ['', 'Xüsusi Şifrə Bakı ✈️', 'enc:literal-secret']) {
+      const encoded = sifreleMetin(text, context);
+      expect(encoded).toMatch(/^enc:v2:test:/);
+      expect(encoded).not.toBe(text);
+      expect(cozMetin(encoded, context)).toBe(text);
+      expect(sifreleMetin(text, context)).not.toBe(encoded);
     }
   });
-
-  it('Aynı metin şifrelendiğinde rastgele IV sayesinde farklı şifreli metinler üretmeli', () => {
-    const metin = 'ayni_gizli_sifre';
-    const sifreli1 = sifreleMetin(metin);
-    const sifreli2 = sifreleMetin(metin);
-
-    expect(sifreli1).not.toBe(sifreli2);
-    expect(cozMetin(sifreli1)).toBe(metin);
-    expect(cozMetin(sifreli2)).toBe(metin);
+  it('rejects changed tenant, provider, tag and truncated ciphertext', () => {
+    const encoded = sifreleMetin('synthetic-secret', context);
+    expect(() => cozMetin(encoded, { ...context, tenantId: 'tenant-b' })).toThrow(EncryptionError);
+    expect(() => cozMetin(encoded, { ...context, provider: 'DHL' })).toThrow(EncryptionError);
+    const pieces = encoded.split(':');
+    pieces[4] = '00'.repeat(16);
+    expect(() => cozMetin(pieces.join(':'), context)).toThrow(EncryptionError);
+    expect(() => cozMetin(encoded.slice(0, -2), context)).toThrow(EncryptionError);
   });
-
-  it('Zaten şifrelenmiş metni tekrar şifrelememeli (idempotent)', () => {
-    const metin = 'gizli_parola';
-    const sifreli = sifreleMetin(metin);
-    const tekrarSifreli = sifreleMetin(sifreli);
-
-    expect(tekrarSifreli).toBe(sifreli);
-  });
-
-  it('Düz metin veya geçersiz format verildiğinde cozMetin güvenli fallback yapmalı', () => {
-    expect(cozMetin('duz_metin')).toBe('duz_metin');
-    expect(cozMetin('')).toBe('');
-    expect(cozMetin('enc:eksik_format')).toBe('enc:eksik_format');
-    expect(cozMetin('enc:1234:5678:90ab')).toBe('enc:1234:5678:90ab'); // Bozuk hex/tag
-  });
-
-  it('Boş ve geçersiz tipleri zararsızca yönetmeli', () => {
-    expect(sifreleMetin('')).toBe('');
-    expect(sifreleMetin(null as unknown as string)).toBe('');
-    expect(cozMetin(null as unknown as string)).toBe('');
+  it.each(['plaintext', '', 'enc:invalid', 'enc:1234:5678:90ab'])(
+    'never returns unverified input: %s',
+    (value) => {
+      expect(() => cozMetin(value, context)).toThrow(EncryptionError);
+    }
+  );
+  it.each(['', 'null', '{}', '{"test":"short"}', '[]'])(
+    'fails closed when keyring is absent or invalid: %s',
+    (keys) => {
+      vi.stubEnv('CARGO_ENCRYPTION_KEYS', keys);
+      expect(() => sifreleMetin('secret', context)).toThrow(EncryptionError);
+    }
+  );
+  it('supports explicit rotation, requiring the old key until records are rewrapped', () => {
+    const old = sifreleMetin('synthetic-secret', context);
+    vi.stubEnv(
+      'CARGO_ENCRYPTION_KEYS',
+      JSON.stringify({ test: 'a1'.repeat(32), next: 'b2'.repeat(32) })
+    );
+    vi.stubEnv('CARGO_ENCRYPTION_ACTIVE_KEY_ID', 'next');
+    const rotated = sifreleMetin(cozMetin(old, context), context);
+    expect(rotated).toMatch(/^enc:v2:next:/);
+    vi.stubEnv('CARGO_ENCRYPTION_KEYS', JSON.stringify({ next: 'b2'.repeat(32) }));
+    expect(cozMetin(rotated, context)).toBe('synthetic-secret');
+    expect(() => cozMetin(old, context)).toThrow(EncryptionError);
   });
 });
 

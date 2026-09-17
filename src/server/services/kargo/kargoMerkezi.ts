@@ -1,5 +1,3 @@
-import path from 'path';
-import { DATA_DIR } from '../../config';
 import {
   KargoSaglayiciInterface,
   KargoSaglayiciTipi,
@@ -12,45 +10,23 @@ import { DhlExpressProvider } from './providers/dhl';
 import { UpsProvider } from './providers/ups';
 import { siparislerVeritabani, setSiparislerVeritabani } from '../state';
 import { supabase } from '../supabase';
-import { formatlaSiparis, hazirlaSupabasePayload } from '../siparisFormatlama';
-import { sifreleMetin, cozMetin } from '../crypto';
-import { JsonStorageError, readJsonFile, writeJsonAtomic } from '../atomicJson';
-
-const AYARLAR_DOSYA_YOLU = path.join(DATA_DIR, 'kargo_ayarlari.json');
-
-// Kimlik bilgisi içermeyen başlangıç kargo ayarları.
-const VARSAYILAN_AYARLAR: KargoSaglayiciAyarlari = {
-  tenantId: 'kanada_shopper_baku',
-  saglayici: 'ARAMEX',
-  aktif: true,
-  cikisUlkesi: 'CA',
-  cikisSehri: 'Toronto (YYZ)',
-  varisUlkesi: 'AZ',
-  varisHavalimani: 'Heydər Əliyev Beynəlxalq Hava Limanı (GYD)',
-  kimlikBilgileri: {
-    kullaniciAdi: '',
-    sifre: '',
-    hesapNo: '',
-    pin: '',
-    entity: 'YYZ',
-    testModu: true,
-  },
-  otomatikSenkronizasyon: true,
-  guncellenmeTarihi: new Date().toISOString(),
-};
+import { formatlaSiparis } from '../siparisFormatlama';
+import { updateCargoOrder } from './orderUpdates';
+import {
+  loadCargoSettings,
+  saveCargoSettings,
+  SECRET_FIELDS,
+  CargoSettingsError,
+} from './settings';
 
 export class KargoMerkezi {
   private providers: Map<KargoSaglayiciTipi, KargoSaglayiciInterface> = new Map();
-  private tenantAyarlari: Map<string, KargoSaglayiciAyarlari> = new Map();
 
   constructor() {
     // 1. Sağlayıcıları kaydet
     this.kayitSaglayici(new AramexProvider());
     this.kayitSaglayici(new DhlExpressProvider());
     this.kayitSaglayici(new UpsProvider());
-
-    // 2. Dosyadan kayıtlı tenant ayarlarını oku
-    this.yukleAyarlariDosyadan();
   }
 
   public kayitSaglayici(provider: KargoSaglayiciInterface) {
@@ -60,77 +36,29 @@ export class KargoMerkezi {
   public getProvider(tip: KargoSaglayiciTipi): KargoSaglayiciInterface {
     const provider = this.providers.get(tip);
     if (!provider) {
-      // Fallback Aramex
-      return this.providers.get('ARAMEX')!;
+      throw new CargoSettingsError('Bu sağlayıcı için bağlantı henüz desteklenmiyor.', 400);
     }
     return provider;
   }
 
-  public getAyarlar(tenantId?: string): KargoSaglayiciAyarlari {
-    const tid = tenantId;
-    if (!tid || tid === 'all') throw new Error('Kargo işlemi için firma seçin.');
-    const ayar = this.tenantAyarlari.get(tid);
-    if (ayar) {
-      return structuredClone(ayar);
-    }
-    return {
-      ...structuredClone(VARSAYILAN_AYARLAR),
-      tenantId: tid,
-    };
+  public async getAyarlar(tenantId?: string): Promise<KargoSaglayiciAyarlari> {
+    return loadCargoSettings(tenantId!);
   }
 
-  public kaydetAyarlar(
-    yeniAyarlar: Partial<KargoSaglayiciAyarlari> & { tenantId: string }
-  ): KargoSaglayiciAyarlari {
-    const tid = yeniAyarlar.tenantId || 'kanada_shopper_baku';
-    const mevcut = this.getAyarlar(tid);
-
-    const guncel: KargoSaglayiciAyarlari = {
-      ...mevcut,
-      ...yeniAyarlar,
-      tenantId: tid,
-      kimlikBilgileri: {
-        ...mevcut.kimlikBilgileri,
-        ...(yeniAyarlar.kimlikBilgileri || {}),
-      },
-      guncellenmeTarihi: new Date().toISOString(),
-    };
-
-    // Şifre boş geldiyse eskisini koru
-    if (
-      yeniAyarlar.kimlikBilgileri &&
-      (!yeniAyarlar.kimlikBilgileri.sifre || yeniAyarlar.kimlikBilgileri.sifre === '••••••••')
-    ) {
-      guncel.kimlikBilgileri.sifre = mevcut.kimlikBilgileri.sifre;
-    }
-    if (
-      yeniAyarlar.kimlikBilgileri &&
-      (!yeniAyarlar.kimlikBilgileri.pin || yeniAyarlar.kimlikBilgileri.pin === '••••••••')
-    ) {
-      guncel.kimlikBilgileri.pin = mevcut.kimlikBilgileri.pin;
-    }
-
-    const pending = new Map(this.tenantAyarlari);
-    pending.set(tid, structuredClone(guncel));
-    this.kaydetAyarlariDosyaya(pending);
-    this.tenantAyarlari = pending;
-    return structuredClone(guncel);
+  public async kaydetAyarlar(yeniAyarlar: Partial<KargoSaglayiciAyarlari> & { tenantId: string }) {
+    return saveCargoSettings(yeniAyarlar);
   }
 
   /**
    * İstemciye (Frontend) gönderilirken şifre ve PIN kodlarını maskeler.
    */
   public maskeleAyarlar(ayarlar: KargoSaglayiciAyarlari): any {
-    return {
-      ...ayarlar,
-      kimlikBilgileri: {
-        ...ayarlar.kimlikBilgileri,
-        sifre: ayarlar.kimlikBilgileri.sifre ? '••••••••' : '',
-        pin: ayarlar.kimlikBilgileri.pin ? '••••••••' : '',
-        sifreTanimli: Boolean(ayarlar.kimlikBilgileri.sifre),
-        pinTanimli: Boolean(ayarlar.kimlikBilgileri.pin),
-      },
-    };
+    const masked = structuredClone(ayarlar) as any;
+    for (const field of SECRET_FIELDS) {
+      masked.kimlikBilgileri[field] = ayarlar.kimlikBilgileri[field] ? '••••••••' : '';
+      masked.kimlikBilgileri[`${field}Tanimli`] = Boolean(ayarlar.kimlikBilgileri[field]);
+    }
+    return masked;
   }
 
   /**
@@ -145,7 +73,7 @@ export class KargoMerkezi {
    * Tekil veya Toplu Canlı AWB Takip Sorgusu
    */
   public async takipEt(takipNolari: string[], tenantId?: string): Promise<KargoTakipGuncelleme[]> {
-    const ayarlar = this.getAyarlar(tenantId);
+    const ayarlar = await this.getAyarlar(tenantId);
     const provider = this.getProvider(ayarlar.saglayici);
     return provider.topluTakipEt(takipNolari, ayarlar);
   }
@@ -165,7 +93,7 @@ export class KargoMerkezi {
       konum: string;
     }>;
   }> {
-    const ayarlar = this.getAyarlar(tenantId);
+    const ayarlar = await this.getAyarlar(tenantId);
     const provider = this.getProvider(ayarlar.saglayici);
 
     // 1. Senkronize edilecek siparişleri bul:
@@ -179,12 +107,14 @@ export class KargoMerkezi {
       if (error) throw new Error('Kargo siparişleri okunamadı.');
       adaylar = (data || []).map(formatlaSiparis);
     }
-    const aktifSiparisler = adaylar.filter(
-      (s) =>
-        s.tenant_id === tenantId &&
-        Boolean(s.uluslararasi_kargo_kodu?.trim()) &&
-        s.lojistik_durumu !== 'TESLIM_EDILDI'
-    );
+    const aktifSiparisler = adaylar
+      .filter(
+        (s) =>
+          s.tenant_id === tenantId &&
+          Boolean(s.uluslararasi_kargo_kodu?.trim()) &&
+          s.lojistik_durumu !== 'TESLIM_EDILDI'
+      )
+      .map((order) => structuredClone(order));
 
     if (aktifSiparisler.length === 0) {
       return {
@@ -217,6 +147,11 @@ export class KargoMerkezi {
 
       if (siparis.lojistik_durumu !== guncelleme.durum) {
         const eski = siparis.lojistik_durumu;
+        const note = `[${ayarlar.saglayici} Canlı: ${guncelleme.konum} - ${guncelleme.hamAciklama}]`;
+        await updateCargoOrder(siparis, {
+          lojistik_durumu: guncelleme.durum,
+          ...(!siparis.baku_tahsilat_notu?.includes(guncelleme.konum) ? { kargo_notu: note } : {}),
+        });
         siparis.lojistik_durumu = guncelleme.durum;
         siparis.guncellenme_tarihi = simdiIso;
 
@@ -235,23 +170,6 @@ export class KargoMerkezi {
           yeniDurum: guncelleme.durum,
           konum: guncelleme.konum,
         });
-
-        // Supabase varsa arka planda güncelle
-        if (supabase) {
-          try {
-            const payload = hazirlaSupabasePayload(siparis);
-            const { data, error } = await supabase
-              .from('siparisler')
-              .update(payload)
-              .eq('id', siparis.id)
-              .eq('tenant_id', tenantId)
-              .select('id')
-              .maybeSingle();
-            if (error || !data) throw new Error('Kargo güncellemesi kaydedilemedi.');
-          } catch {
-            throw new Error('Kargo güncellemesi kaydedilemedi.');
-          }
-        }
       }
     }
 
@@ -261,70 +179,6 @@ export class KargoMerkezi {
       guncellenenSayi,
       detaylar,
     };
-  }
-
-  // Persist settings before publishing them to providers or callers.
-  private yukleAyarlariDosyadan() {
-    const valid = (value: unknown): value is KargoSaglayiciAyarlari[] => {
-      if (!Array.isArray(value)) return false;
-      const tenants = new Set<string>();
-      for (const row of value) {
-        if (
-          !row ||
-          typeof row !== 'object' ||
-          typeof row.tenantId !== 'string' ||
-          !row.tenantId ||
-          row.tenantId === 'all' ||
-          tenants.has(row.tenantId) ||
-          !row.kimlikBilgileri ||
-          typeof row.kimlikBilgileri !== 'object' ||
-          Array.isArray(row.kimlikBilgileri)
-        )
-          return false;
-        for (const field of ['kullaniciAdi', 'sifre', 'hesapNo', 'pin', 'entity'])
-          if (
-            row.kimlikBilgileri[field] !== undefined &&
-            typeof row.kimlikBilgileri[field] !== 'string'
-          )
-            return false;
-        tenants.add(row.tenantId);
-      }
-      return true;
-    };
-    const stored = readJsonFile(AYARLAR_DOSYA_YOLU, valid);
-    const loaded = new Map<string, KargoSaglayiciAyarlari>();
-    for (const row of stored || []) {
-      const item = structuredClone(row);
-      for (const field of ['sifre', 'pin'] as const) {
-        const encoded = item.kimlikBilgileri[field];
-        if (!encoded) continue;
-        const decoded = cozMetin(encoded);
-        if (encoded.startsWith('enc:') && decoded === encoded)
-          throw new JsonStorageError('Kargo kimlik bilgileri çözülemedi.');
-        item.kimlikBilgileri[field] = decoded;
-      }
-      loaded.set(item.tenantId, item);
-    }
-    this.tenantAyarlari = loaded;
-  }
-
-  private kaydetAyarlariDosyaya(settings: Map<string, KargoSaglayiciAyarlari>) {
-    const encode = (value: string | undefined) => {
-      if (!value) return '';
-      const encoded = sifreleMetin(value);
-      if (!encoded.startsWith('enc:'))
-        throw new JsonStorageError('Kargo kimlik bilgileri şifrelenemedi.');
-      return encoded;
-    };
-    const list = Array.from(settings.values()).map((item) => ({
-      ...item,
-      kimlikBilgileri: {
-        ...item.kimlikBilgileri,
-        sifre: encode(item.kimlikBilgileri?.sifre),
-        pin: encode(item.kimlikBilgileri?.pin),
-      },
-    }));
-    writeJsonAtomic(AYARLAR_DOSYA_YOLU, list);
   }
 }
 

@@ -204,11 +204,11 @@ export class AramexProvider implements KargoSaglayiciInterface {
 
     if (!kimlik?.kullaniciAdi || !kimlik?.sifre) {
       return {
-        basarili: true,
-        mesaj: 'Aramex simulyasiya və demo rejimi aktivdir (Rəsmi API açarları daxil edilməyib).',
+        basarili: false,
+        mesaj: 'Aramex bağlantısı yoxlanmadı. İstifadəçi adı və şifrə daxil edin.',
         saglayici: this.tip,
         gecikmeMs: 15,
-        detay: { mod: 'SIMULATION', hesapNo: kimlik.hesapNo || '' },
+        detay: { mod: 'UNCONFIGURED' },
       };
     }
 
@@ -236,16 +236,31 @@ export class AramexProvider implements KargoSaglayiciInterface {
       });
 
       const gecikmeMs = Date.now() - baslangic;
-      const data: any = await res.json();
-
-      if (data?.HasErrors && Array.isArray(data.Notifications) && data.Notifications.length > 0) {
-        const errNotif = data.Notifications[0];
+      if (!res.ok) {
         return {
           basarili: false,
-          mesaj: `Aramex Xətası: ${errNotif.Message || 'Doğrulama uğursuz oldu'}`,
+          mesaj: `Aramex bağlantısı təsdiqlənmədi (HTTP ${res.status}).`,
           saglayici: this.tip,
           gecikmeMs,
-          detay: data.Notifications,
+          detay: { status: res.status },
+        };
+      }
+      const data: unknown = await res.json();
+      // The provider contract includes a boolean HasErrors and both result arrays.
+      // An empty gateway JSON response is not proof of successful authentication.
+      if (
+        !data ||
+        typeof data !== 'object' ||
+        Array.isArray(data) ||
+        (data as any).HasErrors !== false ||
+        !Array.isArray((data as any).Notifications) ||
+        !Array.isArray((data as any).TrackingResults)
+      ) {
+        return {
+          basarili: false,
+          mesaj: 'Aramex etibarlı uğurlu cavab qaytarmadı. Hesab məlumatlarını yoxlayın.',
+          saglayici: this.tip,
+          gecikmeMs,
         };
       }
 
@@ -256,14 +271,13 @@ export class AramexProvider implements KargoSaglayiciInterface {
         gecikmeMs,
         detay: { endpoint, status: res.status },
       };
-    } catch (err: any) {
+    } catch {
       const gecikmeMs = Date.now() - baslangic;
       return {
         basarili: false,
-        mesaj: `Bağlantı xətası: ${err.message}`,
+        mesaj: 'Aramex bağlantısı yoxlanıla bilmədi. Bağlantını və xidmətin vəziyyətini yoxlayın.',
         saglayici: this.tip,
         gecikmeMs,
-        detay: err.stack,
       };
     }
   }

@@ -525,6 +525,11 @@ router.post('/siparisler', async (req, res) => {
   try {
     const tenant = tenantFor(req, true);
     const yeniVeri = req.body;
+    if (['baku_kurye_id', 'baku_kurye_adi', 'baku_kurye_bolgesi'].some((key) => yeniVeri?.[key]))
+      throw new PublicResourceError(
+        'Kuryeyi sipariş kaydedildikten sonra atama işlemiyle seçin.',
+        400
+      );
     await validateCustomerReference(tenant, yeniVeri.musteri_id);
     await assertTenantImageReferences(req, yeniVeri);
     if (!yeniVeri || !yeniVeri.urun_aciklamasi || !yeniVeri.musteri_adi) {
@@ -747,6 +752,17 @@ router.patch('/siparisler/:id', async (req, res) => {
         continue;
       }
       if (JSON.stringify(value) === JSON.stringify(formatted[key])) continue;
+      if (
+        [
+          'baku_kurye_id',
+          'baku_kurye_adi',
+          'baku_kurye_bolgesi',
+          'kurye_atama_surumu',
+          'kurye_teslim_kullanici_id',
+          'kurye_teslim_alan',
+        ].includes(key)
+      )
+        throw new PublicResourceError('Kurye ataması için kurye atama işlemini kullanın.', 403);
       if (key === 'kalan_tutar') continue; // Calculated by the server.
       if (!allowed.has(key))
         throw new PublicResourceError('Bu alanı değiştirme yetkiniz yok: ' + key, 403);
@@ -780,18 +796,39 @@ router.patch('/siparisler/:id', async (req, res) => {
           ? 'KISMI_ODEME'
           : 'BEKLIYOR';
     if (dbActive(tenant)) {
+      const payload = hazirlaSupabasePayload(changed);
+      // Assignment is written only by its transaction. A stale ordinary edit
+      // must not restore the previous courier or undo a concurrent delivery.
+      for (const key of ['baku_kurye_id', 'baku_kurye_adi', 'baku_kurye_bolgesi'])
+        delete payload[key];
       const { data, error } = await supabase
         .from('siparisler')
-        .update(hazirlaSupabasePayload(changed))
+        .update(payload)
         .eq('id', existing.id)
         .eq('tenant_id', tenant)
+        .eq('kurye_atama_surumu', Number(formatted.kurye_atama_surumu || 0))
+        .eq('lojistik_durumu', formatted.lojistik_durumu)
         .select('*')
-        .single();
-      if (error || !data) throw new PublicResourceError('Sipariş güncellenemedi.', 503);
+        .maybeSingle();
+      if (error) throw new PublicResourceError('Sipariş güncellenemedi.', 503);
+      if (!data)
+        throw new PublicResourceError(
+          'Siparişin ataması veya durumu değişti. Listeyi yenileyin.',
+          409
+        );
       return res.json({ basarili: true, kaynak: 'supabase', siparis: formatlaSiparis(data) });
     }
     const pool = memoryOrders(tenant);
     const index = pool.findIndex((s) => s.id === existing.id && belongs(s, tenant));
+    if (
+      index < 0 ||
+      Number(pool[index].kurye_atama_surumu || 0) !== Number(formatted.kurye_atama_surumu || 0) ||
+      pool[index].lojistik_durumu !== formatted.lojistik_durumu
+    )
+      throw new PublicResourceError(
+        'Siparişin ataması veya durumu değişti. Listeyi yenileyin.',
+        409
+      );
     pool[index] = formatlaSiparis(changed);
     res.json({
       basarili: true,

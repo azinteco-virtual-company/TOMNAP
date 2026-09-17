@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { Router, Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -9,6 +9,7 @@ import { supabase } from '../services/supabase';
 import { hazirlaSupabasePayload, formatlaSiparis } from '../services/siparisFormatlama';
 import { siparislerVeritabani } from '../services/state';
 import { fetchPublicResource, MAX_IMAGE_BYTES, PublicResourceError } from '../services/publicFetch';
+import { tenantImagePrefix as imagePrefix } from '../services/tenantImageNames';
 
 const router = Router();
 
@@ -130,10 +131,6 @@ function uploadPath(dosyaAdi: string): string {
   return candidate;
 }
 
-function imagePrefix(tenantId: string) {
-  return `t_${createHash('sha256').update(tenantId).digest('hex').slice(0, 24)}_`;
-}
-
 function ownedUploadPath(req: Request, name: string): string {
   if (!req.auth || !req.tenantId) throw new PublicResourceError('Oturum gerekli.', 401);
   const candidate = uploadPath(name);
@@ -185,6 +182,53 @@ export async function assertTenantImageReferences(req: Request, payload: unknown
         throw new PublicResourceError('Görsel bulunamadı.', 404);
     }
   }
+}
+
+const imageMetadataVersion = (row: any) =>
+  JSON.stringify({
+    urunler: row.urunler,
+    gorsel_urlleri: row.gorsel_urlleri,
+    eksik_bilgiler: row.eksik_bilgiler,
+  });
+
+async function saveOrderImageMetadata(
+  req: Request,
+  id: string,
+  original: any,
+  formatted: any,
+  products: any[]
+) {
+  const metadata = hazirlaSupabasePayload({ ...formatted, urunler: products }).eksik_bilgiler;
+  if (supabase) {
+    // Image edits must never replay an earlier courier assignment, delivery or
+    // financial state after awaiting a remote catalogue image.
+    let query = supabase
+      .from('siparisler')
+      .update({ eksik_bilgiler: metadata })
+      .eq('id', id)
+      .eq('tenant_id', req.tenantId);
+    for (const field of ['eksik_bilgiler', 'urunler', 'gorsel_urlleri']) {
+      if (field !== 'eksik_bilgiler' && !Object.hasOwn(original, field)) continue;
+      query =
+        original[field] == null
+          ? query.is(field, null)
+          : query.eq(field, JSON.stringify(original[field]));
+    }
+    const { data, error } = await query.select('*').maybeSingle();
+    if (error) throw new PublicResourceError('Görsel değişikliği kaydedilemedi.', 503);
+    if (!data) throw new PublicResourceError('Görsel bilgileri değişti; siparişi yenileyin.', 409);
+    return formatlaSiparis(data);
+  }
+  const index = siparislerVeritabani.findIndex(
+    (row) => row.id === id && row.tenant_id === req.tenantId
+  );
+  if (index === -1) throw new PublicResourceError('Sipariş bulunamadı.', 404);
+  const current = siparislerVeritabani[index];
+  if (imageMetadataVersion(formatlaSiparis(current)) !== imageMetadataVersion(formatted))
+    throw new PublicResourceError('Görsel bilgileri değişti; siparişi yenileyin.', 409);
+  const updated = formatlaSiparis({ ...current, eksik_bilgiler: metadata, urunler: products });
+  siparislerVeritabani[index] = updated;
+  return updated;
 }
 
 export function serveUploadedImage(req: Request, res: Response) {
@@ -693,40 +737,17 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
       resmi_urun_adi: resmi_urun_adi || mevcutUrun.resmi_urun_adi,
     };
 
-    const sbPayload = hazirlaSupabasePayload({
-      ...formatli,
-      urunler: guncelUrunler,
-    });
-
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('siparisler')
-        .update(sbPayload)
-        .eq('id', siparis_id)
-        .eq('tenant_id', req.tenantId)
-        .select()
-        .single();
-      if (error || !data)
-        return res.status(503).json({ basarili: false, hata: 'Görsel değişikliği kaydedilemedi.' });
-      if (data) {
-        return res.json({
-          basarili: true,
-          siparis: formatlaSiparis(data),
-          mesaj: 'Orijinal web katalog görseli kaydedildi!',
-        });
-      }
-    }
-
-    const idx = siparislerVeritabani.findIndex(
-      (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+    const saved = await saveOrderImageMetadata(
+      req,
+      siparis_id,
+      mevcutSiparis,
+      formatli,
+      guncelUrunler
     );
-    if (idx !== -1) {
-      siparislerVeritabani[idx].urunler = guncelUrunler;
-    }
 
     res.json({
       basarili: true,
-      siparis: { ...formatli, urunler: guncelUrunler },
+      siparis: saved,
       mesaj: 'Orijinal web katalog görseli kaydedildi!',
     });
   } catch (err: any) {
@@ -793,40 +814,17 @@ router.post('/urun-orijinal-gorsele-don', async (req, res) => {
       resmi_urun_adi: undefined,
     };
 
-    const sbPayload = hazirlaSupabasePayload({
-      ...formatli,
-      urunler: guncelUrunler,
-    });
-
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('siparisler')
-        .update(sbPayload)
-        .eq('id', siparis_id)
-        .eq('tenant_id', req.tenantId)
-        .select()
-        .single();
-      if (error || !data)
-        return res.status(503).json({ basarili: false, hata: 'Görsel değişikliği kaydedilemedi.' });
-      if (data) {
-        return res.json({
-          basarili: true,
-          siparis: formatlaSiparis(data),
-          mesaj: 'Orijinal ekran görüntüsü başarıyla geri yüklendi.',
-        });
-      }
-    }
-
-    const idx = siparislerVeritabani.findIndex(
-      (s) => s.id === siparis_id && s.tenant_id === req.tenantId
+    const saved = await saveOrderImageMetadata(
+      req,
+      siparis_id,
+      mevcutSiparis,
+      formatli,
+      guncelUrunler
     );
-    if (idx !== -1) {
-      siparislerVeritabani[idx].urunler = guncelUrunler;
-    }
 
     res.json({
       basarili: true,
-      siparis: { ...formatli, urunler: guncelUrunler },
+      siparis: saved,
       mesaj: 'Orijinal ekran görüntüsü başarıyla geri yüklendi.',
     });
   } catch (err: any) {

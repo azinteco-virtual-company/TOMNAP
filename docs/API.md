@@ -1,3 +1,5 @@
+> Faz 4: kurye görev API'leri ve sürümlü kargo ayarları için [güncel sözleşme ve geçiş notları](PHASE4_SECURITY.md).
+
 # TOMNAP API Dokümantasyonu
 
 Kanada ➔ Bakü e-ticaret lojistiği, sipariş ayrıştırma, multi-tenant firma yönetimi ve son mil kurye teslimat platformu REST API referansı.

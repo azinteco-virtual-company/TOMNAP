@@ -222,14 +222,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   siparisGuncelle: (id, change) =>
     set((state) => ({
-      siparisler: state.siparisler.map((item) =>
-        item.id === id ? { ...item, ...change, guncellenme_tarihi: new Date().toISOString() } : item
-      ),
+      siparisler: state.siparisler.map((item) => (item.id === id ? { ...item, ...change } : item)),
     })),
   siparisSil: (id) =>
     set((state) => ({ siparisler: state.siparisler.filter((item) => item.id !== id) })),
   siparisleriYukle: async (tenantId) => {
-    if (get().sessionStatus !== 'authenticated') return;
+    if (get().sessionStatus !== 'authenticated' || get().aktifRol === 'BAKU_KURYE') return;
     const id = tenantId ?? get().seciliFirmaId;
     if (id !== get().seciliFirmaId) return;
     const version = getApiContextVersion();
@@ -252,7 +250,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   firmalariYukle: async () => {
-    if (get().sessionStatus !== 'authenticated') return;
+    if (get().sessionStatus !== 'authenticated' || get().aktifRol === 'BAKU_KURYE') return;
     const version = getApiContextVersion();
     try {
       const data = await (await fetchWithRetry('/api/firmalar')).json();
@@ -266,7 +264,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   inboxSayisiGuncelle: async (tenantId) => {
-    if (get().sessionStatus !== 'authenticated') return;
+    if (get().sessionStatus !== 'authenticated' || get().aktifRol === 'BAKU_KURYE') return;
     const id = tenantId ?? get().seciliFirmaId;
     if (id !== get().seciliFirmaId) return;
     const version = getApiContextVersion();
