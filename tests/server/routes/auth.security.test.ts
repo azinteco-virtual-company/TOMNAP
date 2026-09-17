@@ -9,12 +9,28 @@ const state = vi.hoisted(() => ({
   invites: [] as any[],
   saveUsers: vi.fn(),
   saveFirms: vi.fn(),
+  jobs: [] as any[],
 }));
 vi.mock('../../../src/server/services/state', () => ({
   kullanicilarVeritabani: state.users,
   firmalarVeritabani: state.firms,
   kullanicilariKaydetDosyaya: state.saveUsers,
   firmalariKaydetDosyaya: state.saveFirms,
+  davetlerVeritabani: state.invites,
+  getIdentitySnapshot: () =>
+    structuredClone({
+      companies: state.firms,
+      users: state.users,
+      invites: state.invites,
+      emailJobs: state.jobs,
+    }),
+  saveIdentitySnapshot: (next: any) => {
+    state.saveUsers(next.users);
+    state.saveFirms(next.companies);
+    state.users.splice(0, state.users.length, ...structuredClone(next.users));
+    state.firms.splice(0, state.firms.length, ...structuredClone(next.companies));
+    state.invites.splice(0, state.invites.length, ...structuredClone(next.invites));
+  },
 }));
 vi.mock('../../../src/server/routes/firmalar', () => ({ davetlerVeritabani: state.invites }));
 vi.mock('../../../src/server/services/supabase', () => ({
@@ -149,8 +165,59 @@ function database(tables: Record<string, any[]>) {
     };
     return query;
   });
-  state.db = { from };
-  return { queries, failures, tables };
+  // RPC boundary stand-in; transaction semantics are exercised against PostgreSQL
+  // in tests/sql/onboarding-transactions.sql, including injected write failures.
+  const rpc = vi.fn(async (name: string, args: any) => {
+    const failureIndex = failures.findIndex(
+      (item) => item.operation !== 'select' || item.table === 'firmalar'
+    );
+    if (failureIndex >= 0) {
+      const [failure] = failures.splice(failureIndex, 1);
+      if (failure.throws) throw new Error('private database detail');
+      return { data: null, error: failure.zero ? null : { message: 'private database detail' } };
+    }
+    if (name === 'tomnap_activate_user') {
+      const user = tables.kullanicilar.find(
+        (item) =>
+          item.aktivasyon_token === args.p_token &&
+          item.durum === 'BEKLEMEDE_SIFRE' &&
+          Date.parse(item.token_gecerlilik) > Date.now()
+      );
+      if (!user) return { data: null, error: { code: 'PT409' } };
+      Object.assign(user, {
+        sifre_hash: args.p_password_hash,
+        ad_soyad: args.p_name,
+        telefon: args.p_phone,
+        durum: 'AKTIF',
+        aktivasyon_token: null,
+        token_gecerlilik: null,
+      });
+      const firma = tables.firmalar.find((item) => item.id === user.tenant_id);
+      firma.onay_durumu = 'AKTIF';
+      return { data: { user, firma }, error: null };
+    }
+    if (name === 'tomnap_accept_invite') {
+      const invite = tables.davetler.find(
+        (item) =>
+          item.token === args.p_token &&
+          item.durum === 'AKTIF' &&
+          Date.parse(item.son_kullanma_tarihi) > Date.now()
+      );
+      if (!invite) return { data: null, error: { code: 'PT409' } };
+      invite.durum = 'KULLANILDI';
+      tables.kullanicilar.push(args.p_user);
+      return {
+        data: {
+          user: args.p_user,
+          firma: tables.firmalar.find((item) => item.id === invite.firma_id),
+        },
+        error: null,
+      };
+    }
+    throw new Error('Unexpected RPC');
+  });
+  state.db = { from, rpc };
+  return { queries, failures, tables, rpc };
 }
 
 beforeEach(() => {
@@ -162,7 +229,8 @@ beforeEach(() => {
     id: 'firma-1',
     ad: 'Test Boutique',
     sahipEmail: 'owner@example.test',
-    onayDurumu: 'BEKLEMEDE',
+    onayDurumu: 'AKTIF',
+    rolLimitleri: { PATRON: 1, BAKU_KURYE: 1 },
   });
   vi.clearAllMocks();
 });
@@ -367,7 +435,7 @@ describe('Supabase activation security', () => {
     { throws: true, status: 503 },
     { zero: true, status: 409 },
   ])(
-    'does not activate local state after unsuccessful conditional update (%j)',
+    'does not activate local state after unsuccessful atomic RPC (%j)',
     async ({ status, ...failure }) => {
       state.users.push(pendingUser());
       const db = prepare();
@@ -379,9 +447,11 @@ describe('Supabase activation security', () => {
       expect(state.users[0].durum).toBe('BEKLEMEDE_SIFRE');
       expect(state.users[0].sifre_hash).toBeUndefined();
       expect(state.saveUsers).not.toHaveBeenCalled();
-      expect(
-        db.queries.filter((query) => query.operation === 'update').map((query) => query.table)
-      ).toEqual(['kullanicilar']);
+      expect(db.rpc).toHaveBeenCalledWith(
+        'tomnap_activate_user',
+        expect.objectContaining({ p_token: token })
+      );
+      expect(db.queries.every((query) => query.operation === 'select')).toBe(true);
     }
   );
 
@@ -402,11 +472,10 @@ describe('Supabase activation security', () => {
       (await request(app).post('/api/auth/sifre-belirle').send({ token, sifre: password })).status
     ).toBe(503);
     expect(state.users).toHaveLength(0);
-    // Account + firm updates still require a database transaction for all-or-nothing recovery.
-    expect(db.tables.kullanicilar[0].durum).toBe('AKTIF');
+    expect(db.tables.kullanicilar[0].durum).toBe('BEKLEMEDE_SIFRE');
   });
 
-  it('consumes a valid token once using id, token, pending state and expiry filters', async () => {
+  it('consumes a valid token through one RPC without local cache writes', async () => {
     const db = prepare();
     const results = await Promise.all(
       [password, 'OtherPassword123!'].map((sifre) =>
@@ -414,19 +483,12 @@ describe('Supabase activation security', () => {
       )
     );
     expect(results.filter((res) => res.status === 200)).toHaveLength(1);
-    const updates = db.queries.filter(
-      (query) => query.table === 'kullanicilar' && query.operation === 'update'
-    );
-    expect(updates[0].filters).toEqual(
-      expect.arrayContaining([
-        ['eq', 'id', 'user-1'],
-        ['eq', 'aktivasyon_token', token],
-        ['eq', 'durum', 'BEKLEMEDE_SIFRE'],
-        ['gt', 'token_gecerlilik', expect.any(String)],
-      ])
+    expect(db.rpc).toHaveBeenCalledWith(
+      'tomnap_activate_user',
+      expect.objectContaining({ p_token: token })
     );
     expect(db.tables.kullanicilar[0].aktivasyon_token).toBeNull();
-    expect(state.users[0].durum).toBe('AKTIF');
+    expect(state.users).toHaveLength(0);
   });
 });
 
@@ -476,7 +538,7 @@ describe('Supabase invitation security against the committed schema', () => {
     expect(db.tables.kullanicilar).toHaveLength(0);
   });
 
-  it('fails closed when account insertion fails after claiming invitation', async () => {
+  it('keeps the invitation available when its atomic transaction fails', async () => {
     const db = prepare();
     db.failures.push({ table: 'kullanicilar', operation: 'insert', error: true });
     expect(
@@ -488,8 +550,7 @@ describe('Supabase invitation security against the committed schema', () => {
     ).toBe(503);
     expect(state.users).toHaveLength(0);
     expect(db.tables.kullanicilar).toHaveLength(0);
-    // A future transaction/RPC must make this claim recoverable after insertion failure.
-    expect(db.tables.davetler[0].durum).toBe('KULLANILDI');
+    expect(db.tables.davetler[0].durum).toBe('AKTIF');
   });
 
   it('accepts canonical schema invitation once, including concurrent requests', async () => {
@@ -507,17 +568,11 @@ describe('Supabase invitation security against the committed schema', () => {
     );
     expect(results.filter((res) => res.status === 200)).toHaveLength(1);
     expect(db.tables.kullanicilar).toHaveLength(1);
-    expect(state.users).toHaveLength(1);
+    expect(state.users).toHaveLength(0);
     expect(db.tables.davetler[0].durum).toBe('KULLANILDI');
-    const update = db.queries.find(
-      (query) => query.table === 'davetler' && query.operation === 'update'
-    );
-    expect(update.filters).toEqual(
-      expect.arrayContaining([
-        ['eq', 'token', token],
-        ['eq', 'durum', 'AKTIF'],
-        ['gt', 'son_kullanma_tarihi', expect.any(String)],
-      ])
+    expect(db.rpc).toHaveBeenCalledWith(
+      'tomnap_accept_invite',
+      expect.objectContaining({ p_token: token })
     );
     expect(
       (

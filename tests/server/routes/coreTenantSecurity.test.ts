@@ -87,6 +87,48 @@ function database(tables: Record<string, any[]>) {
     tables,
     calls,
     failures,
+    rpc: vi.fn(async (name: string, args: any) => {
+      const row = tables.inbox_mesajlar.find(
+        (item) => item.id === args.p_inbox_id && item.tenant_id === args.p_tenant_id
+      );
+      if (!row) return { data: null, error: { code: 'PT404' } };
+      if (name === 'tomnap_reject_inbox') {
+        if (row.durum === 'ONAYLANDI') return { data: null, error: { code: 'PT409' } };
+        const tekrar = row.durum === 'REDDEDILDI';
+        row.durum = 'REDDEDILDI';
+        return { data: { durum: row.durum, tekrar }, error: null };
+      }
+      if (name !== 'tomnap_approve_inbox') throw new Error('Unexpected RPC');
+      if (row.durum === 'REDDEDILDI') return { data: null, error: { code: 'PT409' } };
+      const prior = tables.siparisler.find(
+        (item) => item.id === args.p_order_id && item.tenant_id === args.p_tenant_id
+      );
+      if (row.durum === 'ONAYLANDI')
+        return prior
+          ? { data: { siparis: structuredClone(prior), tekrar: true }, error: null }
+          : { data: null, error: { code: 'PT409' } };
+      // The real transaction/locking semantics are exercised by SQL tests.
+      // This stand-in returns the RPC contract and simulates atomic rollback.
+      const created = prior || {
+        ...structuredClone(args.p_order_payload),
+        id: args.p_order_id,
+        ham_mesaj: row.konusma_gecmisi,
+        siparis_kaynagi: row.kaynak,
+        olusturma_tarihi: '2026-01-01T00:00:00Z',
+        kalan_tutar: args.p_order_payload.toplam_tutar - args.p_order_payload.alinan_tutar,
+      };
+      const failure = failures.findIndex(
+        (item) => item.table === 'inbox_mesajlar' && item.operation === 'update'
+      );
+      if (failure >= 0) {
+        failures.splice(failure, 1);
+        return { data: null, error: { message: 'private database detail' } };
+      }
+      if (!prior) tables.siparisler.push(created);
+      row.durum = 'ONAYLANDI';
+      row.onaylanan_siparis_id = created.id;
+      return { data: { siparis: structuredClone(created), tekrar: !!prior }, error: null };
+    }),
     from: vi.fn((table: string) => {
       let operation = 'select';
       let values: any;
@@ -473,17 +515,25 @@ describe('authoritative database ownership and failure behavior', () => {
     expect(update.filters).toContainEqual(['eq', 'tenant_id', 'tenant-a']);
   });
 
-  it('approves a DB-only inbox item and deduplicates retry after marking failure', async () => {
+  it('rolls back a failed approval and deduplicates retries after the atomic RPC succeeds', async () => {
     state.setOnayBekleyenler([]);
+    const beforeCount = environment.db.tables.siparisler.length;
     environment.db.failures.push({ table: 'inbox_mesajlar', operation: 'update' });
     expect((await request(app()).post('/api/inbox/inbox-tenant-a/onayla').send({})).status).toBe(
       503
     );
-    const count = environment.db.tables.siparisler.length;
-    expect((await request(app()).post('/api/inbox/inbox-tenant-a/onayla').send({})).status).toBe(
-      200
-    );
-    expect(environment.db.tables.siparisler).toHaveLength(count);
+    expect(environment.db.tables.siparisler).toHaveLength(beforeCount);
+    expect(environment.db.tables.inbox_mesajlar[0].durum).toBe('BEKLEMEDE');
+    const accepted = await request(app()).post('/api/inbox/inbox-tenant-a/onayla').send({});
+    expect(accepted.status).toBe(200);
+    expect(environment.db.tables.siparisler).toHaveLength(beforeCount + 1);
+    const repeated = await request(app()).post('/api/inbox/inbox-tenant-a/onayla').send({});
+    expect(repeated.status).toBe(200);
+    expect(repeated.body).toMatchObject({
+      tekrar: true,
+      siparis: { id: accepted.body.siparis.id },
+    });
+    expect(environment.db.tables.siparisler).toHaveLength(beforeCount + 1);
     expect(environment.db.tables.inbox_mesajlar[0].durum).toBe('ONAYLANDI');
     expect(environment.db.tables.inbox_mesajlar[1].durum).toBe('BEKLEMEDE');
   });

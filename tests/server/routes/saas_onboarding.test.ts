@@ -88,8 +88,8 @@ describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', ()
       ad: 'Test123_VercelHandler',
       sehir: 'Baku',
       sahipAdi: 'TEstural',
-      sahipEmail: 'signup-fixture@example.invalid',
-      sahipTelefon: '+994000000001',
+      sahipEmail: 'handler-signup-fixture@example.invalid',
+      sahipTelefon: '+994000000003',
       paket: 'PRO',
       menseiUlke: 'CA',
     });

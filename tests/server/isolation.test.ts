@@ -17,6 +17,7 @@ import {
   RESEND_API_KEY,
 } from '../../src/server/config';
 import {
+  IDENTITY_DOSYA_YOLU,
   firmalariKaydetDosyaya,
   kullanicilariKaydetDosyaya,
 } from '../../src/server/services/state';
@@ -25,7 +26,12 @@ import { supabase } from '../../src/server/services/supabase';
 
 describe('Test environment isolation', () => {
   it('writes all persisted records and uploads to temporary directories', () => {
-    const filenames = ['firmalar.json', 'kullanicilar.json', 'kargo_ayarlari.json'];
+    const filenames = [
+      'identity.json',
+      'firmalar.json',
+      'kullanicilar.json',
+      'kargo_ayarlari.json',
+    ];
     const readProjectFiles = () =>
       filenames.map((name) => {
         const filename = path.join(process.cwd(), 'data', name);
@@ -43,8 +49,9 @@ describe('Test environment isolation', () => {
     kargoMerkezi.kaydetAyarlar({ tenantId: 'isolated-fixture', aktif: false });
     fs.writeFileSync(path.join(UPLOADS_DIR, 'fixture.txt'), 'temporary upload');
 
-    expect(JSON.parse(fs.readFileSync(FIRMALAR_DOSYA_YOLU, 'utf8'))).toEqual([]);
-    expect(JSON.parse(fs.readFileSync(KULLANICILAR_DOSYA_YOLU, 'utf8'))).toEqual([]);
+    expect(JSON.parse(fs.readFileSync(IDENTITY_DOSYA_YOLU, 'utf8'))).toEqual(
+      expect.objectContaining({ companies: [], users: [] })
+    );
     expect(JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'kargo_ayarlari.json'), 'utf8'))).toEqual(
       expect.arrayContaining([expect.objectContaining({ tenantId: 'isolated-fixture' })])
     );

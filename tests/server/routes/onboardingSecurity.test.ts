@@ -21,6 +21,24 @@ const signup = {
 
 beforeEach(() => {
   db.client = null;
+  if (!firmalarVeritabani.some((firma) => firma.id === 'onboarding-fixture')) {
+    firmalarVeritabani.unshift({
+      id: 'onboarding-fixture',
+      ad: 'Fixture',
+      sehir: 'Baku',
+      aciklama: '',
+      varsayilanParaBirimi: 'AZN',
+      varsayilanKomisyonYuzdesi: 15,
+      onayDurumu: 'AKTIF',
+      rolLimitleri: {
+        PATRON: 1,
+        KANADA_SATINALMA: 1,
+        SATIS_SORUMLUSU: 1,
+        BAKU_FINANS: 1,
+        BAKU_KURYE: 5,
+      },
+    });
+  }
 });
 
 describe('Onboarding trust boundaries', () => {
@@ -33,23 +51,25 @@ describe('Onboarding trust boundaries', () => {
     expect(response.body.aktivasyonLinki).toBeUndefined();
   });
 
-  it.each(['firmalar', 'kullanicilar'])(
-    'does not report signup success after %s persistence fails',
-    async (failingTable) => {
-      const count = kullanicilarVeritabani.length;
-      db.client = {
-        from: (table: string) => ({
-          insert: async () => ({
-            error: table === failingTable ? { message: 'write failed' } : null,
-          }),
-        }),
-      };
-      const response = await request(app).post('/api/firmalar/kayit').send(signup);
-      expect(response.status).toBe(503);
-      expect(response.body.basarili).toBe(false);
-      expect(kullanicilarVeritabani).toHaveLength(count);
-    }
-  );
+  it.each([
+    { code: 'XX000', status: 503 },
+    { code: '23505', status: 409 },
+  ])('does not report signup success after transaction failure (%j)', async ({ code, status }) => {
+    const count = kullanicilarVeritabani.length;
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: { code, message: 'private database detail' } });
+    db.client = { rpc };
+    const response = await request(app).post('/api/firmalar/kayit').send(signup);
+    expect(response.status).toBe(status);
+    expect(response.body.basarili).toBe(false);
+    expect(response.text).not.toContain('private database detail');
+    expect(kullanicilarVeritabani).toHaveLength(count);
+    expect(rpc).toHaveBeenCalledWith(
+      'tomnap_register_boutique',
+      expect.objectContaining({ p_email_job: expect.objectContaining({ status: 'PENDING' }) })
+    );
+  });
 
   it('rejects SUPER_ADMIN and unknown invitation roles', async () => {
     for (const rol of ['SUPER_ADMIN', 'unknown']) {
@@ -78,6 +98,7 @@ describe('Onboarding trust boundaries', () => {
   it('does not publish an invite when its database insert fails', async () => {
     const count = davetlerVeritabani.length;
     db.client = {
+      rpc: vi.fn().mockResolvedValue({ data: null, error: { code: 'XX000' } }),
       from: () => ({
         select: () => ({
           eq: () => ({

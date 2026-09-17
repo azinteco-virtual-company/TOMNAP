@@ -154,6 +154,22 @@ export default defineConfig(async ({ command }) => {
       chunkSizeWarningLimit: 1000,
     },
     server: {
+      host: '127.0.0.1',
+      fs: {
+        strict: true,
+        deny: [
+          '**/.env',
+          '**/.env.*',
+          '**/*.{crt,pem}',
+          '**/.git/**',
+          ...['data', 'src/server', 'api', 'scripts', 'tests', 'work'].map(
+            (name) => path.resolve(process.cwd(), name) + '/**'
+          ),
+          ...[process.env.DATA_DIR, process.env.UPLOADS_DIR]
+            .filter(Boolean)
+            .map((name) => path.resolve(name!) + '/**'),
+        ],
+      },
       proxy: {
         '/api': {
           target: 'http://localhost:3000',

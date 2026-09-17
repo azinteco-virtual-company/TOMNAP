@@ -50,13 +50,14 @@ jobs:
           echo "✅ Production derlemesi başarıyla doğrulandı."
 
   database-security:
-    name: PostgreSQL grants, RLS and session schema
+    name: PostgreSQL access, transactions and concurrency
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:17
         env:
           POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: tomnap_test
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres"
@@ -66,7 +67,7 @@ jobs:
       PGPORT: 5432
       PGUSER: postgres
       PGPASSWORD: isolated-ci-only
-      PGDATABASE: postgres
+      PGDATABASE: tomnap_test
     steps:
       - uses: actions/checkout@v4
       - name: Synthetic schema, migration and access regression checks
@@ -75,4 +76,9 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f supabase_saas_schema.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-access-fixture.sql
           psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20260917151255_server_sessions_and_private_tables.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20260917160612_transactional_onboarding_inbox_and_order_maintenance.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/security-rls.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/inbox-transactions.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/maintenance-transactions.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/onboarding-transactions.sql
+          node tests/sql/inbox-concurrency.mjs

@@ -28,6 +28,8 @@ export interface EmailGonderParams {
   subject: string;
   html: string;
   text?: string;
+  from?: string;
+  idempotencyKey?: string;
 }
 
 export interface ActivationEmailParams {
@@ -49,7 +51,7 @@ export interface InviteEmailParams {
 /**
  * Ümumi e-poçt göndərmə funksiyası.
  * RESEND_API_KEY mövcuddursa Resend API vasitəsilə göndərir.
- * Yoxdursa və ya inkişaf rejimindədirsə konsola təhlükəsiz link çıxarır və xəta vermədən tamamlayır.
+ * Konfiqurasiya edilməyibsə çatdırılmanı uğursuz sayır; məxfi linkləri loglamır.
  */
 export async function sendEmail(
   params: EmailGonderParams
@@ -63,12 +65,14 @@ export async function sendEmail(
     try {
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
+        signal: AbortSignal.timeout(15_000),
         headers: {
           Authorization: `Bearer ${RESEND_API_KEY}`,
           'Content-Type': 'application/json',
+          ...(params.idempotencyKey ? { 'Idempotency-Key': params.idempotencyKey } : {}),
         },
         body: JSON.stringify({
-          from: EMAIL_FROM,
+          from: params.from || EMAIL_FROM,
           to: [to],
           subject,
           html,
@@ -87,9 +91,9 @@ export async function sendEmail(
         return { basarili: false, hata: resData?.message || 'E-poçt göndərilə bilmədi' };
       }
     } catch (err: any) {
-      console.error(`❌ Resend göndərmə xətası:`, err.message);
+      console.error(`❌ Resend göndərmə xətası.`);
       console.log(`==========================================================\n`);
-      return { basarili: false, hata: err.message };
+      return { basarili: false, hata: 'E-poçt xidməti əlçatan deyil.' };
     }
   }
 
@@ -106,7 +110,7 @@ export async function sendEmail(
 /**
  * Yeni Butik Qeydiyyatı üçün Aktivasiya & Şifrə Təyini E-poçtu
  */
-export async function sendActivationEmail(params: ActivationEmailParams) {
+export function buildActivationEmail(params: ActivationEmailParams) {
   const baseUrl = getApplicationUrl();
   const link = `${baseUrl}/sifre-belirle?token=${encodeURIComponent(params.token)}`;
 
@@ -169,14 +173,13 @@ Bu link 24 saat müddətində etibarlıdır.
 TOMNAP Dəstək Komandası
   `.trim();
 
-  const result = await sendEmail({ to: params.email, subject, html, text });
-  return { ...result, link };
+  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text }, link };
 }
 
 /**
  * Komanda Üzvləri üçün Dəvət & Şifrə Təyini E-poçtu
  */
-export async function sendInviteEmail(params: InviteEmailParams) {
+export function buildInviteEmail(params: InviteEmailParams) {
   const baseUrl = getApplicationUrl();
   const link = `${baseUrl}/davet-qebul?token=${encodeURIComponent(params.token)}`;
 
@@ -248,6 +251,15 @@ ${link}
 TOMNAP Dəstək Komandası
   `.trim();
 
-  const result = await sendEmail({ to: params.email, subject, html, text });
-  return { ...result, link };
+  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text }, link };
+}
+
+export async function sendActivationEmail(params: ActivationEmailParams) {
+  const { payload, link } = buildActivationEmail(params);
+  return { ...(await sendEmail(payload)), link };
+}
+
+export async function sendInviteEmail(params: InviteEmailParams) {
+  const { payload, link } = buildInviteEmail(params);
+  return { ...(await sendEmail(payload)), link };
 }

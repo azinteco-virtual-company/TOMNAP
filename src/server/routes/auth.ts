@@ -1,12 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
-import {
-  kullanicilarVeritabani,
-  kullanicilariKaydetDosyaya,
-  firmalarVeritabani,
-  firmalariKaydetDosyaya,
-} from '../services/state';
-import { davetlerVeritabani } from './firmalar';
+import { kullanicilarVeritabani, firmalarVeritabani, davetlerVeritabani } from '../services/state';
+import { activateUser, acceptInvite, OnboardingError } from '../services/onboarding';
 import { sifreHashle, sifreDogrula } from '../services/crypto';
 import { supabase } from '../services/supabase';
 import { DavetKaydi, KullaniciKaydi } from '../types';
@@ -69,6 +64,7 @@ async function findInvite(token: string): Promise<DavetKaydi | undefined> {
     gecerlilikTarihi: data.son_kullanma_tarihi,
     kullanildiMi: data.durum !== 'AKTIF',
     kullananKisi: data.kullanan_adi,
+    email: data.email || undefined,
   };
 }
 
@@ -81,13 +77,6 @@ async function findFirma(tenantId: string) {
     .maybeSingle();
   if (error) throw error;
   return data || undefined;
-}
-
-function cacheUser(user: KullaniciKaydi) {
-  const index = kullanicilarVeritabani.findIndex((item) => item.id === user.id);
-  if (index < 0) kullanicilarVeritabani.push(user);
-  else kullanicilarVeritabani[index] = user;
-  kullanicilariKaydetDosyaya(kullanicilarVeritabani);
 }
 
 // Token inspection is read-only: it cannot create or repair accounts.
@@ -153,10 +142,19 @@ router.post(['/auth/sifre-belirle', '/firmalar/davet/katil'], async (req, res) =
     if (typeof token !== 'string' || !token.trim()) {
       return res.status(400).json({ basarili: false, hata: 'Təhlükəsizlik tokeni mütləqdir.' });
     }
-    if (typeof sifre !== 'string' || sifre.length < 6) {
+    if (typeof sifre !== 'string' || sifre.length < 6 || sifre.length > 1024) {
       return res
         .status(400)
         .json({ basarili: false, hata: 'Şifrə ən azı 6 simvoldan ibarət olmalıdır.' });
+    }
+    if (
+      (adSoyad !== undefined && (typeof adSoyad !== 'string' || adSoyad.trim().length > 150)) ||
+      (telefon !== undefined &&
+        (typeof telefon !== 'string' || (telefon.trim() && !normalizePhone(telefon.trim()))))
+    ) {
+      return res
+        .status(400)
+        .json({ basarili: false, hata: 'Ad və telefon məlumatlarını yoxlayın.' });
     }
     const cleanToken = token.trim();
     const user = await findActivationUser(cleanToken);
@@ -167,62 +165,11 @@ router.post(['/auth/sifre-belirle', '/firmalar/davet/katil'], async (req, res) =
           hata: 'Bu aktivasiya linki etibarsızdır və ya vaxtı bitmişdir.',
         });
       }
-      const firma = await findFirma(user.tenant_id);
-      // Recheck after asynchronous reads, before consuming a local token.
-      if (!isPendingActivation(user, cleanToken)) {
-        return res
-          .status(400)
-          .json({ basarili: false, hata: 'Bu aktivasiya linki artıq etibarlı deyil.' });
-      }
-      const changes = {
+      const { user: activatedUser, firma } = await activateUser(cleanToken, {
         sifre_hash: sifreHashle(sifre),
-        durum: 'AKTIF' as const,
-        aktivasyon_token: null,
-        token_gecerlilik: null,
         ad_soyad: typeof adSoyad === 'string' && adSoyad.trim() ? adSoyad.trim() : user.ad_soyad,
         telefon: typeof telefon === 'string' && telefon.trim() ? telefon.trim() : user.telefon,
-      };
-      if (supabase) {
-        // The conditional UPDATE consumes the token once, including concurrent requests.
-        // .select() is required: a successful HTTP response can still update zero rows.
-        const { data: updated, error } = await supabase
-          .from('kullanicilar')
-          .update(changes)
-          .eq('id', user.id)
-          .eq('aktivasyon_token', cleanToken)
-          .eq('durum', 'BEKLEMEDE_SIFRE')
-          .gt('token_gecerlilik', new Date().toISOString())
-          .select('id')
-          .maybeSingle();
-        if (error) throw error;
-        if (!updated)
-          return res
-            .status(409)
-            .json({ basarili: false, hata: 'Bu aktivasiya linki artıq etibarlı deyil.' });
-        if (firma?.onay_durumu === 'BEKLEMEDE') {
-          const { error: firmaError } = await supabase
-            .from('firmalar')
-            .update({ onay_durumu: 'AKTIF' })
-            .eq('id', user.tenant_id)
-            .eq('onay_durumu', 'BEKLEMEDE');
-          if (firmaError) throw firmaError;
-          firma.onay_durumu = 'AKTIF';
-        }
-      } else {
-        if (!isPendingActivation(user, cleanToken)) {
-          return res
-            .status(400)
-            .json({ basarili: false, hata: 'Bu aktivasiya linki artıq etibarlı deyil.' });
-        }
-        Object.assign(user, changes);
-      }
-      const activatedUser = { ...user, ...changes };
-      cacheUser(activatedUser);
-      const localFirma = firmalarVeritabani.find((item) => item.id === user.tenant_id);
-      if (localFirma?.onayDurumu === 'BEKLEMEDE') {
-        localFirma.onayDurumu = 'AKTIF';
-        firmalariKaydetDosyaya(firmalarVeritabani);
-      }
+      });
       return res.json({
         basarili: true,
         mesaj: 'Şifrəniz uğurla təyin edildi! İndi daxil ola bilərsiniz.',
@@ -258,11 +205,21 @@ router.post(['/auth/sifre-belirle', '/firmalar/davet/katil'], async (req, res) =
         .status(400)
         .json({ basarili: false, hata: 'E-poçt və telefon mətn formatında olmalıdır.' });
     }
+    if (
+      invite.email &&
+      typeof email === 'string' &&
+      email.trim() &&
+      email.trim().toLowerCase() !== invite.email.trim().toLowerCase()
+    ) {
+      return res
+        .status(403)
+        .json({ basarili: false, hata: 'E-poçt ünvanı dəvətdəki ünvanla uyğun gəlmir.' });
+    }
     const userEmail =
       (typeof invite.email === 'string' ? invite.email.trim().toLowerCase() : '') ||
       (typeof email === 'string' ? email.trim().toLowerCase() : '');
     const userPhone = typeof telefon === 'string' ? telefon.trim() : '';
-    const validEmail = userEmail.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail);
+    const validEmail = userEmail.length <= 150 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail);
     const phoneDigits = userPhone.replace(/\D/g, '');
     const validPhone =
       /^[+\d\s().-]+$/.test(userPhone) && phoneDigits.length >= 7 && phoneDigits.length <= 15;
@@ -293,75 +250,26 @@ router.post(['/auth/sifre-belirle', '/firmalar/davet/katil'], async (req, res) =
       token_gecerlilik: null,
       olusturma_tarihi: new Date().toISOString(),
     };
-    if (supabase) {
-      // Claim before creating a user. A transaction/RPC is still needed to roll
-      // back this claim if the subsequent account insertion fails.
-      const { data: claimed, error } = await supabase
-        .from('davetler')
-        .update({
-          durum: 'KULLANILDI',
-          kullanan_adi: newUser.ad_soyad,
-          kullanan_telefon: newUser.telefon,
-          kullanildi_tarih: new Date().toISOString(),
-        })
-        .eq('token', cleanToken)
-        .eq('durum', 'AKTIF')
-        .gt('son_kullanma_tarihi', new Date().toISOString())
-        .select('token')
-        .maybeSingle();
-      if (error) throw error;
-      if (!claimed)
-        return res.status(409).json({ basarili: false, hata: 'Bu dəvət artıq etibarlı deyil.' });
-      const { data: inserted, error: insertError } = await supabase
-        .from('kullanicilar')
-        .insert(newUser)
-        .select('id')
-        .maybeSingle();
-      if (insertError) throw insertError;
-      if (!inserted)
-        return res
-          .status(503)
-          .json({ basarili: false, hata: 'İstifadəçi qeydi yaradıla bilmədi.' });
-    }
-    if (!supabase && !isAvailableInvite(invite, cleanToken)) {
-      return res.status(400).json({ basarili: false, hata: 'Bu dəvət artıq etibarlı deyil.' });
-    }
-    invite.kullanildiMi = true;
-    invite.kullananKisi = newUser.ad_soyad;
-    const localInvite = davetlerVeritabani.find((item) => item.token === cleanToken);
-    if (localInvite) Object.assign(localInvite, invite);
-    cacheUser(newUser);
-    const localFirma = firmalarVeritabani.find((item) => item.id === invite.tenantId);
-    if (localFirma) {
-      localFirma.aktifKullaniciSayilari ||= {
-        PATRON: 1,
-        KANADA_SATINALMA: 0,
-        SATIS_SORUMLUSU: 0,
-        BAKU_FINANS: 0,
-        BAKU_KURYE: 0,
-      };
-      const role = invite.rol as keyof typeof localFirma.aktifKullaniciSayilari;
-      if (localFirma.aktifKullaniciSayilari[role] !== undefined)
-        localFirma.aktifKullaniciSayilari[role] += 1;
-      firmalariKaydetDosyaya(firmalarVeritabani);
-    }
+    const { user: acceptedUser, firma: acceptedFirma } = await acceptInvite(cleanToken, newUser);
     return res.json({
       basarili: true,
       tenantId: invite.tenantId,
-      tenantAd: firma.ad,
+      tenantAd: acceptedFirma.ad,
       rol: invite.rol,
-      mesaj: `Təbriklər! "${firma.ad}" komandasına ${invite.rol} olaraq şifrəniz təyin edildi.`,
+      mesaj: `Təbriklər! "${acceptedFirma.ad}" komandasına ${invite.rol} olaraq şifrəniz təyin edildi.`,
       kullanici: {
-        id: newUser.id,
-        adSoyad: newUser.ad_soyad,
-        email: newUser.email,
-        telefon: newUser.telefon,
-        rol: newUser.rol,
-        tenantId: newUser.tenant_id,
+        id: acceptedUser.id,
+        adSoyad: acceptedUser.ad_soyad,
+        email: acceptedUser.email,
+        telefon: acceptedUser.telefon,
+        rol: acceptedUser.rol,
+        tenantId: acceptedUser.tenant_id,
       },
-      firma,
+      firma: acceptedFirma,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof OnboardingError)
+      return res.status(error.status).json({ basarili: false, hata: error.message });
     return res.status(503).json({
       basarili: false,
       hata: 'Şifrə hazırda təyin edilə bilmir. Daha sonra yenidən cəhd edin.',

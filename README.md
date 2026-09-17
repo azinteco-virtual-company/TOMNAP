@@ -1,3 +1,5 @@
+> **Faz 3 güncellemesi:** [İşlem bütünlüğü, güvenli yedek yükleme ve migration](docs/PERSISTENCE_SECURITY.md).
+
 > **Güncel güvenlik kurulumu:** [Oturum, firma yetkileri ve migration](docs/SESSION_SECURITY.md).
 > API için gerçek kullanıcı oturumu gerekir. İlk yönetici `npm run admin:bootstrap` ile oluşturulur.
 > Eski admin/demo kodları ve anonim API anahtarı erişimi kaldırılmıştır.
@@ -15,7 +17,7 @@
 - **A – Automate:** AI destekli görsel/metin okuma ve otomatik durum güncellemeleri
 - **P – Parcel:** Son kilometre kapıya teslim ve tahsilat
 
-> Güvenlik durumu ve aşamalı iyileştirme planı: [yeniden inceleme](docs/SECURITY_RECHECK.md). Bu dal üretime hazırlık çalışmalarını içerir; üretim geçişi ve kalan veri kalıcılığı işleri güncel oturum raporunda listelenmiştir.
+> Güvenlik durumu ve aşamalı iyileştirme planı: [yeniden inceleme](docs/SECURITY_RECHECK.md). Bu dal üretime hazırlık çalışmalarını içerir; üretim geçişi ve kalan işler güncel Faz 3 raporunda listelenmiştir.
 
 ## 🚀 Özellikler
 

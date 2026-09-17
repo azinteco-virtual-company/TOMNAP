@@ -1,4 +1,3 @@
-import fs from 'fs';
 import path from 'path';
 import { DATA_DIR } from '../../config';
 import {
@@ -15,6 +14,7 @@ import { siparislerVeritabani, setSiparislerVeritabani } from '../state';
 import { supabase } from '../supabase';
 import { formatlaSiparis, hazirlaSupabasePayload } from '../siparisFormatlama';
 import { sifreleMetin, cozMetin } from '../crypto';
+import { JsonStorageError, readJsonFile, writeJsonAtomic } from '../atomicJson';
 
 const AYARLAR_DOSYA_YOLU = path.join(DATA_DIR, 'kargo_ayarlari.json');
 
@@ -39,7 +39,7 @@ const VARSAYILAN_AYARLAR: KargoSaglayiciAyarlari = {
   guncellenmeTarihi: new Date().toISOString(),
 };
 
-class KargoMerkezi {
+export class KargoMerkezi {
   private providers: Map<KargoSaglayiciTipi, KargoSaglayiciInterface> = new Map();
   private tenantAyarlari: Map<string, KargoSaglayiciAyarlari> = new Map();
 
@@ -110,9 +110,11 @@ class KargoMerkezi {
       guncel.kimlikBilgileri.pin = mevcut.kimlikBilgileri.pin;
     }
 
-    this.tenantAyarlari.set(tid, guncel);
-    this.kaydetAyarlariDosyaya();
-    return guncel;
+    const pending = new Map(this.tenantAyarlari);
+    pending.set(tid, structuredClone(guncel));
+    this.kaydetAyarlariDosyaya(pending);
+    this.tenantAyarlari = pending;
+    return structuredClone(guncel);
   }
 
   /**
@@ -261,58 +263,68 @@ class KargoMerkezi {
     };
   }
 
-  // Kalıcılık (Persistence)
+  // Persist settings before publishing them to providers or callers.
   private yukleAyarlariDosyadan() {
-    try {
-      if (fs.existsSync(AYARLAR_DOSYA_YOLU)) {
-        const content = fs.readFileSync(AYARLAR_DOSYA_YOLU, 'utf-8');
-        const data = JSON.parse(content);
-        if (Array.isArray(data)) {
-          for (const item of data) {
-            if (item.tenantId) {
-              // Şifreli alanları çözerek belleğe al
-              if (item.kimlikBilgileri) {
-                if (item.kimlikBilgileri.sifre) {
-                  item.kimlikBilgileri.sifre = cozMetin(item.kimlikBilgileri.sifre);
-                }
-                if (item.kimlikBilgileri.pin) {
-                  item.kimlikBilgileri.pin = cozMetin(item.kimlikBilgileri.pin);
-                }
-              }
-              this.tenantAyarlari.set(item.tenantId, item);
-            }
-          }
-        }
-      } else {
-        // Varsayılanı kaydet
-        this.tenantAyarlari.set(VARSAYILAN_AYARLAR.tenantId, { ...VARSAYILAN_AYARLAR });
-        this.kaydetAyarlariDosyaya();
+    const valid = (value: unknown): value is KargoSaglayiciAyarlari[] => {
+      if (!Array.isArray(value)) return false;
+      const tenants = new Set<string>();
+      for (const row of value) {
+        if (
+          !row ||
+          typeof row !== 'object' ||
+          typeof row.tenantId !== 'string' ||
+          !row.tenantId ||
+          row.tenantId === 'all' ||
+          tenants.has(row.tenantId) ||
+          !row.kimlikBilgileri ||
+          typeof row.kimlikBilgileri !== 'object' ||
+          Array.isArray(row.kimlikBilgileri)
+        )
+          return false;
+        for (const field of ['kullaniciAdi', 'sifre', 'hesapNo', 'pin', 'entity'])
+          if (
+            row.kimlikBilgileri[field] !== undefined &&
+            typeof row.kimlikBilgileri[field] !== 'string'
+          )
+            return false;
+        tenants.add(row.tenantId);
       }
-    } catch (err) {
-      console.warn('Kargo ayarları dosyası okunamadı, varsayılan yüklendi:', err);
-      this.tenantAyarlari.set(VARSAYILAN_AYARLAR.tenantId, { ...VARSAYILAN_AYARLAR });
+      return true;
+    };
+    const stored = readJsonFile(AYARLAR_DOSYA_YOLU, valid);
+    const loaded = new Map<string, KargoSaglayiciAyarlari>();
+    for (const row of stored || []) {
+      const item = structuredClone(row);
+      for (const field of ['sifre', 'pin'] as const) {
+        const encoded = item.kimlikBilgileri[field];
+        if (!encoded) continue;
+        const decoded = cozMetin(encoded);
+        if (encoded.startsWith('enc:') && decoded === encoded)
+          throw new JsonStorageError('Kargo kimlik bilgileri çözülemedi.');
+        item.kimlikBilgileri[field] = decoded;
+      }
+      loaded.set(item.tenantId, item);
     }
+    this.tenantAyarlari = loaded;
   }
 
-  private kaydetAyarlariDosyaya() {
-    try {
-      const dir = path.dirname(AYARLAR_DOSYA_YOLU);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      // Hassas şifre ve PIN alanlarını AES ile şifreleyerek diske yaz
-      const list = Array.from(this.tenantAyarlari.values()).map((item) => ({
-        ...item,
-        kimlikBilgileri: {
-          ...item.kimlikBilgileri,
-          sifre: item.kimlikBilgileri?.sifre ? sifreleMetin(item.kimlikBilgileri.sifre) : '',
-          pin: item.kimlikBilgileri?.pin ? sifreleMetin(item.kimlikBilgileri.pin) : '',
-        },
-      }));
-      fs.writeFileSync(AYARLAR_DOSYA_YOLU, JSON.stringify(list, null, 2), 'utf-8');
-    } catch (err) {
-      console.error('Kargo ayarları dosyaya yazılamadı:', err);
-    }
+  private kaydetAyarlariDosyaya(settings: Map<string, KargoSaglayiciAyarlari>) {
+    const encode = (value: string | undefined) => {
+      if (!value) return '';
+      const encoded = sifreleMetin(value);
+      if (!encoded.startsWith('enc:'))
+        throw new JsonStorageError('Kargo kimlik bilgileri şifrelenemedi.');
+      return encoded;
+    };
+    const list = Array.from(settings.values()).map((item) => ({
+      ...item,
+      kimlikBilgileri: {
+        ...item.kimlikBilgileri,
+        sifre: encode(item.kimlikBilgileri?.sifre),
+        pin: encode(item.kimlikBilgileri?.pin),
+      },
+    }));
+    writeJsonAtomic(AYARLAR_DOSYA_YOLU, list);
   }
 }
 

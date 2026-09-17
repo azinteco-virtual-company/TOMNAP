@@ -273,7 +273,12 @@ describe('Real session authorization and tenant integration', () => {
     expect(accepted.status).toBe(200);
     expect(accepted.body.siparis.tenant_id).toBe(companyA);
     expect(siparislerVeritabani).toHaveLength(3);
-    expect((await salesA.agent.post('/api/inbox/inbox-a/onayla').send({})).status).toBe(409);
+    const repeated = await salesA.agent.post('/api/inbox/inbox-a/onayla').send({});
+    expect(repeated.status).toBe(200);
+    expect(repeated.body).toMatchObject({
+      tekrar: true,
+      siparis: { id: accepted.body.siparis.id },
+    });
     expect(siparislerVeritabani).toHaveLength(3);
     expect((await ownerB.agent.post('/api/inbox/inbox-b/reddet').send({})).status).toBe(200);
   });

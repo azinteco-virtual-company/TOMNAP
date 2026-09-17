@@ -6,7 +6,11 @@ import { Type } from '@google/genai';
 import { GEMINI_API_KEY } from '../config';
 import { getGeminiClient, generateContentWithRetryAndFallback } from '../services/gemini';
 import { supabase } from '../services/supabase';
-import { hazirlaSupabasePayload, formatlaSiparis } from '../services/siparisFormatlama';
+import {
+  hazirlaSupabasePayload,
+  formatlaSiparis,
+  siparisEkVerileriniAl,
+} from '../services/siparisFormatlama';
 import {
   onayBekleyenler,
   siparislerVeritabani,
@@ -39,7 +43,8 @@ const inboxFailure = (res: any, error: any) =>
     hata:
       error instanceof PublicResourceError ? error.message : 'Gelen kutusu işlemi tamamlanamadı.',
   });
-const mappedInbox = (row: any): OnayBekleyenKaydi => ({
+type InboxItem = OnayBekleyenKaydi & { onaylanan_siparis_id?: string | null };
+const mappedInbox = (row: any): InboxItem => ({
   ...row,
   gelis_tarihi: row.gelis_tarihi || row.olusturma_tarihi,
   oneri_siparis: { ...(row.oneri_siparis || {}), tenant_id: rowTenant(row) },
@@ -55,7 +60,7 @@ async function ownedInbox(tenant: string, id: string) {
     if (error) throw new PublicResourceError('Mesaj okunamadı.', 503);
     return data && belongs(data, tenant) ? mappedInbox(data) : undefined;
   }
-  return onayBekleyenler.find((m) => m.id === id && belongs(m, tenant));
+  return onayBekleyenler.find((m) => m.id === id && belongs(m, tenant)) as InboxItem | undefined;
 }
 
 // GET /api/inbox — Onay Bekleyen Gelen Kutusu Listele
@@ -221,17 +226,100 @@ Sohbet: "${mesaj}"`;
   }
 });
 
-// POST /api/inbox/:id/onayla — Inbox Mesajını Onayla ve Kesin Siparişe Dönüştür
+function approvalOrderId(tenantId: string, inboxId: string): string {
+  const hash = createHash('sha256')
+    .update(tenantId + ':' + inboxId)
+    .digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+
+function transitionFailure(error: { code?: string } | null): never {
+  const status =
+    error?.code === 'PT404'
+      ? 404
+      : error?.code === 'PT409'
+        ? 409
+        : ['PT400', '22P02', '22003', '23514', '23502'].includes(error?.code || '')
+          ? 400
+          : 503;
+  throw new PublicResourceError(
+    status === 404
+      ? 'Mesaj bulunamadı.'
+      : status === 409
+        ? 'Mesaj kararı değiştirilemez veya onaylı sipariş artık yok.'
+        : status === 400
+          ? 'Geçersiz sipariş verisi.'
+          : 'Mesaj kararı kaydedilemedi.',
+    status
+  );
+}
+
+async function approveDatabase(
+  tenantId: string,
+  inboxId: string,
+  orderId: string,
+  payload: Record<string, unknown>
+) {
+  const { data, error } = await supabase.rpc('tomnap_approve_inbox', {
+    p_tenant_id: tenantId,
+    p_inbox_id: inboxId,
+    p_order_id: orderId,
+    p_order_payload: payload,
+  });
+  if (error) transitionFailure(error);
+  if (
+    !data?.siparis?.id ||
+    data.siparis.tenant_id !== tenantId ||
+    typeof data.tekrar !== 'boolean'
+  ) {
+    throw new PublicResourceError('Mesaj kararı doğrulanamadı.', 503);
+  }
+  return { siparis: formatlaSiparis(data.siparis), tekrar: data.tekrar };
+}
+
+function approvedMemory(item: InboxItem, tenantId: string, orderId: string) {
+  const pool = tenantId === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani;
+  const stored = pool.find(
+    (row) => row.id === (item.onaylanan_siparis_id || orderId) && belongs(row, tenantId)
+  );
+  if (!stored) throw new PublicResourceError('Onaylı sipariş artık mevcut değil.', 409);
+  return { siparis: formatlaSiparis(stored), tekrar: true };
+}
+
+const approvedResponse = (res: any, result: { siparis: any; tekrar: boolean }) =>
+  res.json({
+    basarili: true,
+    mesaj: 'Sipariş onaylandı ve resmi sipariş tablosuna aktarıldı.',
+    ...result,
+  });
+
+// POST /api/inbox/:id/onayla — One transaction decides and creates the order.
 router.post('/inbox/:id/onayla', async (req, res) => {
   try {
     const tenantId = tenantFor(req, true);
     const { id } = req.params;
     const inboxItem = await ownedInbox(tenantId, id);
-    if (!inboxItem)
-      return res.status(404).json({ basarili: false, hata: 'Inbox mesajı bulunamadı.' });
+    if (!inboxItem) throw new PublicResourceError('Inbox mesajı bulunamadı.', 404);
+    const orderId = approvalOrderId(tenantId, id);
+    if (inboxItem.durum === 'ONAYLANDI') {
+      // Retry returns the original committed order; edited retry bodies never
+      // create a replacement or overwrite the first decision.
+      return approvedResponse(
+        res,
+        dbActive(tenantId)
+          ? await approveDatabase(tenantId, id, orderId, {})
+          : approvedMemory(inboxItem, tenantId, orderId)
+      );
+    }
     if (inboxItem.durum !== 'BEKLEMEDE')
-      return res.status(409).json({ basarili: false, hata: 'Mesaj daha önce işlendi.' });
-    const siparisVerisi = req.body.duzeltilmis_siparis || inboxItem.oneri_siparis;
+      throw new PublicResourceError('Mesaj daha önce reddedildi.', 409);
+    const submitted = req.body.duzeltilmis_siparis || inboxItem.oneri_siparis;
+    if (!submitted || typeof submitted !== 'object' || Array.isArray(submitted))
+      throw new PublicResourceError('Geçersiz sipariş verisi.', 400);
+    // Hydrate only known business fields before validating references. A nested
+    // customer or invoice image must pass the same tenant checks as a direct edit.
+    const extras = siparisEkVerileriniAl(submitted);
+    const siparisVerisi = { ...submitted, ...extras };
     if (
       (siparisVerisi.tenant_id && siparisVerisi.tenant_id !== tenantId) ||
       (siparisVerisi.tenantId && siparisVerisi.tenantId !== tenantId)
@@ -258,11 +346,19 @@ router.post('/inbox/:id/onayla', async (req, res) => {
 
     const alinan = Number(siparisVerisi.alinan_tutar || 0);
     const toplam = Number(siparisVerisi.toplam_tutar || alinan);
+    const adet = Number(siparisVerisi.adet ?? 1);
     const kalan = Math.max(0, toplam - alinan);
-    if (!Number.isFinite(toplam) || !Number.isFinite(alinan) || toplam < 0 || alinan < 0)
-      throw new PublicResourceError('Geçersiz tutar.', 400);
-
+    if (
+      !Number.isFinite(toplam) ||
+      !Number.isFinite(alinan) ||
+      toplam < 0 ||
+      alinan < 0 ||
+      !Number.isInteger(adet) ||
+      adet <= 0
+    )
+      throw new PublicResourceError('Geçersiz tutar veya adet.', 400);
     const dbPayload = {
+      ek_veriler: extras,
       tenant_id: tenantId,
       is_demo: tenantId === 'demo_sandbox',
       ham_mesaj: inboxItem.konusma_gecmisi,
@@ -275,7 +371,7 @@ router.post('/inbox/:id/onayla', async (req, res) => {
       urun_aciklamasi: siparisVerisi.urun_aciklamasi || 'Ürün',
       beden_veya_olcu: siparisVerisi.beden_veya_olcu || '',
       renk: siparisVerisi.renk || '',
-      adet: Number(siparisVerisi.adet || 1),
+      adet,
       toplam_tutar: toplam,
       alinan_tutar: alinan,
       para_birimi: siparisVerisi.para_birimi || 'AZN',
@@ -292,59 +388,36 @@ router.post('/inbox/:id/onayla', async (req, res) => {
       ai_guven_skoru: Number(siparisVerisi.ai_guven_skoru || 0.98),
     };
 
-    // A stable UUID makes retries safe if order creation succeeds but inbox marking fails.
-    const hash = createHash('sha256')
-      .update(tenantId + ':' + id)
-      .digest('hex');
-    const orderId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-    let kesinSiparis: any;
     if (dbActive(tenantId)) {
-      const { data: prior, error: lookupError } = await supabase
-        .from('siparisler')
-        .select('*')
-        .eq('id', orderId)
-        .eq('tenant_id', tenantId)
-        .maybeSingle();
-      if (lookupError) throw new PublicResourceError('Sipariş doğrulanamadı.', 503);
-      if (prior) kesinSiparis = formatlaSiparis(prior);
-      else {
-        const { data, error } = await supabase
-          .from('siparisler')
-          .insert({ ...hazirlaSupabasePayload(dbPayload), id: orderId })
-          .select('*')
-          .single();
-        if (error || !data) throw new PublicResourceError('Sipariş kaydedilemedi.', 503);
-        kesinSiparis = formatlaSiparis(data);
-      }
-      const { data: marked, error } = await supabase
-        .from('inbox_mesajlar')
-        .update({ durum: 'ONAYLANDI' })
-        .eq('id', id)
-        .eq('tenant_id', tenantId)
-        .eq('durum', 'BEKLEMEDE')
-        .select('id')
-        .maybeSingle();
-      if (error || !marked)
-        throw new PublicResourceError('Sipariş kaydedildi ancak mesaj durumu güncellenemedi.', 503);
-    } else {
-      const pool = tenantId === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani;
-      kesinSiparis = pool.find((s) => s.id === orderId && belongs(s, tenantId));
-      if (!kesinSiparis) {
-        kesinSiparis = formatlaSiparis({
-          id: orderId,
-          olusturma_tarihi: new Date().toISOString(),
-          ...dbPayload,
-          kalan_tutar: kalan,
-        });
-        pool.unshift(kesinSiparis);
-      }
-      inboxItem.durum = 'ONAYLANDI';
+      return approvedResponse(
+        res,
+        await approveDatabase(tenantId, id, orderId, hazirlaSupabasePayload(dbPayload))
+      );
     }
-    res.json({
-      basarili: true,
-      mesaj: 'Sipariş onaylandı ve resmi sipariş tablosuna aktarıldı.',
-      siparis: kesinSiparis,
-    });
+    // All validations above can yield. Re-read the live row and decision now,
+    // then mutate synchronously so approve/reject cannot overwrite one another.
+    const current = onayBekleyenler.find((item) => item.id === id && belongs(item, tenantId)) as
+      InboxItem | undefined;
+    if (!current) throw new PublicResourceError('Inbox mesajı bulunamadı.', 404);
+    if (current.durum === 'ONAYLANDI')
+      return approvedResponse(res, approvedMemory(current, tenantId, orderId));
+    if (current.durum !== 'BEKLEMEDE')
+      throw new PublicResourceError('Mesaj daha önce reddedildi.', 409);
+    const pool = tenantId === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani;
+    let stored = pool.find((row) => row.id === orderId && belongs(row, tenantId));
+    const tekrar = !!stored;
+    if (!stored) {
+      stored = formatlaSiparis({
+        id: orderId,
+        olusturma_tarihi: new Date().toISOString(),
+        ...dbPayload,
+        kalan_tutar: kalan,
+      });
+      pool.unshift(stored);
+    }
+    current.durum = 'ONAYLANDI';
+    current.onaylanan_siparis_id = stored.id;
+    return approvedResponse(res, { siparis: stored, tekrar });
   } catch (error) {
     inboxFailure(res, error);
   }
@@ -353,22 +426,31 @@ router.post('/inbox/:id/onayla', async (req, res) => {
 router.post('/inbox/:id/reddet', async (req, res) => {
   try {
     const tenant = tenantFor(req, true);
-    const inbox = await ownedInbox(tenant, req.params.id);
-    if (!inbox) return res.status(404).json({ basarili: false, hata: 'Mesaj bulunamadı.' });
-    if (inbox.durum !== 'BEKLEMEDE')
-      return res.status(409).json({ basarili: false, hata: 'Mesaj daha önce işlendi.' });
     if (dbActive(tenant)) {
-      const { data, error } = await supabase
-        .from('inbox_mesajlar')
-        .update({ durum: 'REDDEDILDI' })
-        .eq('id', inbox.id)
-        .eq('tenant_id', tenant)
-        .eq('durum', 'BEKLEMEDE')
-        .select('id')
-        .maybeSingle();
-      if (error || !data) throw new PublicResourceError('Mesaj güncellenemedi.', 503);
-    } else inbox.durum = 'REDDEDILDI';
-    res.json({ basarili: true, mesaj: 'Mesaj reddedildi/arşivlendi.' });
+      const { data, error } = await supabase.rpc('tomnap_reject_inbox', {
+        p_tenant_id: tenant,
+        p_inbox_id: req.params.id,
+      });
+      if (error) transitionFailure(error);
+      if (data?.durum !== 'REDDEDILDI' || typeof data.tekrar !== 'boolean')
+        throw new PublicResourceError('Mesaj kararı doğrulanamadı.', 503);
+      return res.json({
+        basarili: true,
+        mesaj: 'Mesaj reddedildi/arşivlendi.',
+        tekrar: data.tekrar,
+      });
+    }
+    // No await between reading the state and writing the rejection.
+    const inbox = onayBekleyenler.find(
+      (item) => item.id === req.params.id && belongs(item, tenant)
+    );
+    if (!inbox) throw new PublicResourceError('Mesaj bulunamadı.', 404);
+    if (inbox.durum === 'REDDEDILDI')
+      return res.json({ basarili: true, mesaj: 'Mesaj reddedildi/arşivlendi.', tekrar: true });
+    if (inbox.durum !== 'BEKLEMEDE')
+      throw new PublicResourceError('Mesaj daha önce onaylandı.', 409);
+    inbox.durum = 'REDDEDILDI';
+    return res.json({ basarili: true, mesaj: 'Mesaj reddedildi/arşivlendi.', tekrar: false });
   } catch (error) {
     inboxFailure(res, error);
   }

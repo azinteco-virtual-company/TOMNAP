@@ -15,6 +15,8 @@ import {
 import {
   setKullanicilarVeritabani,
   kullanicilarVeritabani,
+  firmalarVeritabani,
+  setFirmalarVeritabani,
 } from '../../../src/server/services/state';
 import { sifreHashle } from '../../../src/server/services/crypto';
 import type { KullaniciKaydi } from '../../../src/server/types';
@@ -247,6 +249,7 @@ describe('Login has no shared or magic credentials', () => {
   });
 
   it('does not establish a session when an activation token is consumed', async () => {
+    setFirmalarVeritabani(firmalarVeritabani.map((f) => ({ ...f, onayDurumu: 'AKTIF' as const })));
     setKullanicilarVeritabani([
       user({
         durum: 'BEKLEMEDE_SIFRE',

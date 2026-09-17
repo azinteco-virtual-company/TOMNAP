@@ -11,6 +11,7 @@ import {
   sendActivationEmail,
   sendInviteEmail,
   getApplicationUrl,
+  sendEmail,
 } from '../../../src/server/services/emailService';
 
 afterEach(() => {
@@ -48,6 +49,25 @@ describe('Activation email security', () => {
     expect(payload.html).not.toContain('<a href="https://evil.invalid">');
     expect(payload.html).toContain('&lt;img src=x');
     expect(payload.text).toContain('<img src=x');
+  });
+
+  it('sends a stable provider idempotency key and persisted sender', async () => {
+    config.RESEND_API_KEY = 'mock-only';
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ id: 'mock' }), { status: 200 }));
+    await sendEmail({
+      from: 'original@example.test',
+      to: 'owner@example.test',
+      subject: 'Fixed',
+      html: '<p>Fixed</p>',
+      text: 'Fixed',
+      idempotencyKey: 'tomnap-onboarding/job-id',
+    });
+    const request = fetchSpy.mock.calls[0][1]!;
+    expect(request.headers).toMatchObject({ 'Idempotency-Key': 'tomnap-onboarding/job-id' });
+    expect(JSON.parse(String(request.body)).from).toBe('original@example.test');
+    expect(request.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('never simulates successful email delivery in production', async () => {

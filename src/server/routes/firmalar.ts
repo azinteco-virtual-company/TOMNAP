@@ -1,14 +1,22 @@
 import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import {
   firmalarVeritabani,
   siparislerVeritabani,
   firmalariKaydetDosyaya,
-  kullanicilarVeritabani,
-  kullanicilariKaydetDosyaya,
+  davetlerVeritabani,
+  getIdentitySnapshot,
+  saveIdentitySnapshot,
 } from '../services/state';
 import { supabase } from '../services/supabase';
 import { tokenUret } from '../services/crypto';
-import { sendActivationEmail, sendInviteEmail, getApplicationUrl } from '../services/emailService';
+import {
+  buildActivationEmail,
+  buildInviteEmail,
+  getApplicationUrl,
+} from '../services/emailService';
+import { registerBoutique, createInvite, OnboardingError } from '../services/onboarding';
+import { createEmailJob, tryDeliverOnboardingEmail } from '../services/onboardingOutbox';
 import { FirmaTenantItem, KullaniciKaydi } from '../types';
 import { IS_PRODUCTION, RESEND_API_KEY } from '../config';
 
@@ -84,8 +92,8 @@ router.get('/firmalar', async (req, res) => {
   });
 });
 
-// In-memory davet listesi
-export const davetlerVeritabani: any[] = [];
+// Shared durable identity snapshot (kept as a compatibility export).
+export { davetlerVeritabani } from '../services/state';
 
 // POST /api/firmalar/kayit — İctimai Butik Qeydiyyatı (Self-Service Onboarding)
 router.post('/firmalar/kayit', async (req, res) => {
@@ -94,7 +102,9 @@ router.post('/firmalar/kayit', async (req, res) => {
     const ad = String(body.ad || '').trim();
     const sahipAdi = String(body.sahipAdi || '').trim();
     const sahipTelefon = String(body.sahipTelefon || '').trim();
-    const sahipEmail = String(body.sahipEmail || '').trim();
+    const sahipEmail = String(body.sahipEmail || '')
+      .trim()
+      .toLowerCase();
     const sehir = String(body.sehir || 'Bakı').trim();
     const paket = body.paket || 'PRO';
     const menseiUlke = String(body.menseiUlke || 'CA').trim();
@@ -105,6 +115,24 @@ router.post('/firmalar/kayit', async (req, res) => {
         basarili: false,
         hata: 'Butik adı, sahibinin adı, əlaqə telefonu və e-poçt ünvanı mütləqdir.',
       });
+    }
+
+    if (
+      [body.ad, body.sahipAdi, body.sahipTelefon, body.sahipEmail].some(
+        (value) => typeof value !== 'string'
+      ) ||
+      ad.length > 200 ||
+      sahipAdi.length > 150 ||
+      sahipEmail.length > 150 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sahipEmail) ||
+      !/^[+\d\s().-]+$/.test(sahipTelefon) ||
+      !/^\d{7,15}$/.test(sahipTelefon.replace(/\D/g, '')) ||
+      sehir.length > 100 ||
+      menseiUlke.length > 10
+    ) {
+      return res
+        .status(400)
+        .json({ basarili: false, hata: 'Qeydiyyat məlumatlarının formatını yoxlayın.' });
     }
 
     if (IS_PRODUCTION && !RESEND_API_KEY) {
@@ -126,9 +154,10 @@ router.post('/firmalar/kayit', async (req, res) => {
         .replace(/ş/g, 's')
         .replace(/ç/g, 'c')
         .replace(/ğ/g, 'g')
-        .replace(/[^a-z0-9]/g, '_') +
+        .replace(/[^a-z0-9]/g, '_')
+        .slice(0, 60) +
       '_' +
-      Date.now().toString(36).slice(-4);
+      randomUUID();
 
     const upper = String(paket || 'PRO').toUpperCase();
     const normalPaket: 'BASLANGIC' | 'PRO' | 'ENTERPRISE' =
@@ -191,7 +220,7 @@ router.post('/firmalar/kayit', async (req, res) => {
     const tokenGecerlilik = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 saat
 
     const yeniPatronUser: KullaniciKaydi = {
-      id: 'usr_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4),
+      id: 'usr_' + randomUUID(),
       tenant_id: slug,
       ad_soyad: sahipAdi,
       email: sahipEmail.toLowerCase(),
@@ -203,83 +232,35 @@ router.post('/firmalar/kayit', async (req, res) => {
       olusturma_tarihi: new Date().toISOString(),
     };
 
-    // Supabase-ə yazmağa cəhd et (Etibarlı və tam ardıcıl, gizli timeout olmadan)
-    if (supabase) {
-      try {
-        const { error: fErr } = await supabase.from('firmalar').insert({
-          id: yeniFirma.id,
-          ad: yeniFirma.ad,
-          sehir: yeniFirma.sehir,
-          varsayilan_para_birimi: yeniFirma.varsayilanParaBirimi,
-          varsayilan_komisyon_yuzdesi: yeniFirma.varsayilanKomisyonYuzdesi,
-          aciklama: yeniFirma.aciklama,
-          is_demo: yeniFirma.isDemo,
-          onay_durumu: yeniFirma.onayDurumu,
-          paket: yeniFirma.paket,
-          sahip_adi: yeniFirma.sahipAdi,
-          sahip_email: yeniFirma.sahipEmail,
-          sahip_telefon: yeniFirma.sahipTelefon,
-          mensei_ulke: yeniFirma.menseiUlke,
-          rol_limitleri: yeniFirma.rolLimitleri,
-          aktif_kullanici_sayilari: yeniFirma.aktifKullaniciSayilari,
-        });
-        if (fErr) {
-          return res.status(503).json({
-            basarili: false,
-            hata: 'Qeydiyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
-          });
-        }
-
-        const { error: uErr } = await supabase.from('kullanicilar').insert({
-          id: yeniPatronUser.id,
-          tenant_id: yeniPatronUser.tenant_id,
-          ad_soyad: yeniPatronUser.ad_soyad,
-          email: yeniPatronUser.email,
-          telefon: yeniPatronUser.telefon,
-          rol: yeniPatronUser.rol,
-          durum: yeniPatronUser.durum,
-          aktivasyon_token: yeniPatronUser.aktivasyon_token,
-          token_gecerlilik: yeniPatronUser.token_gecerlilik,
-          olusturma_tarihi: yeniPatronUser.olusturma_tarihi,
-        });
-        if (uErr) {
-          return res.status(503).json({
-            basarili: false,
-            hata: 'İstifadəçi qeydi saxlanılmadı. Dəstək xidməti ilə əlaqə saxlayın.',
-          });
-        }
-      } catch (errDb) {
-        return res.status(503).json({
-          basarili: false,
-          hata: 'Qeydiyyat xidməti əlçatan deyil. Daha sonra yenidən cəhd edin.',
-        });
-      }
-    }
-
-    firmalarVeritabani.push(yeniFirma);
-    firmalariKaydetDosyaya(firmalarVeritabani);
-    kullanicilarVeritabani.push(yeniPatronUser);
-    kullanicilariKaydetDosyaya(kullanicilarVeritabani);
-
-    // Activation links use the configured application origin, never request headers.
-
-    const emailResult = await sendActivationEmail({
+    const { payload } = buildActivationEmail({
       email: sahipEmail,
       adSoyad: sahipAdi,
       butikAdi: ad,
       token: aktivasyonToken,
     });
+    const job = createEmailJob(yeniFirma.id, 'ACTIVATION', payload, tokenGecerlilik);
+    await registerBoutique(yeniFirma, yeniPatronUser, job);
+    const emailGonderildi = await tryDeliverOnboardingEmail(job.id);
 
     res.json({
       basarili: true,
-      mesaj: emailResult.basarili
+      mesaj: emailGonderildi
         ? `Qeydiyyat qəbul edildi. Şifrə təyini linki ${sahipEmail} ünvanına göndərildi.`
-        : 'Qeydiyyat qəbul edildi, lakin aktivasiya məktubu göndərilə bilmədi. Dəstək xidməti ilə əlaqə saxlayın.',
+        : 'Qeydiyyat saxlanıldı. Aktivasiya məktubu göndərilmə növbəsindədir; dəstək xidməti göndərişi yenidən yoxlaya bilər.',
       firma: yeniFirma,
-      emailGonderildi: emailResult.basarili,
+      emailGonderildi,
+      emailDurumu: emailGonderildi ? 'GONDERILDI' : 'BEKLIYOR',
     });
   } catch (err: any) {
-    res.status(500).json({ basarili: false, hata: err.message });
+    res
+      .status(err instanceof OnboardingError ? err.status : 503)
+      .json({
+        basarili: false,
+        hata:
+          err instanceof OnboardingError
+            ? err.message
+            : 'Əməliyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
+      });
   }
 });
 
@@ -301,18 +282,17 @@ router.patch('/firmalar/:id/onay', async (req, res) => {
       if (error)
         return res.status(503).json({ basarili: false, hata: 'Firma durumu kaydedilemedi.' });
       if (!data) return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
-      const local = firmalarVeritabani.find((f) => f.id === id);
-      if (local) local.onayDurumu = onayDurumu;
       return res.json({
         basarili: true,
         firma: { ...data, onayDurumu },
         mesaj: 'Firma durumu güncellendi.',
       });
     }
-    const firma = firmalarVeritabani.find((f) => f.id === id);
+    const next = getIdentitySnapshot();
+    const firma = next.companies.find((f) => f.id === id);
     if (!firma) return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
     firma.onayDurumu = onayDurumu;
-    firmalariKaydetDosyaya(firmalarVeritabani);
+    saveIdentitySnapshot(next);
     return res.json({ basarili: true, firma, mesaj: 'Firma durumu güncellendi.' });
   } catch {
     return res.status(503).json({ basarili: false, hata: 'Firma durumu kaydedilemedi.' });
@@ -354,15 +334,17 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
     if (firma.onayDurumu && firma.onayDurumu !== 'AKTIF')
       return res.status(403).json({ basarili: false, hata: 'Firma aktif değil.' });
 
-    // Limit yoxlanışı
-    const limit = (firma.rolLimitleri as any)?.[rol] ?? 5;
-    const movcud = (firma.aktifKullaniciSayilari as any)?.[rol] ?? 0;
-
-    if (movcud >= limit) {
-      return res.status(400).json({
-        basarili: false,
-        hata: `Bu butik üçün ${rol} vəzifəsi üzrə limit (${limit}/${limit}) dolmuşdur. Zəhmət olmasa paketinizi yüksəldin.`,
-      });
+    if (
+      (email !== undefined &&
+        (typeof email !== 'string' ||
+          email.trim().length > 150 ||
+          (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())))) ||
+      (adSoyad !== undefined && (typeof adSoyad !== 'string' || adSoyad.length > 150)) ||
+      typeof olusturanKisi !== 'string'
+    ) {
+      return res
+        .status(400)
+        .json({ basarili: false, hata: 'Dəvət məlumatlarının formatını yoxlayın.' });
     }
 
     const token = 'inv_' + tokenUret(32);
@@ -381,52 +363,22 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
       kullananKisi: adSoyad ? String(adSoyad).trim() : undefined,
     };
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('davetler')
-          .insert({
-            id: davet.token,
-            token: davet.token,
-            firma_id: davet.tenantId,
-            rol: davet.rol,
-            olusturan_rol: req.auth?.role || 'PATRON',
-            durum: 'AKTIF',
-            son_kullanma_tarihi: davet.gecerlilikTarihi,
-          })
-          .select('token')
-          .maybeSingle();
-        if (error || !data) {
-          return res
-            .status(503)
-            .json({ basarili: false, hata: 'Dəvət saxlanılmadı. Daha sonra yenidən cəhd edin.' });
-        }
-      } catch {
-        return res.status(503).json({ basarili: false, hata: 'Dəvət xidməti əlçatan deyil.' });
-      }
-    }
-
-    davetlerVeritabani.push(davet);
-
-    // E-poçt göstərilibsə real dəvət göndər
-    let emailGonderildi = false;
-    let davetUrlTam = `/davet-qebul?token=${token}`;
-
-    if (email && String(email).includes('@')) {
-      const emailSonuc = await sendInviteEmail({
-        email: String(email).trim().toLowerCase(),
-        adSoyad: adSoyad ? String(adSoyad).trim() : undefined,
-        butikAdi: firma.ad,
-        rol,
-        token,
-        davetEden: olusturanKisi,
-      });
-
-      emailGonderildi = emailSonuc.basarili;
-      if (emailSonuc.link) {
-        davetUrlTam = emailSonuc.link;
-      }
-    }
+    const preparedEmail = davet.email
+      ? buildInviteEmail({
+          email: davet.email,
+          adSoyad: davet.kullananKisi,
+          butikAdi: firma.ad,
+          rol,
+          token,
+          davetEden: olusturanKisi,
+        })
+      : undefined;
+    const job = preparedEmail
+      ? createEmailJob(firma.id, 'INVITE', preparedEmail.payload, gecerlilikTarihi)
+      : undefined;
+    const created = await createInvite(davet, req.auth?.role || 'PATRON', job);
+    const emailGonderildi = job ? await tryDeliverOnboardingEmail(job.id) : false;
+    const davetUrlTam = preparedEmail?.link || `${getApplicationUrl()}/davet-qebul?token=${token}`;
 
     res.json({
       basarili: true,
@@ -437,10 +389,19 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
       mesaj: emailGonderildi
         ? `Dəvət məktubu ${email} ünvanına göndərildi.`
         : `Dəvət linki uğurla yaradıldı.`,
-      kalanKota: limit - movcud,
+      emailDurumu: job ? (emailGonderildi ? 'GONDERILDI' : 'BEKLIYOR') : 'ISTENMEDI',
+      kalanKota: created.remaining,
     });
   } catch (err: any) {
-    res.status(500).json({ basarili: false, hata: err.message });
+    res
+      .status(err instanceof OnboardingError ? err.status : 503)
+      .json({
+        basarili: false,
+        hata:
+          err instanceof OnboardingError
+            ? err.message
+            : 'Əməliyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
+      });
   }
 });
 
@@ -468,9 +429,10 @@ router.post('/firmalar', async (req, res) => {
         .replace(/ş/g, 's')
         .replace(/ç/g, 'c')
         .replace(/ğ/g, 'g')
-        .replace(/[^a-z0-9]/g, '_') +
+        .replace(/[^a-z0-9]/g, '_')
+        .slice(0, 60) +
       '_' +
-      Date.now().toString(36).slice(-4);
+      randomUUID();
 
     const yeniFirma: FirmaTenantItem = {
       id: slug,
@@ -519,8 +481,7 @@ router.post('/firmalar', async (req, res) => {
       if (error || !data)
         return res.status(503).json({ basarili: false, hata: 'Firma kaydedilemedi.' });
     }
-    firmalarVeritabani.push(yeniFirma);
-    firmalariKaydetDosyaya(firmalarVeritabani);
+    if (!supabase) firmalariKaydetDosyaya([...firmalarVeritabani, yeniFirma]);
 
     res.json({
       basarili: true,
@@ -528,7 +489,15 @@ router.post('/firmalar', async (req, res) => {
       firma: yeniFirma,
     });
   } catch (err: any) {
-    res.status(500).json({ basarili: false, hata: err.message });
+    res
+      .status(err instanceof OnboardingError ? err.status : 503)
+      .json({
+        basarili: false,
+        hata:
+          err instanceof OnboardingError
+            ? err.message
+            : 'Əməliyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
+      });
   }
 });
 
@@ -548,11 +517,16 @@ router.delete('/firmalar/:id', async (req, res) => {
       if (error) return res.status(503).json({ basarili: false, hata: 'Firma silinemedi.' });
       if (!data) return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
     }
-    const index = firmalarVeritabani.findIndex((f) => f.id === id);
-    if (!supabase && index === -1)
-      return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
-    if (index !== -1) firmalarVeritabani.splice(index, 1);
-    firmalariKaydetDosyaya(firmalarVeritabani);
+    if (!supabase) {
+      const next = getIdentitySnapshot();
+      if (!next.companies.some((firma) => firma.id === id))
+        return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
+      next.companies = next.companies.filter((firma) => firma.id !== id);
+      next.users = next.users.filter((user) => user.tenant_id !== id);
+      next.invites = next.invites.filter((invite) => invite.tenantId !== id);
+      next.emailJobs = next.emailJobs.filter((job) => job.tenant_id !== id);
+      saveIdentitySnapshot(next);
+    }
     res.json({ basarili: true, mesaj: 'Butik uğurla silindi.' });
   } catch {
     res.status(503).json({ basarili: false, hata: 'Firma silinemedi.' });

@@ -1,6 +1,6 @@
 // src/server/index.ts
 import express from "express";
-import fs5 from "fs";
+import fs4 from "fs";
 import helmet from "helmet";
 
 // src/server/config.ts
@@ -29,13 +29,79 @@ if (SUPABASE_URL && !SUPABASE_KEY)
 import { timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 
 // src/server/services/sessions.ts
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes as randomBytes2, timingSafeEqual } from "node:crypto";
 import fs2 from "node:fs";
-import path3 from "node:path";
+import path4 from "node:path";
 
 // src/server/services/state.ts
-import fs from "fs";
-import path2 from "path";
+import path3 from "path";
+
+// src/server/services/atomicJson.ts
+import fs from "node:fs";
+import path2 from "node:path";
+import { randomBytes } from "node:crypto";
+var JsonStorageError = class extends Error {
+  constructor(message, cause) {
+    super(message, { cause });
+    this.status = 503;
+    this.name = "JsonStorageError";
+  }
+};
+function readJsonFile(filename, validate) {
+  let serialized;
+  try {
+    serialized = fs.readFileSync(filename, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return void 0;
+    throw new JsonStorageError("Yerel veri dosyas\u0131 okunamad\u0131.", error);
+  }
+  try {
+    const value = JSON.parse(serialized);
+    if (!validate(value)) throw new Error("Invalid persisted data shape");
+    return value;
+  } catch (error) {
+    throw new JsonStorageError(
+      "Yerel veri dosyas\u0131 ge\xE7ersiz; mevcut veriler de\u011Fi\u015Ftirilmedi.",
+      error
+    );
+  }
+}
+function writeJsonAtomic(filename, value) {
+  let temporary;
+  let descriptor;
+  try {
+    const serialized = JSON.stringify(value, null, 2);
+    if (serialized === void 0) throw new Error("Value is not JSON serializable");
+    const directory = path2.dirname(filename);
+    fs.mkdirSync(directory, { recursive: true, mode: 448 });
+    temporary = path2.join(
+      directory,
+      `.${path2.basename(filename)}.${randomBytes(16).toString("hex")}.tmp`
+    );
+    descriptor = fs.openSync(temporary, "wx", 384);
+    fs.writeFileSync(descriptor, serialized, "utf8");
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = void 0;
+    fs.renameSync(temporary, filename);
+    temporary = void 0;
+  } catch (error) {
+    throw new JsonStorageError("Yerel veriler kaydedilemedi; i\u015Flem tamamlanmad\u0131.", error);
+  } finally {
+    if (descriptor !== void 0) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+      }
+    }
+    if (temporary) {
+      try {
+        fs.rmSync(temporary, { force: true });
+      } catch {
+      }
+    }
+  }
+}
 
 // src/data/ornek-siparisler.ts
 var BASLANGIC_SIPARISLER = [
@@ -3474,12 +3540,17 @@ var siparislerVeritabani = [...BASLANGIC_SIPARISLER];
 function setSiparislerVeritabani(yeniListe) {
   siparislerVeritabani = yeniListe;
 }
-var GOLDEN_DEMO_SIPARISLER = JSON.parse(JSON.stringify(BASLANGIC_SIPARISLER)).map((s) => ({
-  ...s,
-  tenant_id: "demo_sandbox",
-  is_demo: true
-}));
+var GOLDEN_DEMO_SIPARISLER = JSON.parse(JSON.stringify(BASLANGIC_SIPARISLER)).map(
+  (s) => ({
+    ...s,
+    tenant_id: "demo_sandbox",
+    is_demo: true
+  })
+);
 var demoSiparislerVeritabani = JSON.parse(JSON.stringify(GOLDEN_DEMO_SIPARISLER));
+function setDemoSiparislerVeritabani(yeniListe) {
+  demoSiparislerVeritabani = yeniListe;
+}
 function sifirlaDemoVeritabani() {
   demoSiparislerVeritabani = JSON.parse(JSON.stringify(GOLDEN_DEMO_SIPARISLER));
   return demoSiparislerVeritabani.length;
@@ -3554,18 +3625,33 @@ var musterilerVeritabani = [
     son_siparis_tutari: 240
   }
 ];
-function firmalariYukleDosyadan() {
-  try {
-    if (fs.existsSync(FIRMALAR_DOSYA_YOLU)) {
-      const icerik = fs.readFileSync(FIRMALAR_DOSYA_YOLU, "utf-8");
-      const parsed = JSON.parse(icerik);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.warn("Firmalar dosyadan okunamad\u0131:", e);
-  }
+var IDENTITY_DOSYA_YOLU = path3.join(DATA_DIR, "identity.json");
+var object = (value) => !!value && typeof value === "object" && !Array.isArray(value);
+var nonempty = (value) => typeof value === "string" && value.length > 0;
+var roles = /* @__PURE__ */ new Set([
+  "SUPER_ADMIN",
+  "PATRON",
+  "KANADA_SATINALMA",
+  "SATIS_SORUMLUSU",
+  "BAKU_FINANS",
+  "BAKU_KURYE"
+]);
+function companyRecord(value) {
+  return object(value) && nonempty(value.id) && nonempty(value.ad) && typeof value.sehir === "string" && ["AZN", "CAD", "USD"].includes(String(value.varsayilanParaBirimi)) && typeof value.varsayilanKomisyonYuzdesi === "number" && Number.isFinite(value.varsayilanKomisyonYuzdesi) && typeof value.aciklama === "string";
+}
+function userRecord(value) {
+  return object(value) && nonempty(value.id) && nonempty(value.tenant_id) && typeof value.ad_soyad === "string" && typeof value.email === "string" && roles.has(String(value.rol)) && ["BEKLEMEDE_SIFRE", "AKTIF", "PASIF"].includes(String(value.durum)) && typeof value.olusturma_tarihi === "string";
+}
+function inviteRecord(value) {
+  return object(value) && nonempty(value.token) && nonempty(value.tenantId) && typeof value.tenantAd === "string" && roles.has(String(value.rol)) && value.rol !== "SUPER_ADMIN" && typeof value.olusturanKisi === "string" && typeof value.olusturmaTarihi === "string" && typeof value.gecerlilikTarihi === "string" && typeof value.kullanildiMi === "boolean";
+}
+function records(value, valid, key) {
+  return Array.isArray(value) && value.every(valid) && new Set(value.map((item) => item[key])).size === value.length;
+}
+function snapshotRecord(value) {
+  return object(value) && value.version === 1 && records(value.companies, companyRecord, "id") && records(value.users, userRecord, "id") && records(value.invites, inviteRecord, "token") && Array.isArray(value.emailJobs) && value.emailJobs.every(object);
+}
+function defaultCompanies() {
   return [
     {
       id: "kanada_shopper_baku",
@@ -3602,44 +3688,64 @@ function firmalariYukleDosyadan() {
     }
   ];
 }
-function firmalariKaydetDosyaya(firmalar) {
-  try {
-    const dir = path2.dirname(FIRMALAR_DOSYA_YOLU);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(FIRMALAR_DOSYA_YOLU, JSON.stringify(firmalar, null, 2), "utf-8");
-  } catch (e) {
-    console.error("Firmalar dosyaya yaz\u0131lamad\u0131:", e);
-  }
+function loadIdentitySnapshot() {
+  const current = readJsonFile(IDENTITY_DOSYA_YOLU, snapshotRecord);
+  if (current !== void 0)
+    return structuredClone({
+      companies: current.companies,
+      users: current.users,
+      invites: current.invites,
+      emailJobs: current.emailJobs
+    });
+  const companies = readJsonFile(
+    FIRMALAR_DOSYA_YOLU,
+    (value) => records(value, companyRecord, "id")
+  );
+  const users = readJsonFile(
+    KULLANICILAR_DOSYA_YOLU,
+    (value) => records(value, userRecord, "id")
+  );
+  return {
+    companies: companies === void 0 ? defaultCompanies() : companies,
+    users: users ?? [],
+    invites: [],
+    emailJobs: []
+  };
 }
-var firmalarVeritabani = firmalariYukleDosyadan();
-function kullanicilariYukleDosyadan() {
-  try {
-    if (fs.existsSync(KULLANICILAR_DOSYA_YOLU)) {
-      const icerik = fs.readFileSync(KULLANICILAR_DOSYA_YOLU, "utf-8");
-      const parsed = JSON.parse(icerik);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.warn("Kullan\u0131c\u0131lar dosyadan okunamad\u0131:", e);
-  }
-  return [];
+var initialIdentity = IS_PRODUCTION || SUPABASE_URL ? { companies: [], users: [], invites: [], emailJobs: [] } : loadIdentitySnapshot();
+var firmalarVeritabani = initialIdentity.companies;
+var kullanicilarVeritabani = initialIdentity.users;
+var davetlerVeritabani = initialIdentity.invites;
+var identityEmailJobs = initialIdentity.emailJobs;
+function getIdentitySnapshot() {
+  return structuredClone({
+    companies: firmalarVeritabani,
+    users: kullanicilarVeritabani,
+    invites: davetlerVeritabani,
+    emailJobs: identityEmailJobs
+  });
 }
-function kullanicilariKaydetDosyaya(kullanicilar) {
+function saveIdentitySnapshot(next) {
+  let snapshot;
   try {
-    const dir = path2.dirname(KULLANICILAR_DOSYA_YOLU);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(KULLANICILAR_DOSYA_YOLU, JSON.stringify(kullanicilar, null, 2), "utf-8");
-  } catch (e) {
-    console.error("Kullan\u0131c\u0131lar dosyaya yaz\u0131lamad\u0131:", e);
+    snapshot = structuredClone({
+      version: 1,
+      ...next,
+      emailJobs: next.emailJobs ?? identityEmailJobs
+    });
+  } catch (error) {
+    throw new JsonStorageError("Yerel kimlik verileri ge\xE7ersiz.", error);
   }
+  if (!snapshotRecord(snapshot)) throw new JsonStorageError("Yerel kimlik verileri ge\xE7ersiz.");
+  writeJsonAtomic(IDENTITY_DOSYA_YOLU, snapshot);
+  firmalarVeritabani = snapshot.companies;
+  kullanicilarVeritabani = snapshot.users;
+  davetlerVeritabani = snapshot.invites;
+  identityEmailJobs = snapshot.emailJobs;
 }
-var kullanicilarVeritabani = kullanicilariYukleDosyadan();
+function firmalariKaydetDosyaya(companies) {
+  saveIdentitySnapshot({ ...getIdentitySnapshot(), companies });
+}
 var onayBekleyenler = [
   {
     id: "inbox-001",
@@ -3755,7 +3861,7 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 // src/server/services/sessions.ts
 var SESSION_COOKIE = "tomnap_session";
 var SESSION_DURATION_MS = 8 * 60 * 60 * 1e3;
-var SESSION_FILE = path3.join(DATA_DIR, "oturumlar.json");
+var SESSION_FILE = path4.join(DATA_DIR, "oturumlar.json");
 var ROLES = /* @__PURE__ */ new Set([
   "SUPER_ADMIN",
   "PATRON",
@@ -3785,17 +3891,17 @@ function validRecord(value) {
 }
 function readLocal() {
   if (!fs2.existsSync(SESSION_FILE)) return [];
-  const records = JSON.parse(fs2.readFileSync(SESSION_FILE, "utf8"));
-  if (!Array.isArray(records) || !records.every(validRecord)) {
+  const records2 = JSON.parse(fs2.readFileSync(SESSION_FILE, "utf8"));
+  if (!Array.isArray(records2) || !records2.every(validRecord)) {
     throw new Error("Session storage is invalid");
   }
-  return records;
+  return records2;
 }
-function saveLocal(records) {
+function saveLocal(records2) {
   fs2.mkdirSync(DATA_DIR, { recursive: true, mode: 448 });
-  const temporary = `${SESSION_FILE}.${randomBytes(12).toString("hex")}.tmp`;
+  const temporary = `${SESSION_FILE}.${randomBytes2(12).toString("hex")}.tmp`;
   try {
-    fs2.writeFileSync(temporary, JSON.stringify(records), {
+    fs2.writeFileSync(temporary, JSON.stringify(records2), {
       encoding: "utf8",
       mode: 384,
       flag: "wx"
@@ -3845,11 +3951,11 @@ async function createSession(user, res) {
   if (!validUser(fresh) || fingerprint(fresh) !== verifiedFingerprint || !await tenantEnabled(fresh)) {
     throw new Error("Account changed during login");
   }
-  const token = randomBytes(32).toString("hex");
+  const token = randomBytes2(32).toString("hex");
   const record = {
     token_hash: digest(token),
     user_id: fresh.id,
-    csrf_token: randomBytes(32).toString("hex"),
+    csrf_token: randomBytes2(32).toString("hex"),
     credential_fingerprint: fingerprint(fresh),
     expires_at: new Date(Date.now() + SESSION_DURATION_MS).toISOString()
   };
@@ -3859,9 +3965,9 @@ async function createSession(user, res) {
     if (!data || data.token_hash !== record.token_hash)
       throw new Error("Session was not persisted");
   } else {
-    const records = readLocal().filter((item) => Date.parse(item.expires_at) > Date.now());
-    records.push(record);
-    saveLocal(records);
+    const records2 = readLocal().filter((item) => Date.parse(item.expires_at) > Date.now());
+    records2.push(record);
+    saveLocal(records2);
   }
   res.cookie(SESSION_COOKIE, token, { ...cookieOptions(), maxAge: SESSION_DURATION_MS });
   res.setHeader("Cache-Control", "no-store");
@@ -3917,7 +4023,7 @@ async function revokeSession(req, res) {
 }
 
 // src/server/middleware/security.ts
-import path4 from "path";
+import path5 from "path";
 import { URL as URL2 } from "url";
 import { BlockList, isIP } from "node:net";
 function sanitizeDosyaAdi(dosyaAdi) {
@@ -3925,7 +4031,7 @@ function sanitizeDosyaAdi(dosyaAdi) {
     return `dosya_${Date.now()}`;
   }
   const normalized = dosyaAdi.replace(/\\/g, "/");
-  let temiz = path4.posix.basename(normalized);
+  let temiz = path5.posix.basename(normalized);
   temiz = temiz.replace(/\0/g, "");
   temiz = temiz.replace(/[^a-zA-Z0-9_.-]/g, "_");
   temiz = temiz.replace(/\.{2,}/g, ".");
@@ -3941,9 +4047,9 @@ function yolGuvenlimi(dosyaYolu, izinliDizin) {
   }
   const pNorm = dosyaYolu.replace(/\\/g, "/");
   const dNorm = izinliDizin.replace(/\\/g, "/");
-  const normalizedPath = path4.resolve(pNorm);
-  const normalizedDir = path4.resolve(dNorm);
-  const sep = path4.sep;
+  const normalizedPath = path5.resolve(pNorm);
+  const normalizedDir = path5.resolve(dNorm);
+  const sep = path5.sep;
   const dirPrefix = normalizedDir.endsWith(sep) ? normalizedDir : normalizedDir + sep;
   return normalizedPath === normalizedDir || normalizedPath.startsWith(dirPrefix);
 }
@@ -4179,7 +4285,7 @@ function sessionAuth() {
       }
       const method = req.method === "HEAD" ? "GET" : req.method;
       if (!rules.some(
-        ([m, path7, roles]) => m === method && path7.test(req.path) && roles.includes(auth.role)
+        ([m, path8, roles2]) => m === method && path8.test(req.path) && roles2.includes(auth.role)
       )) {
         res.status(403).json({ basarili: false, hata: "Bu i\u015Flem i\xE7in yetkiniz yok." });
         return;
@@ -4498,9 +4604,9 @@ import { randomUUID } from "node:crypto";
 import { Type } from "@google/genai";
 
 // src/server/routes/gorsel.ts
-import { createHash as createHash2, randomBytes as randomBytes2 } from "node:crypto";
+import { createHash as createHash2, randomBytes as randomBytes3 } from "node:crypto";
 import { Router as Router2 } from "express";
-import path5 from "path";
+import path6 from "path";
 import fs3 from "fs";
 
 // src/server/services/gemini.ts
@@ -4628,6 +4734,29 @@ function uretUluslararasiKargoKodu() {
   const p = prefixes[Math.floor(Math.random() * prefixes.length)];
   return `${p}-${randomNum}-YYZ`;
 }
+var SIPARIS_EK_ALANLAR = [
+  "guncellenme_tarihi",
+  "musteri_id",
+  "musteri_tipi",
+  "kanada_magaza_adi",
+  "kanada_alis_fiyati_cad",
+  "kanada_alis_fiyati_azn",
+  "kargo_agirligi_kg",
+  "kargo_ucreti_azn",
+  "kanada_fatura_no",
+  "kanada_fatura_gorseli",
+  "kanada_gumruk_fin_kodu",
+  "islem_gecmisi"
+];
+function siparisEkVerileriniAl(input) {
+  const stored = input.ek_veriler && typeof input.ek_veriler === "object" && !Array.isArray(input.ek_veriler) ? input.ek_veriler : {};
+  const result = {};
+  for (const field of SIPARIS_EK_ALANLAR) {
+    if (Object.hasOwn(stored, field) && stored[field] !== void 0) result[field] = stored[field];
+    if (Object.hasOwn(input, field) && input[field] !== void 0) result[field] = input[field];
+  }
+  return result;
+}
 var SUPABASE_GECERLI_KOLONLAR = /* @__PURE__ */ new Set([
   "tenant_id",
   "ham_mesaj",
@@ -4656,7 +4785,8 @@ var SUPABASE_GECERLI_KOLONLAR = /* @__PURE__ */ new Set([
   "uluslararasi_kargo_kodu",
   "eksik_bilgiler",
   "ai_guven_skoru",
-  "is_demo"
+  "is_demo",
+  "ek_veriler"
 ]);
 function hazirlaSupabasePayload(input) {
   let tahsilatNotu = (input.baku_tahsilat_notu || "").trim();
@@ -4682,6 +4812,7 @@ function hazirlaSupabasePayload(input) {
   }
   const raw = {
     ...input,
+    ek_veriler: siparisEkVerileriniAl(input),
     tenant_id: input.tenant_id || "kanada_shopper_baku",
     baku_tahsilat_notu: tahsilatNotu,
     eksik_bilgiler: eksikBilgiler,
@@ -4700,6 +4831,8 @@ function hazirlaSupabasePayload(input) {
   return payload;
 }
 function formatlaSiparis(s) {
+  const extra = siparisEkVerileriniAl(s);
+  s = { ...extra, ...s, ek_veriler: extra };
   let bakuTahsilatNotu = (s.baku_tahsilat_notu || "").trim();
   let ozelNot = (s.ozel_not || "").trim();
   const talimatMatch = bakuTahsilatNotu.match(/\[(?:TƏLİMAT|TALİMAT):\s*([\s\S]*?)\]/i);
@@ -4751,10 +4884,7 @@ function formatlaSiparis(s) {
   urunler = urunler.map((u, idx) => {
     const adi = u.urun_adi || u.urun_aciklamasi || `\xDCr\xFCn #${idx + 1}`;
     const fiyati = u.tutar !== void 0 ? Number(u.tutar) : u.birim_fiyat !== void 0 ? Number(u.birim_fiyat) : void 0;
-    let gorsel = u.urun_gorseli || u.gorsel_url || void 0;
-    if (!gorsel && (s.musteri_adi?.includes("K\xF6n\xFCl") || s.musteri_adi?.includes("Konul"))) {
-      gorsel = idx === 0 ? "/uploads/karl_lagerfeld_canta_1.svg" : "/uploads/karl_lagerfeld_canta_2.svg";
-    }
+    const gorsel = u.urun_gorseli || u.gorsel_url || void 0;
     return {
       ...u,
       urun_adi: adi,
@@ -4765,15 +4895,6 @@ function formatlaSiparis(s) {
       urun_gorseli: gorsel
     };
   });
-  if (s.musteri_adi?.includes("K\xF6n\xFCl") || s.musteri_adi?.includes("Konul")) {
-    if (!gorselUrlleri || gorselUrlleri.length === 0 || gorselUrlleri.some((g) => typeof g === "string" && g.includes("Panodan_"))) {
-      gorselUrlleri = [
-        "/uploads/whatsapp_konul_screenshot.svg",
-        "/uploads/karl_lagerfeld_canta_1.svg",
-        "/uploads/karl_lagerfeld_canta_2.svg"
-      ];
-    }
-  }
   const toplam = Number(s.toplam_tutar || 0);
   const alinan = Number(s.alinan_tutar || 0);
   const kalan = s.kalan_tutar !== void 0 && s.kalan_tutar !== null ? Number(s.kalan_tutar) : Math.max(0, toplam - alinan);
@@ -4832,7 +4953,7 @@ async function requestOnce(url, deadline, options) {
     const transport = url.protocol === "https:" ? https : http;
     let response;
     let timer;
-    const fail2 = (error) => {
+    const fail3 = (error) => {
       clearTimeout(timer);
       reject(error);
     };
@@ -4852,7 +4973,7 @@ async function requestOnce(url, deadline, options) {
       },
       (incoming) => {
         response = incoming;
-        incoming.on("error", fail2);
+        incoming.on("error", fail3);
         const headers = new Headers();
         for (const [key, value] of Object.entries(incoming.headers)) {
           if (value !== void 0)
@@ -4868,14 +4989,14 @@ async function requestOnce(url, deadline, options) {
         const length = Number(headers.get("content-length"));
         if (Number.isFinite(length) && length > maxBytes) {
           const error = new PublicResourceError("\u0130ndirilen dosya boyut s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor.", 413);
-          fail2(error);
+          fail3(error);
           incoming.destroy();
           request.destroy();
           return;
         }
         const encoding = headers.get("content-encoding");
         if (encoding && encoding !== "identity") {
-          fail2(new PublicResourceError("S\u0131k\u0131\u015Ft\u0131r\u0131lm\u0131\u015F uzak yan\u0131t desteklenmiyor.", 502));
+          fail3(new PublicResourceError("S\u0131k\u0131\u015Ft\u0131r\u0131lm\u0131\u015F uzak yan\u0131t desteklenmiyor.", 502));
           incoming.destroy();
           request.destroy();
           return;
@@ -4885,7 +5006,7 @@ async function requestOnce(url, deadline, options) {
         incoming.on("data", (chunk) => {
           bytes += chunk.length;
           if (bytes > maxBytes) {
-            fail2(new PublicResourceError("\u0130ndirilen dosya boyut s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor.", 413));
+            fail3(new PublicResourceError("\u0130ndirilen dosya boyut s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor.", 413));
             incoming.destroy();
             request.destroy();
             return;
@@ -4898,7 +5019,7 @@ async function requestOnce(url, deadline, options) {
         });
         incoming.on(
           "aborted",
-          () => fail2(new PublicResourceError("Uzak yan\u0131t tamamlanmad\u0131.", 502))
+          () => fail3(new PublicResourceError("Uzak yan\u0131t tamamlanmad\u0131.", 502))
         );
       }
     );
@@ -4907,7 +5028,7 @@ async function requestOnce(url, deadline, options) {
       request.destroy(error);
       response?.destroy(error);
     }, deadline - Date.now());
-    request.on("error", fail2);
+    request.on("error", fail3);
     try {
       request.end();
     } catch (error) {
@@ -5018,7 +5139,7 @@ function uploadPath(dosyaAdi) {
   if (!dosyaAdi || sanitizeDosyaAdi(dosyaAdi) !== dosyaAdi) {
     throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel dosya yolu.");
   }
-  const candidate = path5.join(UPLOADS_DIR, dosyaAdi);
+  const candidate = path6.join(UPLOADS_DIR, dosyaAdi);
   if (!yolGuvenlimi(candidate, UPLOADS_DIR)) {
     throw new PublicResourceError("Eri\u015Fim reddedildi.");
   }
@@ -5048,7 +5169,7 @@ function storeTenantImage(req, base64, declaredMime) {
     throw new PublicResourceError("G\xF6rsel i\xE7in bir firma se\xE7in.", 403);
   if (typeof base64 !== "string") throw new PublicResourceError("Ge\xE7ersiz g\xF6rsel.", 400);
   const parsed = decodeImage(base64, declaredMime);
-  const name = `${imagePrefix(req.tenantId)}${randomBytes2(16).toString("hex")}.${parsed.ext}`;
+  const name = `${imagePrefix(req.tenantId)}${randomBytes3(16).toString("hex")}.${parsed.ext}`;
   fs3.mkdirSync(UPLOADS_DIR, { recursive: true, mode: 448 });
   fs3.writeFileSync(uploadPath(name), parsed.buffer, { flag: "wx", mode: 384 });
   return {
@@ -5100,7 +5221,7 @@ router2.post("/upload-gorsel", (req, res) => {
       return res.status(400).json({ basarili: false, hata: "Ge\xE7ersiz g\xF6rsel verisi" });
     }
     const stored = storeTenantImage(req, base64, mimeType);
-    const benzersizAd = path5.basename(stored.url);
+    const benzersizAd = path6.basename(stored.url);
     res.json({
       basarili: true,
       url: `/uploads/${benzersizAd}`,
@@ -6626,16 +6747,63 @@ Sohbet: "${mesaj}"`;
     inboxFailure(res, error);
   }
 });
+function approvalOrderId(tenantId, inboxId) {
+  const hash = createHash3("sha256").update(tenantId + ":" + inboxId).digest("hex");
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+function transitionFailure(error) {
+  const status = error?.code === "PT404" ? 404 : error?.code === "PT409" ? 409 : ["PT400", "22P02", "22003", "23514", "23502"].includes(error?.code || "") ? 400 : 503;
+  throw new PublicResourceError(
+    status === 404 ? "Mesaj bulunamad\u0131." : status === 409 ? "Mesaj karar\u0131 de\u011Fi\u015Ftirilemez veya onayl\u0131 sipari\u015F art\u0131k yok." : status === 400 ? "Ge\xE7ersiz sipari\u015F verisi." : "Mesaj karar\u0131 kaydedilemedi.",
+    status
+  );
+}
+async function approveDatabase(tenantId, inboxId, orderId, payload) {
+  const { data, error } = await supabase.rpc("tomnap_approve_inbox", {
+    p_tenant_id: tenantId,
+    p_inbox_id: inboxId,
+    p_order_id: orderId,
+    p_order_payload: payload
+  });
+  if (error) transitionFailure(error);
+  if (!data?.siparis?.id || data.siparis.tenant_id !== tenantId || typeof data.tekrar !== "boolean") {
+    throw new PublicResourceError("Mesaj karar\u0131 do\u011Frulanamad\u0131.", 503);
+  }
+  return { siparis: formatlaSiparis(data.siparis), tekrar: data.tekrar };
+}
+function approvedMemory(item, tenantId, orderId) {
+  const pool = tenantId === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+  const stored = pool.find(
+    (row) => row.id === (item.onaylanan_siparis_id || orderId) && belongs3(row, tenantId)
+  );
+  if (!stored) throw new PublicResourceError("Onayl\u0131 sipari\u015F art\u0131k mevcut de\u011Fil.", 409);
+  return { siparis: formatlaSiparis(stored), tekrar: true };
+}
+var approvedResponse = (res, result) => res.json({
+  basarili: true,
+  mesaj: "Sipari\u015F onayland\u0131 ve resmi sipari\u015F tablosuna aktar\u0131ld\u0131.",
+  ...result
+});
 router5.post("/inbox/:id/onayla", async (req, res) => {
   try {
     const tenantId = tenantFor3(req, true);
     const { id } = req.params;
     const inboxItem = await ownedInbox(tenantId, id);
-    if (!inboxItem)
-      return res.status(404).json({ basarili: false, hata: "Inbox mesaj\u0131 bulunamad\u0131." });
+    if (!inboxItem) throw new PublicResourceError("Inbox mesaj\u0131 bulunamad\u0131.", 404);
+    const orderId = approvalOrderId(tenantId, id);
+    if (inboxItem.durum === "ONAYLANDI") {
+      return approvedResponse(
+        res,
+        dbActive2(tenantId) ? await approveDatabase(tenantId, id, orderId, {}) : approvedMemory(inboxItem, tenantId, orderId)
+      );
+    }
     if (inboxItem.durum !== "BEKLEMEDE")
-      return res.status(409).json({ basarili: false, hata: "Mesaj daha \xF6nce i\u015Flendi." });
-    const siparisVerisi = req.body.duzeltilmis_siparis || inboxItem.oneri_siparis;
+      throw new PublicResourceError("Mesaj daha \xF6nce reddedildi.", 409);
+    const submitted = req.body.duzeltilmis_siparis || inboxItem.oneri_siparis;
+    if (!submitted || typeof submitted !== "object" || Array.isArray(submitted))
+      throw new PublicResourceError("Ge\xE7ersiz sipari\u015F verisi.", 400);
+    const extras = siparisEkVerileriniAl(submitted);
+    const siparisVerisi = { ...submitted, ...extras };
     if (siparisVerisi.tenant_id && siparisVerisi.tenant_id !== tenantId || siparisVerisi.tenantId && siparisVerisi.tenantId !== tenantId)
       throw new PublicResourceError("Sipari\u015F ba\u015Fka butike ta\u015F\u0131namaz.", 403);
     await assertTenantImageReferences(req, siparisVerisi);
@@ -6653,10 +6821,12 @@ router5.post("/inbox/:id/onayla", async (req, res) => {
     }
     const alinan = Number(siparisVerisi.alinan_tutar || 0);
     const toplam = Number(siparisVerisi.toplam_tutar || alinan);
+    const adet = Number(siparisVerisi.adet ?? 1);
     const kalan = Math.max(0, toplam - alinan);
-    if (!Number.isFinite(toplam) || !Number.isFinite(alinan) || toplam < 0 || alinan < 0)
-      throw new PublicResourceError("Ge\xE7ersiz tutar.", 400);
+    if (!Number.isFinite(toplam) || !Number.isFinite(alinan) || toplam < 0 || alinan < 0 || !Number.isInteger(adet) || adet <= 0)
+      throw new PublicResourceError("Ge\xE7ersiz tutar veya adet.", 400);
     const dbPayload = {
+      ek_veriler: extras,
       tenant_id: tenantId,
       is_demo: tenantId === "demo_sandbox",
       ham_mesaj: inboxItem.konusma_gecmisi,
@@ -6669,7 +6839,7 @@ router5.post("/inbox/:id/onayla", async (req, res) => {
       urun_aciklamasi: siparisVerisi.urun_aciklamasi || "\xDCr\xFCn",
       beden_veya_olcu: siparisVerisi.beden_veya_olcu || "",
       renk: siparisVerisi.renk || "",
-      adet: Number(siparisVerisi.adet || 1),
+      adet,
       toplam_tutar: toplam,
       alinan_tutar: alinan,
       para_birimi: siparisVerisi.para_birimi || "AZN",
@@ -6681,40 +6851,33 @@ router5.post("/inbox/:id/onayla", async (req, res) => {
       ) : [],
       ai_guven_skoru: Number(siparisVerisi.ai_guven_skoru || 0.98)
     };
-    const hash = createHash3("sha256").update(tenantId + ":" + id).digest("hex");
-    const orderId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-    let kesinSiparis;
     if (dbActive2(tenantId)) {
-      const { data: prior, error: lookupError } = await supabase.from("siparisler").select("*").eq("id", orderId).eq("tenant_id", tenantId).maybeSingle();
-      if (lookupError) throw new PublicResourceError("Sipari\u015F do\u011Frulanamad\u0131.", 503);
-      if (prior) kesinSiparis = formatlaSiparis(prior);
-      else {
-        const { data, error: error2 } = await supabase.from("siparisler").insert({ ...hazirlaSupabasePayload(dbPayload), id: orderId }).select("*").single();
-        if (error2 || !data) throw new PublicResourceError("Sipari\u015F kaydedilemedi.", 503);
-        kesinSiparis = formatlaSiparis(data);
-      }
-      const { data: marked, error } = await supabase.from("inbox_mesajlar").update({ durum: "ONAYLANDI" }).eq("id", id).eq("tenant_id", tenantId).eq("durum", "BEKLEMEDE").select("id").maybeSingle();
-      if (error || !marked)
-        throw new PublicResourceError("Sipari\u015F kaydedildi ancak mesaj durumu g\xFCncellenemedi.", 503);
-    } else {
-      const pool = tenantId === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
-      kesinSiparis = pool.find((s) => s.id === orderId && belongs3(s, tenantId));
-      if (!kesinSiparis) {
-        kesinSiparis = formatlaSiparis({
-          id: orderId,
-          olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
-          ...dbPayload,
-          kalan_tutar: kalan
-        });
-        pool.unshift(kesinSiparis);
-      }
-      inboxItem.durum = "ONAYLANDI";
+      return approvedResponse(
+        res,
+        await approveDatabase(tenantId, id, orderId, hazirlaSupabasePayload(dbPayload))
+      );
     }
-    res.json({
-      basarili: true,
-      mesaj: "Sipari\u015F onayland\u0131 ve resmi sipari\u015F tablosuna aktar\u0131ld\u0131.",
-      siparis: kesinSiparis
-    });
+    const current = onayBekleyenler.find((item) => item.id === id && belongs3(item, tenantId));
+    if (!current) throw new PublicResourceError("Inbox mesaj\u0131 bulunamad\u0131.", 404);
+    if (current.durum === "ONAYLANDI")
+      return approvedResponse(res, approvedMemory(current, tenantId, orderId));
+    if (current.durum !== "BEKLEMEDE")
+      throw new PublicResourceError("Mesaj daha \xF6nce reddedildi.", 409);
+    const pool = tenantId === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+    let stored = pool.find((row) => row.id === orderId && belongs3(row, tenantId));
+    const tekrar = !!stored;
+    if (!stored) {
+      stored = formatlaSiparis({
+        id: orderId,
+        olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
+        ...dbPayload,
+        kalan_tutar: kalan
+      });
+      pool.unshift(stored);
+    }
+    current.durum = "ONAYLANDI";
+    current.onaylanan_siparis_id = stored.id;
+    return approvedResponse(res, { siparis: stored, tekrar });
   } catch (error) {
     inboxFailure(res, error);
   }
@@ -6722,15 +6885,30 @@ router5.post("/inbox/:id/onayla", async (req, res) => {
 router5.post("/inbox/:id/reddet", async (req, res) => {
   try {
     const tenant = tenantFor3(req, true);
-    const inbox = await ownedInbox(tenant, req.params.id);
-    if (!inbox) return res.status(404).json({ basarili: false, hata: "Mesaj bulunamad\u0131." });
-    if (inbox.durum !== "BEKLEMEDE")
-      return res.status(409).json({ basarili: false, hata: "Mesaj daha \xF6nce i\u015Flendi." });
     if (dbActive2(tenant)) {
-      const { data, error } = await supabase.from("inbox_mesajlar").update({ durum: "REDDEDILDI" }).eq("id", inbox.id).eq("tenant_id", tenant).eq("durum", "BEKLEMEDE").select("id").maybeSingle();
-      if (error || !data) throw new PublicResourceError("Mesaj g\xFCncellenemedi.", 503);
-    } else inbox.durum = "REDDEDILDI";
-    res.json({ basarili: true, mesaj: "Mesaj reddedildi/ar\u015Fivlendi." });
+      const { data, error } = await supabase.rpc("tomnap_reject_inbox", {
+        p_tenant_id: tenant,
+        p_inbox_id: req.params.id
+      });
+      if (error) transitionFailure(error);
+      if (data?.durum !== "REDDEDILDI" || typeof data.tekrar !== "boolean")
+        throw new PublicResourceError("Mesaj karar\u0131 do\u011Frulanamad\u0131.", 503);
+      return res.json({
+        basarili: true,
+        mesaj: "Mesaj reddedildi/ar\u015Fivlendi.",
+        tekrar: data.tekrar
+      });
+    }
+    const inbox = onayBekleyenler.find(
+      (item) => item.id === req.params.id && belongs3(item, tenant)
+    );
+    if (!inbox) throw new PublicResourceError("Mesaj bulunamad\u0131.", 404);
+    if (inbox.durum === "REDDEDILDI")
+      return res.json({ basarili: true, mesaj: "Mesaj reddedildi/ar\u015Fivlendi.", tekrar: true });
+    if (inbox.durum !== "BEKLEMEDE")
+      throw new PublicResourceError("Mesaj daha \xF6nce onayland\u0131.", 409);
+    inbox.durum = "REDDEDILDI";
+    return res.json({ basarili: true, mesaj: "Mesaj reddedildi/ar\u015Fivlendi.", tekrar: false });
   } catch (error) {
     inboxFailure(res, error);
   }
@@ -6739,6 +6917,7 @@ var inbox_default = router5;
 
 // src/server/routes/firmalar.ts
 import { Router as Router6 } from "express";
+import { randomUUID as randomUUID5 } from "node:crypto";
 
 // src/server/services/crypto.ts
 import crypto from "crypto";
@@ -6838,12 +7017,14 @@ async function sendEmail(params) {
     try {
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
+        signal: AbortSignal.timeout(15e3),
         headers: {
           Authorization: `Bearer ${RESEND_API_KEY}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          ...params.idempotencyKey ? { "Idempotency-Key": params.idempotencyKey } : {}
         },
         body: JSON.stringify({
-          from: EMAIL_FROM,
+          from: params.from || EMAIL_FROM,
           to: [to],
           subject,
           html,
@@ -6863,10 +7044,10 @@ async function sendEmail(params) {
         return { basarili: false, hata: resData?.message || "E-po\xE7t g\xF6nd\u0259ril\u0259 bilm\u0259di" };
       }
     } catch (err) {
-      console.error(`\u274C Resend g\xF6nd\u0259rm\u0259 x\u0259tas\u0131:`, err.message);
+      console.error(`\u274C Resend g\xF6nd\u0259rm\u0259 x\u0259tas\u0131.`);
       console.log(`==========================================================
 `);
-      return { basarili: false, hata: err.message };
+      return { basarili: false, hata: "E-po\xE7t xidm\u0259ti \u0259l\xE7atan deyil." };
     }
   }
   if (IS_PRODUCTION) {
@@ -6877,7 +7058,7 @@ async function sendEmail(params) {
 `);
   return { basarili: false, hata: "Geli\u015Ftirme ortam\u0131nda e-po\xE7t g\xF6nderilmedi." };
 }
-async function sendActivationEmail(params) {
+function buildActivationEmail(params) {
   const baseUrl = getApplicationUrl();
   const link = `${baseUrl}/sifre-belirle?token=${encodeURIComponent(params.token)}`;
   const subject = `TOMNAP \u2014 ${params.butikAdi} \xFC\xE7\xFCn \u015Fifr\u0259nizi t\u0259yin edin v\u0259 i\u015F masan\u0131z\u0131 aktivl\u0259\u015Fdirin`;
@@ -6936,10 +7117,9 @@ ${link}
 Bu link 24 saat m\xFCdd\u0259tind\u0259 etibarl\u0131d\u0131r.
 TOMNAP D\u0259st\u0259k Komandas\u0131
   `.trim();
-  const result = await sendEmail({ to: params.email, subject, html, text });
-  return { ...result, link };
+  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text }, link };
 }
-async function sendInviteEmail(params) {
+function buildInviteEmail(params) {
   const baseUrl = getApplicationUrl();
   const link = `${baseUrl}/davet-qebul?token=${encodeURIComponent(params.token)}`;
   const rolAdlari = {
@@ -7006,8 +7186,241 @@ ${link}
 
 TOMNAP D\u0259st\u0259k Komandas\u0131
   `.trim();
-  const result = await sendEmail({ to: params.email, subject, html, text });
-  return { ...result, link };
+  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text }, link };
+}
+
+// src/server/services/onboarding.ts
+var OnboardingError = class extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+};
+async function onboardingRpc(name, args) {
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) {
+    if (error.code === "23505")
+      throw new OnboardingError(409, "Bu e-po\xE7t v\u0259 ya telefon art\u0131q qeydiyyatdad\u0131r.");
+    if (error.code === "PT409")
+      throw new OnboardingError(409, "Link art\u0131q etibarl\u0131 deyil v\u0259 ya komanda limiti dolub.");
+    if (error.code === "PT403") throw new OnboardingError(403, "Firma aktiv deyil.");
+    throw new OnboardingError(503, "Qeydiyyat saxlan\u0131lmad\u0131. Daha sonra yenid\u0259n c\u0259hd edin.");
+  }
+  if (!data) throw new OnboardingError(409, "\u018Fm\u0259liyyat tamamlanmad\u0131. Linki yenid\u0259n yoxlay\u0131n.");
+  return data;
+}
+function ensureUnique(users, user) {
+  const email = user.email.trim().toLowerCase();
+  const phone2 = (user.telefon || "").replace(/\D/g, "");
+  if (users.some(
+    (existing) => existing.id !== user.id && (existing.email.trim().toLowerCase() === email || phone2 && (existing.telefon || "").replace(/\D/g, "") === phone2)
+  ))
+    throw new OnboardingError(409, "Bu e-po\xE7t v\u0259 ya telefon art\u0131q qeydiyyatdad\u0131r.");
+}
+function available(invite, token) {
+  return invite.token === token && !invite.kullanildiMi && Date.parse(invite.gecerlilikTarihi) > Date.now() && ["PATRON", "KANADA_SATINALMA", "SATIS_SORUMLUSU", "BAKU_FINANS", "BAKU_KURYE"].includes(
+    invite.rol
+  );
+}
+function capacity(firma, users, role) {
+  if (firma.onayDurumu !== "AKTIF") throw new OnboardingError(403, "Firma aktiv deyil.");
+  const limit = Number(firma.rolLimitleri?.[role]);
+  const count = users.filter(
+    (user) => user.tenant_id === firma.id && user.rol === role && user.durum !== "PASIF"
+  ).length;
+  if (!Number.isInteger(limit) || limit <= count)
+    throw new OnboardingError(409, "Komanda rolu \xFCzr\u0259 limit dolub.");
+  return { count, remaining: limit - count };
+}
+function companyRow(firma) {
+  return {
+    id: firma.id,
+    ad: firma.ad,
+    sehir: firma.sehir,
+    varsayilan_para_birimi: firma.varsayilanParaBirimi,
+    varsayilan_komisyon_yuzdesi: firma.varsayilanKomisyonYuzdesi,
+    aciklama: firma.aciklama,
+    is_demo: false,
+    onay_durumu: firma.onayDurumu,
+    paket: firma.paket,
+    sahip_adi: firma.sahipAdi,
+    sahip_email: firma.sahipEmail,
+    sahip_telefon: firma.sahipTelefon,
+    mensei_ulke: firma.menseiUlke,
+    rol_limitleri: firma.rolLimitleri,
+    aktif_kullanici_sayilari: firma.aktifKullaniciSayilari
+  };
+}
+async function registerBoutique(firma, user, emailJob) {
+  if (supabase)
+    return onboardingRpc("tomnap_register_boutique", {
+      p_firma: companyRow(firma),
+      p_user: user,
+      p_email_job: emailJob
+    });
+  const next = getIdentitySnapshot();
+  ensureUnique(next.users, user);
+  if (next.companies.some((item) => item.id === firma.id))
+    throw new OnboardingError(409, "Bu firma art\u0131q m\xF6vcuddur.");
+  next.companies.push(firma);
+  next.users.push(user);
+  next.emailJobs.push(emailJob);
+  saveIdentitySnapshot(next);
+  return { firma, user };
+}
+async function activateUser(token, changes) {
+  if (supabase)
+    return onboardingRpc("tomnap_activate_user", {
+      p_token: token,
+      p_password_hash: changes.sifre_hash,
+      p_name: changes.ad_soyad,
+      p_phone: changes.telefon || ""
+    });
+  const next = getIdentitySnapshot();
+  const user = next.users.find((item) => item.aktivasyon_token === token);
+  if (!user || user.durum !== "BEKLEMEDE_SIFRE" || Date.parse(user.token_gecerlilik || "") <= Date.now() || !Number.isFinite(Date.parse(user.token_gecerlilik || ""))) {
+    throw new OnboardingError(409, "Bu aktivasiya linki art\u0131q etibarl\u0131 deyil.");
+  }
+  const firma = next.companies.find((item) => item.id === user.tenant_id);
+  if (!firma || !["BEKLEMEDE", "AKTIF"].includes(firma.onayDurumu || ""))
+    throw new OnboardingError(403, "Firma aktiv deyil.");
+  Object.assign(user, changes, { durum: "AKTIF", aktivasyon_token: null, token_gecerlilik: null });
+  ensureUnique(next.users, user);
+  if (firma.onayDurumu === "BEKLEMEDE") firma.onayDurumu = "AKTIF";
+  saveIdentitySnapshot(next);
+  return { user, firma };
+}
+async function acceptInvite(token, user) {
+  if (supabase) return onboardingRpc("tomnap_accept_invite", { p_token: token, p_user: user });
+  const next = getIdentitySnapshot();
+  const invite = next.invites.find((item) => item.token === token);
+  if (!invite || !available(invite, token))
+    throw new OnboardingError(409, "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil.");
+  const firma = next.companies.find((item) => item.id === invite.tenantId);
+  if (!firma) throw new OnboardingError(403, "Firma aktiv deyil.");
+  if (invite.email && invite.email.trim().toLowerCase() !== user.email.trim().toLowerCase()) {
+    throw new OnboardingError(403, "E-po\xE7t \xFCnvan\u0131 d\u0259v\u0259td\u0259ki \xFCnvanla uy\u011Fun g\u0259lmir.");
+  }
+  const { count } = capacity(firma, next.users, invite.rol);
+  const accepted = {
+    ...user,
+    tenant_id: invite.tenantId,
+    rol: invite.rol,
+    email: invite.email?.trim().toLowerCase() || user.email
+  };
+  ensureUnique(next.users, accepted);
+  next.users.push(accepted);
+  invite.kullanildiMi = true;
+  invite.kullananKisi = accepted.ad_soyad;
+  firma.aktifKullaniciSayilari = {
+    ...firma.aktifKullaniciSayilari,
+    [invite.rol]: count + 1
+  };
+  saveIdentitySnapshot(next);
+  return { user: accepted, firma };
+}
+async function createInvite(invite, creatorRole, emailJob) {
+  if (supabase)
+    return onboardingRpc("tomnap_create_invite", {
+      p_invite: {
+        id: invite.token,
+        token: invite.token,
+        firma_id: invite.tenantId,
+        rol: invite.rol,
+        olusturan_rol: creatorRole,
+        son_kullanma_tarihi: invite.gecerlilikTarihi,
+        email: invite.email || null,
+        kullanan_adi: invite.kullananKisi || null
+      },
+      p_email_job: emailJob || null
+    });
+  const next = getIdentitySnapshot();
+  const firma = next.companies.find((item) => item.id === invite.tenantId);
+  if (!firma) throw new OnboardingError(403, "Firma aktiv deyil.");
+  const { remaining } = capacity(firma, next.users, invite.rol);
+  next.invites.push(invite);
+  if (emailJob) next.emailJobs.push(emailJob);
+  saveIdentitySnapshot(next);
+  return { invite, remaining };
+}
+
+// src/server/services/onboardingOutbox.ts
+import { randomUUID as randomUUID4 } from "node:crypto";
+function createEmailJob(tenantId, kind, payload, expiresAt) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  return {
+    id: randomUUID4(),
+    tenant_id: tenantId,
+    kind,
+    payload,
+    status: "PENDING",
+    expires_at: expiresAt,
+    created_at: now,
+    next_attempt_at: now,
+    attempts: 0
+  };
+}
+async function deliverOnboardingEmail(id) {
+  const claimToken = randomUUID4();
+  let job;
+  if (supabase) {
+    const { data, error } = await supabase.rpc("tomnap_claim_onboarding_email", {
+      p_id: id || null,
+      p_claim_token: claimToken
+    });
+    if (error) throw new Error("Onboarding email claim unavailable");
+    job = data || void 0;
+  } else {
+    const next = getIdentitySnapshot();
+    const now = Date.now();
+    job = next.emailJobs.find(
+      (item) => (!id || item.id === id) && Date.parse(String(item.expires_at)) > now && (item.status === "PENDING" && Date.parse(String(item.next_attempt_at)) <= now || item.status === "RUNNING" && Date.parse(String(item.leased_until)) <= now)
+    );
+    if (job) {
+      Object.assign(job, {
+        status: "RUNNING",
+        claim_token: claimToken,
+        leased_until: new Date(now + 12e4).toISOString(),
+        attempts: job.attempts + 1
+      });
+      saveIdentitySnapshot(next);
+    }
+  }
+  if (!job) return { claimed: false, sent: false };
+  let sent = false;
+  try {
+    sent = (await sendEmail({ ...job.payload, idempotencyKey: `tomnap-onboarding/${job.id}` })).basarili;
+  } catch {
+  }
+  if (supabase) {
+    const { data, error } = await supabase.rpc("tomnap_finish_onboarding_email", {
+      p_id: job.id,
+      p_claim_token: claimToken,
+      p_sent: sent
+    });
+    if (error || data !== true) throw new Error("Onboarding email acknowledgement unavailable");
+  } else {
+    const next = getIdentitySnapshot();
+    const current = next.emailJobs.find((item) => item.id === job.id);
+    if (!current || current.status !== "RUNNING" || current.claim_token !== claimToken)
+      throw new Error("Onboarding email lease lost");
+    Object.assign(current, {
+      status: sent ? "SENT" : "PENDING",
+      claim_token: null,
+      leased_until: null,
+      next_attempt_at: new Date(Date.now() + 3e5).toISOString(),
+      sent_at: sent ? (/* @__PURE__ */ new Date()).toISOString() : null
+    });
+    saveIdentitySnapshot(next);
+  }
+  return { claimed: true, sent };
+}
+async function tryDeliverOnboardingEmail(id) {
+  try {
+    return (await deliverOnboardingEmail(id)).sent;
+  } catch {
+    return false;
+  }
 }
 
 // src/server/routes/firmalar.ts
@@ -7077,14 +7490,13 @@ router6.get("/firmalar", async (req, res) => {
     siparis_sayilari: sayilar
   });
 });
-var davetlerVeritabani = [];
 router6.post("/firmalar/kayit", async (req, res) => {
   try {
     const body = req.body || {};
     const ad = String(body.ad || "").trim();
     const sahipAdi = String(body.sahipAdi || "").trim();
     const sahipTelefon = String(body.sahipTelefon || "").trim();
-    const sahipEmail = String(body.sahipEmail || "").trim();
+    const sahipEmail = String(body.sahipEmail || "").trim().toLowerCase();
     const sehir = String(body.sehir || "Bak\u0131").trim();
     const paket = body.paket || "PRO";
     const menseiUlke = String(body.menseiUlke || "CA").trim();
@@ -7095,6 +7507,11 @@ router6.post("/firmalar/kayit", async (req, res) => {
         hata: "Butik ad\u0131, sahibinin ad\u0131, \u0259laq\u0259 telefonu v\u0259 e-po\xE7t \xFCnvan\u0131 m\xFCtl\u0259qdir."
       });
     }
+    if ([body.ad, body.sahipAdi, body.sahipTelefon, body.sahipEmail].some(
+      (value) => typeof value !== "string"
+    ) || ad.length > 200 || sahipAdi.length > 150 || sahipEmail.length > 150 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sahipEmail) || !/^[+\d\s().-]+$/.test(sahipTelefon) || !/^\d{7,15}$/.test(sahipTelefon.replace(/\D/g, "")) || sehir.length > 100 || menseiUlke.length > 10) {
+      return res.status(400).json({ basarili: false, hata: "Qeydiyyat m\u0259lumatlar\u0131n\u0131n format\u0131n\u0131 yoxlay\u0131n." });
+    }
     if (IS_PRODUCTION && !RESEND_API_KEY) {
       return res.status(503).json({
         basarili: false,
@@ -7102,7 +7519,7 @@ router6.post("/firmalar/kayit", async (req, res) => {
       });
     }
     getApplicationUrl();
-    const slug = ad.toLowerCase().replace(/ə/g, "e").replace(/ı/g, "i").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ş/g, "s").replace(/ç/g, "c").replace(/ğ/g, "g").replace(/[^a-z0-9]/g, "_") + "_" + Date.now().toString(36).slice(-4);
+    const slug = ad.toLowerCase().replace(/ə/g, "e").replace(/ı/g, "i").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ş/g, "s").replace(/ç/g, "c").replace(/ğ/g, "g").replace(/[^a-z0-9]/g, "_").slice(0, 60) + "_" + randomUUID5();
     const upper = String(paket || "PRO").toUpperCase();
     const normalPaket = upper === "ENTERPRISE" ? "ENTERPRISE" : upper === "BASLANGIC" ? "BASLANGIC" : "PRO";
     let rolLimitleri = {
@@ -7158,7 +7575,7 @@ router6.post("/firmalar/kayit", async (req, res) => {
     const aktivasyonToken = tokenUret(32);
     const tokenGecerlilik = new Date(Date.now() + 24 * 60 * 60 * 1e3).toISOString();
     const yeniPatronUser = {
-      id: "usr_" + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4),
+      id: "usr_" + randomUUID5(),
       tenant_id: slug,
       ad_soyad: sahipAdi,
       email: sahipEmail.toLowerCase(),
@@ -7169,74 +7586,27 @@ router6.post("/firmalar/kayit", async (req, res) => {
       token_gecerlilik: tokenGecerlilik,
       olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString()
     };
-    if (supabase) {
-      try {
-        const { error: fErr } = await supabase.from("firmalar").insert({
-          id: yeniFirma.id,
-          ad: yeniFirma.ad,
-          sehir: yeniFirma.sehir,
-          varsayilan_para_birimi: yeniFirma.varsayilanParaBirimi,
-          varsayilan_komisyon_yuzdesi: yeniFirma.varsayilanKomisyonYuzdesi,
-          aciklama: yeniFirma.aciklama,
-          is_demo: yeniFirma.isDemo,
-          onay_durumu: yeniFirma.onayDurumu,
-          paket: yeniFirma.paket,
-          sahip_adi: yeniFirma.sahipAdi,
-          sahip_email: yeniFirma.sahipEmail,
-          sahip_telefon: yeniFirma.sahipTelefon,
-          mensei_ulke: yeniFirma.menseiUlke,
-          rol_limitleri: yeniFirma.rolLimitleri,
-          aktif_kullanici_sayilari: yeniFirma.aktifKullaniciSayilari
-        });
-        if (fErr) {
-          return res.status(503).json({
-            basarili: false,
-            hata: "Qeydiyyat saxlan\u0131lmad\u0131. Daha sonra yenid\u0259n c\u0259hd edin."
-          });
-        }
-        const { error: uErr } = await supabase.from("kullanicilar").insert({
-          id: yeniPatronUser.id,
-          tenant_id: yeniPatronUser.tenant_id,
-          ad_soyad: yeniPatronUser.ad_soyad,
-          email: yeniPatronUser.email,
-          telefon: yeniPatronUser.telefon,
-          rol: yeniPatronUser.rol,
-          durum: yeniPatronUser.durum,
-          aktivasyon_token: yeniPatronUser.aktivasyon_token,
-          token_gecerlilik: yeniPatronUser.token_gecerlilik,
-          olusturma_tarihi: yeniPatronUser.olusturma_tarihi
-        });
-        if (uErr) {
-          return res.status(503).json({
-            basarili: false,
-            hata: "\u0130stifad\u0259\xE7i qeydi saxlan\u0131lmad\u0131. D\u0259st\u0259k xidm\u0259ti il\u0259 \u0259laq\u0259 saxlay\u0131n."
-          });
-        }
-      } catch (errDb) {
-        return res.status(503).json({
-          basarili: false,
-          hata: "Qeydiyyat xidm\u0259ti \u0259l\xE7atan deyil. Daha sonra yenid\u0259n c\u0259hd edin."
-        });
-      }
-    }
-    firmalarVeritabani.push(yeniFirma);
-    firmalariKaydetDosyaya(firmalarVeritabani);
-    kullanicilarVeritabani.push(yeniPatronUser);
-    kullanicilariKaydetDosyaya(kullanicilarVeritabani);
-    const emailResult = await sendActivationEmail({
+    const { payload } = buildActivationEmail({
       email: sahipEmail,
       adSoyad: sahipAdi,
       butikAdi: ad,
       token: aktivasyonToken
     });
+    const job = createEmailJob(yeniFirma.id, "ACTIVATION", payload, tokenGecerlilik);
+    await registerBoutique(yeniFirma, yeniPatronUser, job);
+    const emailGonderildi = await tryDeliverOnboardingEmail(job.id);
     res.json({
       basarili: true,
-      mesaj: emailResult.basarili ? `Qeydiyyat q\u0259bul edildi. \u015Eifr\u0259 t\u0259yini linki ${sahipEmail} \xFCnvan\u0131na g\xF6nd\u0259rildi.` : "Qeydiyyat q\u0259bul edildi, lakin aktivasiya m\u0259ktubu g\xF6nd\u0259ril\u0259 bilm\u0259di. D\u0259st\u0259k xidm\u0259ti il\u0259 \u0259laq\u0259 saxlay\u0131n.",
+      mesaj: emailGonderildi ? `Qeydiyyat q\u0259bul edildi. \u015Eifr\u0259 t\u0259yini linki ${sahipEmail} \xFCnvan\u0131na g\xF6nd\u0259rildi.` : "Qeydiyyat saxlan\u0131ld\u0131. Aktivasiya m\u0259ktubu g\xF6nd\u0259rilm\u0259 n\xF6vb\u0259sind\u0259dir; d\u0259st\u0259k xidm\u0259ti g\xF6nd\u0259ri\u015Fi yenid\u0259n yoxlaya bil\u0259r.",
       firma: yeniFirma,
-      emailGonderildi: emailResult.basarili
+      emailGonderildi,
+      emailDurumu: emailGonderildi ? "GONDERILDI" : "BEKLIYOR"
     });
   } catch (err) {
-    res.status(500).json({ basarili: false, hata: err.message });
+    res.status(err instanceof OnboardingError ? err.status : 503).json({
+      basarili: false,
+      hata: err instanceof OnboardingError ? err.message : "\u018Fm\u0259liyyat saxlan\u0131lmad\u0131. Daha sonra yenid\u0259n c\u0259hd edin."
+    });
   }
 });
 router6.patch("/firmalar/:id/onay", async (req, res) => {
@@ -7250,18 +7620,17 @@ router6.patch("/firmalar/:id/onay", async (req, res) => {
       if (error)
         return res.status(503).json({ basarili: false, hata: "Firma durumu kaydedilemedi." });
       if (!data) return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
-      const local = firmalarVeritabani.find((f) => f.id === id);
-      if (local) local.onayDurumu = onayDurumu;
       return res.json({
         basarili: true,
         firma: { ...data, onayDurumu },
         mesaj: "Firma durumu g\xFCncellendi."
       });
     }
-    const firma = firmalarVeritabani.find((f) => f.id === id);
+    const next = getIdentitySnapshot();
+    const firma = next.companies.find((f) => f.id === id);
     if (!firma) return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
     firma.onayDurumu = onayDurumu;
-    firmalariKaydetDosyaya(firmalarVeritabani);
+    saveIdentitySnapshot(next);
     return res.json({ basarili: true, firma, mesaj: "Firma durumu g\xFCncellendi." });
   } catch {
     return res.status(503).json({ basarili: false, hata: "Firma durumu kaydedilemedi." });
@@ -7290,13 +7659,8 @@ router6.post("/firmalar/davet-olustur", async (req, res) => {
     }
     if (firma.onayDurumu && firma.onayDurumu !== "AKTIF")
       return res.status(403).json({ basarili: false, hata: "Firma aktif de\u011Fil." });
-    const limit = firma.rolLimitleri?.[rol] ?? 5;
-    const movcud = firma.aktifKullaniciSayilari?.[rol] ?? 0;
-    if (movcud >= limit) {
-      return res.status(400).json({
-        basarili: false,
-        hata: `Bu butik \xFC\xE7\xFCn ${rol} v\u0259zif\u0259si \xFCzr\u0259 limit (${limit}/${limit}) dolmu\u015Fdur. Z\u0259hm\u0259t olmasa paketinizi y\xFCks\u0259ldin.`
-      });
+    if (email !== void 0 && (typeof email !== "string" || email.trim().length > 150 || email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) || adSoyad !== void 0 && (typeof adSoyad !== "string" || adSoyad.length > 150) || typeof olusturanKisi !== "string") {
+      return res.status(400).json({ basarili: false, hata: "D\u0259v\u0259t m\u0259lumatlar\u0131n\u0131n format\u0131n\u0131 yoxlay\u0131n." });
     }
     const token = "inv_" + tokenUret(32);
     const gecerlilikTarihi = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3).toISOString();
@@ -7312,41 +7676,18 @@ router6.post("/firmalar/davet-olustur", async (req, res) => {
       email: email ? String(email).trim().toLowerCase() : void 0,
       kullananKisi: adSoyad ? String(adSoyad).trim() : void 0
     };
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from("davetler").insert({
-          id: davet.token,
-          token: davet.token,
-          firma_id: davet.tenantId,
-          rol: davet.rol,
-          olusturan_rol: req.auth?.role || "PATRON",
-          durum: "AKTIF",
-          son_kullanma_tarihi: davet.gecerlilikTarihi
-        }).select("token").maybeSingle();
-        if (error || !data) {
-          return res.status(503).json({ basarili: false, hata: "D\u0259v\u0259t saxlan\u0131lmad\u0131. Daha sonra yenid\u0259n c\u0259hd edin." });
-        }
-      } catch {
-        return res.status(503).json({ basarili: false, hata: "D\u0259v\u0259t xidm\u0259ti \u0259l\xE7atan deyil." });
-      }
-    }
-    davetlerVeritabani.push(davet);
-    let emailGonderildi = false;
-    let davetUrlTam = `/davet-qebul?token=${token}`;
-    if (email && String(email).includes("@")) {
-      const emailSonuc = await sendInviteEmail({
-        email: String(email).trim().toLowerCase(),
-        adSoyad: adSoyad ? String(adSoyad).trim() : void 0,
-        butikAdi: firma.ad,
-        rol,
-        token,
-        davetEden: olusturanKisi
-      });
-      emailGonderildi = emailSonuc.basarili;
-      if (emailSonuc.link) {
-        davetUrlTam = emailSonuc.link;
-      }
-    }
+    const preparedEmail = davet.email ? buildInviteEmail({
+      email: davet.email,
+      adSoyad: davet.kullananKisi,
+      butikAdi: firma.ad,
+      rol,
+      token,
+      davetEden: olusturanKisi
+    }) : void 0;
+    const job = preparedEmail ? createEmailJob(firma.id, "INVITE", preparedEmail.payload, gecerlilikTarihi) : void 0;
+    const created = await createInvite(davet, req.auth?.role || "PATRON", job);
+    const emailGonderildi = job ? await tryDeliverOnboardingEmail(job.id) : false;
+    const davetUrlTam = preparedEmail?.link || `${getApplicationUrl()}/davet-qebul?token=${token}`;
     res.json({
       basarili: true,
       davet,
@@ -7354,10 +7695,14 @@ router6.post("/firmalar/davet-olustur", async (req, res) => {
       davetUrlTam,
       emailGonderildi,
       mesaj: emailGonderildi ? `D\u0259v\u0259t m\u0259ktubu ${email} \xFCnvan\u0131na g\xF6nd\u0259rildi.` : `D\u0259v\u0259t linki u\u011Furla yarad\u0131ld\u0131.`,
-      kalanKota: limit - movcud
+      emailDurumu: job ? emailGonderildi ? "GONDERILDI" : "BEKLIYOR" : "ISTENMEDI",
+      kalanKota: created.remaining
     });
   } catch (err) {
-    res.status(500).json({ basarili: false, hata: err.message });
+    res.status(err instanceof OnboardingError ? err.status : 503).json({
+      basarili: false,
+      hata: err instanceof OnboardingError ? err.message : "\u018Fm\u0259liyyat saxlan\u0131lmad\u0131. Daha sonra yenid\u0259n c\u0259hd edin."
+    });
   }
 });
 router6.post("/firmalar", async (req, res) => {
@@ -7372,7 +7717,7 @@ router6.post("/firmalar", async (req, res) => {
     if (!ad) {
       return res.status(400).json({ basarili: false, hata: "Firma / butik ad\u0131 zorunludur." });
     }
-    const slug = ad.toLowerCase().replace(/ə/g, "e").replace(/ı/g, "i").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ş/g, "s").replace(/ç/g, "c").replace(/ğ/g, "g").replace(/[^a-z0-9]/g, "_") + "_" + Date.now().toString(36).slice(-4);
+    const slug = ad.toLowerCase().replace(/ə/g, "e").replace(/ı/g, "i").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ş/g, "s").replace(/ç/g, "c").replace(/ğ/g, "g").replace(/[^a-z0-9]/g, "_").slice(0, 60) + "_" + randomUUID5();
     const yeniFirma = {
       id: slug,
       ad,
@@ -7415,15 +7760,17 @@ router6.post("/firmalar", async (req, res) => {
       if (error || !data)
         return res.status(503).json({ basarili: false, hata: "Firma kaydedilemedi." });
     }
-    firmalarVeritabani.push(yeniFirma);
-    firmalariKaydetDosyaya(firmalarVeritabani);
+    if (!supabase) firmalariKaydetDosyaya([...firmalarVeritabani, yeniFirma]);
     res.json({
       basarili: true,
       mesaj: `"${ad}" butiki sistem\u0259 u\u011Furla \u0259lav\u0259 edildi!`,
       firma: yeniFirma
     });
   } catch (err) {
-    res.status(500).json({ basarili: false, hata: err.message });
+    res.status(err instanceof OnboardingError ? err.status : 503).json({
+      basarili: false,
+      hata: err instanceof OnboardingError ? err.message : "\u018Fm\u0259liyyat saxlan\u0131lmad\u0131. Daha sonra yenid\u0259n c\u0259hd edin."
+    });
   }
 });
 router6.delete("/firmalar/:id", async (req, res) => {
@@ -7436,11 +7783,16 @@ router6.delete("/firmalar/:id", async (req, res) => {
       if (error) return res.status(503).json({ basarili: false, hata: "Firma silinemedi." });
       if (!data) return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
     }
-    const index = firmalarVeritabani.findIndex((f) => f.id === id);
-    if (!supabase && index === -1)
-      return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
-    if (index !== -1) firmalarVeritabani.splice(index, 1);
-    firmalariKaydetDosyaya(firmalarVeritabani);
+    if (!supabase) {
+      const next = getIdentitySnapshot();
+      if (!next.companies.some((firma) => firma.id === id))
+        return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
+      next.companies = next.companies.filter((firma) => firma.id !== id);
+      next.users = next.users.filter((user) => user.tenant_id !== id);
+      next.invites = next.invites.filter((invite) => invite.tenantId !== id);
+      next.emailJobs = next.emailJobs.filter((job) => job.tenant_id !== id);
+      saveIdentitySnapshot(next);
+    }
     res.json({ basarili: true, mesaj: "Butik u\u011Furla silindi." });
   } catch {
     res.status(503).json({ basarili: false, hata: "Firma silinemedi." });
@@ -7528,211 +7880,265 @@ var kuryeler_default = router7;
 
 // src/server/routes/veritabani.ts
 import { Router as Router8 } from "express";
+import { createHash as createHash4 } from "node:crypto";
 var router8 = Router8();
-router8.get("/veritabani/durum", async (req, res) => {
-  let supabaseBagli = false;
-  let toplamKayit = 0;
-  let demoKayitSayisi = 0;
-  let canliKayitSayisi = 0;
-  let hata = null;
-  try {
-    let siparisler = [];
-    if (supabase) {
-      const { data, error } = await supabase.from("siparisler").select("*");
-      if (error) {
-        hata = error.message;
-      } else if (data) {
-        supabaseBagli = true;
-        siparisler = data.map((s) => formatlaSiparis(s));
+var UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
+var localReceipts = /* @__PURE__ */ new Map();
+var tenantOf = (row) => row.tenant_id || formatlaSiparis(row).tenant_id;
+var localRows = (tenant) => tenant === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+var dbActive3 = (tenant) => !!supabase && tenant !== "demo_sandbox";
+function fail2(res, error) {
+  const status = error instanceof PublicResourceError ? error.status : error?.code === "23505" ? 409 : ["22023", "22P02", "23514", "23502"].includes(error?.code) ? 400 : error?.code === "54000" ? 413 : 503;
+  res.status(status).json({
+    basarili: false,
+    hata: error instanceof PublicResourceError ? error.message : status === 409 ? "\u0130\u015Flem kimli\u011Fi veya sipari\u015F kimli\u011Fi \xE7ak\u0131\u015F\u0131yor. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : status === 400 ? "Yedek verisi ge\xE7ersiz. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : status === 413 ? "Yedek s\u0131n\u0131r\u0131 5000 sipari\u015F / 10 MiB. Daha b\xFCy\xFCk veri i\xE7in veritaban\u0131 yede\u011Fi kullan\u0131n." : "Veritaban\u0131 i\u015Flemi do\u011Frulanamad\u0131. Ayn\u0131 i\u015Flem kimli\u011Fiyle yeniden deneyin."
+  });
+}
+function concreteTenant(req) {
+  if (!req.tenantId || req.tenantId === "all")
+    throw new PublicResourceError("\u0130\u015Flem i\xE7in tek bir firma se\xE7in.", 400);
+  return req.tenantId;
+}
+function operationKey(req) {
+  const key = req.body.islem_id;
+  if (typeof key !== "string" || !UUID.test(key))
+    throw new PublicResourceError("Ge\xE7erli bir i\u015Flem kimli\u011Fi gerekiyor.", 400);
+  return key.toLowerCase();
+}
+function prepareRows(rows2, tenant, demo = false) {
+  if (!Array.isArray(rows2) || !rows2.length || rows2.length > 5e3 || Buffer.byteLength(JSON.stringify(rows2)) > 10 * 1024 * 1024)
+    throw new PublicResourceError(
+      "Yedek 1\u20135000 sipari\u015F i\xE7ermeli ve 10 MiB s\u0131n\u0131r\u0131n\u0131 a\u015Fmamal\u0131.",
+      400
+    );
+  const ids = /* @__PURE__ */ new Set();
+  const supported = /* @__PURE__ */ new Set([
+    ...SUPABASE_GECERLI_KOLONLAR,
+    ...SIPARIS_EK_ALANLAR,
+    "id",
+    "tenantId",
+    "olusturma_tarihi",
+    "guncellenme_tarihi",
+    "kalan_tutar",
+    "urunler",
+    "gorsel_urlleri",
+    "ozel_not",
+    "birden_fazla_urun"
+  ]);
+  return rows2.map((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || typeof raw.id !== "string" || !raw.id || raw.id.length > 200)
+      throw new PublicResourceError("Her sipari\u015Fin kal\u0131c\u0131 bir kimli\u011Fi olmal\u0131.", 400);
+    if (Object.keys(raw).some((key) => !supported.has(key)) || raw.ek_veriler && (typeof raw.ek_veriler !== "object" || Array.isArray(raw.ek_veriler) || Object.keys(raw.ek_veriler).some(
+      (key) => !SIPARIS_EK_ALANLAR.includes(key)
+    )))
+      throw new PublicResourceError(
+        "Yedekte desteklenmeyen alan var; veri kayb\u0131n\u0131 \xF6nlemek i\xE7in y\xFCkleme durduruldu.",
+        400
+      );
+    const claims = [
+      raw.tenant_id,
+      raw.tenantId,
+      ...Array.isArray(raw.eksik_bilgiler) ? raw.eksik_bilgiler.filter((x) => typeof x === "string" && x.startsWith("META:tenant_id=")).map((x) => x.slice("META:tenant_id=".length)) : []
+    ].filter((x) => x !== void 0);
+    if (!demo && (!claims.length || claims.some((x) => x !== tenant)))
+      throw new PublicResourceError("Yedek yaln\u0131zca se\xE7ili firman\u0131n sipari\u015Flerini i\xE7ermeli.", 403);
+    if (raw.adet !== void 0 && (typeof raw.adet !== "number" || !Number.isSafeInteger(raw.adet) || raw.adet <= 0))
+      throw new PublicResourceError("Sipari\u015F adedi ge\xE7ersiz.", 400);
+    for (const field of ["toplam_tutar", "alinan_tutar"])
+      if (raw[field] !== void 0 && (typeof raw[field] !== "number" || !Number.isFinite(raw[field]) || raw[field] < 0))
+        throw new PublicResourceError("Sipari\u015F tutar\u0131 ge\xE7ersiz.", 400);
+    const row = formatlaSiparis(raw);
+    if (typeof row.musteri_adi !== "string" || !row.musteri_adi.trim() || typeof row.urun_aciklamasi !== "string" || !row.urun_aciklamasi.trim() || !Number.isSafeInteger(row.adet) || row.adet <= 0 || !Number.isFinite(row.toplam_tutar) || row.toplam_tutar < 0 || !Number.isFinite(row.alinan_tutar) || row.alinan_tutar < 0)
+      throw new PublicResourceError("Sipari\u015F ad\u0131, \xFCr\xFCn, adet veya tutar ge\xE7ersiz.", 400);
+    if (dbActive3(tenant) && !UUID.test(raw.id))
+      throw new PublicResourceError(
+        "Veritaban\u0131na y\xFCklenen sipari\u015Fler UUID kimli\u011Fi ta\u015F\u0131mal\u0131. Eski yerel kimlikler \xF6nce e\u015Flenmeli.",
+        400
+      );
+    const id = UUID.test(raw.id) ? raw.id.toLowerCase() : raw.id;
+    if (ids.has(id)) throw new PublicResourceError("Yedekte tekrarlanan sipari\u015F kimli\u011Fi var.", 400);
+    ids.add(id);
+    const payload = {
+      ...hazirlaSupabasePayload({
+        ...row,
+        tenant_id: tenant,
+        is_demo: demo || tenant === "demo_sandbox" || row.is_demo === true
+      }),
+      id
+    };
+    for (const field of ["olusturma_tarihi", "guncellenme_tarihi"])
+      if (raw[field] !== void 0) {
+        if (typeof raw[field] !== "string" || !Number.isFinite(Date.parse(raw[field])))
+          throw new PublicResourceError("Sipari\u015F tarihi ge\xE7ersiz.", 400);
+        payload[field] = new Date(raw[field]).toISOString();
       }
-    }
-    if (!supabaseBagli) {
-      siparisler = siparislerVeritabani.map((s) => formatlaSiparis(s));
-    }
-    toplamKayit = siparisler.length;
-    demoKayitSayisi = siparisler.filter((s) => s.is_demo !== false).length;
-    canliKayitSayisi = siparisler.filter((s) => s.is_demo === false).length;
-    const firmaDagilimi = {};
-    for (const s of siparisler) {
-      const tid = s.tenant_id || "kanada_shopper_baku";
-      firmaDagilimi[tid] = (firmaDagilimi[tid] || 0) + 1;
+    return payload;
+  });
+}
+async function maintain(tenant, key, mode, rows2) {
+  if (dbActive3(tenant)) {
+    const { data, error } = await supabase.rpc("tomnap_restore_orders", {
+      p_tenant_id: tenant,
+      p_operation_id: key,
+      p_mode: mode,
+      p_orders: rows2
+    });
+    if (error) throw error;
+    if (!data || data.hedef_tenant !== tenant || typeof data.toplam !== "number")
+      throw new Error("Invalid operation receipt");
+    return { ...data, kaynak: "supabase" };
+  }
+  if (!firmalarVeritabani.some((f) => f.id === tenant))
+    throw new PublicResourceError("Firma bulunamad\u0131.", 404);
+  const fingerprint2 = createHash4("sha256").update(JSON.stringify({ tenant, mode, rows: rows2 })).digest("hex");
+  const receipt = localReceipts.get(key);
+  if (receipt) {
+    if (receipt.fingerprint !== fingerprint2)
+      throw new PublicResourceError("\u0130\u015Flem kimli\u011Fi ba\u015Fka bir istek i\xE7in kullan\u0131lm\u0131\u015F.", 409);
+    return { ...receipt.result, tekrar: true };
+  }
+  if (localReceipts.size >= 1e4)
+    throw new PublicResourceError("Yerel i\u015Flem kay\u0131t s\u0131n\u0131r\u0131na ula\u015F\u0131ld\u0131.", 503);
+  const current = localRows(tenant), ids = new Set(rows2.map((r) => r.id));
+  if (current.some(
+    (r) => ids.has(UUID.test(r.id) ? r.id.toLowerCase() : r.id) && (mode === "merge" || tenantOf(r) !== tenant)
+  ))
+    throw new PublicResourceError("Y\xFCkleme mevcut sipari\u015F kimli\u011Fiyle \xE7ak\u0131\u015F\u0131yor.", 409);
+  const normalized = rows2.map(
+    (row) => formatlaSiparis({ ...row, olusturma_tarihi: row.olusturma_tarihi || (/* @__PURE__ */ new Date()).toISOString() })
+  );
+  const next = [
+    ...current.filter((r) => mode === "merge" || tenantOf(r) !== tenant),
+    ...normalized
+  ];
+  if (tenant === "demo_sandbox") setDemoSiparislerVeritabani(next);
+  else setSiparislerVeritabani(next);
+  const result = { toplam: rows2.length, hedef_tenant: tenant, tekrar: false, kaynak: "bellek" };
+  localReceipts.set(key, { fingerprint: fingerprint2, result });
+  return result;
+}
+router8.get("/veritabani/durum", async (req, res) => {
+  try {
+    const tenant = req.tenantId;
+    let status;
+    if (dbActive3(tenant)) {
+      const { data, error } = await supabase.rpc("tomnap_order_status", { p_tenant_id: tenant });
+      if (error) throw error;
+      if (!data || typeof data.toplam_siparis !== "number") throw new Error("Invalid status");
+      status = data;
+    } else {
+      const rows2 = localRows(tenant).filter((r) => tenant === "all" || tenantOf(r) === tenant);
+      status = {
+        toplam_siparis: rows2.length,
+        demo_siparis_sayisi: rows2.filter((r) => r.is_demo === true).length,
+        canli_siparis_sayisi: rows2.filter((r) => r.is_demo !== true).length,
+        firma_dagilimi: {}
+      };
+      for (const row of rows2)
+        status.firma_dagilimi[tenantOf(row)] = (status.firma_dagilimi[tenantOf(row)] || 0) + 1;
     }
     res.json({
       basarili: true,
-      supabase_bagli: supabaseBagli,
-      kaynak: supabaseBagli ? "supabase" : "bellek",
-      toplam_siparis: toplamKayit,
-      demo_siparis_sayisi: demoKayitSayisi,
-      canli_siparis_sayisi: canliKayitSayisi,
-      rejim: toplamKayit === 0 ? "TEMIZ_CANLI" : demoKayitSayisi > 0 ? "DEMO_MODU" : "CANLI_MODU",
-      firma_dagilimi: firmaDagilimi,
-      hata
+      ...status,
+      supabase_bagli: dbActive3(tenant),
+      kaynak: dbActive3(tenant) ? "supabase" : "bellek",
+      rejim: status.toplam_siparis === 0 ? "TEMIZ_CANLI" : status.demo_siparis_sayisi > 0 ? "DEMO_MODU" : "CANLI_MODU"
     });
-  } catch (err) {
-    res.status(500).json({ basarili: false, hata: err.message });
+  } catch (error) {
+    fail2(res, error);
   }
 });
 router8.post("/veritabani/temizle", async (req, res) => {
   try {
-    const { tenant_id, onay_kodu } = req.body;
-    const hedefTenant = tenant_id || "demo_sandbox";
-    const isGlobalResetAllowed = process.env.ALLOW_GLOBAL_RESET === "true";
-    const isDemoTarget = hedefTenant === "demo_sandbox";
-    if (!isDemoTarget && !isGlobalResetAllowed && onay_kodu !== "CANLI_TEMIZLEME_ONAY_2026") {
-      return res.status(403).json({
-        basarili: false,
-        hata: `"${hedefTenant}" canl\u0131 firma veritaban\u0131d\u0131r. Yanl\u0131\u015Fl\u0131kla silinmeyi \xF6nlemek i\xE7in yaln\u0131zca demo hesab\u0131 ("demo_sandbox") s\u0131f\u0131rlanabilir veya ge\xE7erli onay kodu gereklidir.`
-      });
-    }
-    let silinenAdet = 0;
-    if (supabase) {
-      let deleteQuery = supabase.from("siparisler").delete();
-      if (hedefTenant !== "all") {
-        deleteQuery = deleteQuery.eq("tenant_id", hedefTenant);
-      }
-      const { data, error } = await deleteQuery.select("id");
-      if (error) {
-        console.error("Supabase temizleme hatas\u0131:", error.message);
-        return res.status(500).json({ basarili: false, hata: "Supabase temizlenemedi: " + error.message });
-      }
-      silinenAdet = data?.length || 0;
-    }
-    if (hedefTenant === "all") {
-      silinenAdet = Math.max(silinenAdet, siparislerVeritabani.length);
-      setSiparislerVeritabani([]);
-    } else {
-      const oncekiSayi = siparislerVeritabani.length;
-      const filtrelenmis = siparislerVeritabani.filter(
-        (s) => (s.tenant_id || "kanada_shopper_baku") !== hedefTenant
-      );
-      silinenAdet = Math.max(silinenAdet, oncekiSayi - filtrelenmis.length);
-      setSiparislerVeritabani(filtrelenmis);
-    }
-    console.log(`\u{1F9F9} Veritaban\u0131 temizlendi (${hedefTenant}). Toplam silinen: ${silinenAdet}`);
-    res.json({
-      basarili: true,
-      mesaj: `"${hedefTenant}" butiki \xFC\xE7\xFCn sifari\u015Fl\u0259r u\u011Furla t\u0259mizl\u0259ndi!`,
-      silinen_adet: silinenAdet,
-      toplam: 0,
-      hedef_tenant: hedefTenant
-    });
-  } catch (err) {
-    console.error("Temizleme istisnas\u0131:", err);
-    res.status(500).json({ basarili: false, hata: "Temizleme i\u015Flemi ba\u015Far\u0131s\u0131z: " + err.message });
+    const tenant = concreteTenant(req);
+    if (req.body.onay_kodu !== `SIL:${tenant}`)
+      throw new PublicResourceError(`Silmek i\xE7in SIL:${tenant} onay\u0131 gerekiyor.`, 403);
+    const result = await maintain(tenant, operationKey(req), "clear", []);
+    res.json({ basarili: true, ...result, mesaj: "Se\xE7ili firman\u0131n sipari\u015Fleri temizlendi." });
+  } catch (error) {
+    fail2(res, error);
   }
 });
 router8.post("/veritabani/demo-yukle", async (req, res) => {
   try {
-    const hedefTenant = req.body.tenant_id || "demo_sandbox";
-    if (supabase) {
-      await supabase.from("siparisler").delete().eq("tenant_id", hedefTenant);
-    }
-    const digerSiparisler = siparislerVeritabani.filter(
-      (s) => (s.tenant_id || "kanada_shopper_baku") !== hedefTenant
-    );
-    const eklenecekler = BASLANGIC_SIPARISLER.map((s) => ({
-      ...s,
-      tenant_id: hedefTenant,
-      is_demo: true
-    }));
-    if (supabase) {
-      const chunkSize = 30;
-      for (let i = 0; i < eklenecekler.length; i += chunkSize) {
-        const chunk = eklenecekler.slice(i, i + chunkSize);
-        const sbChunk = chunk.map((item) => hazirlaSupabasePayload(item));
-        const { error } = await supabase.from("siparisler").insert(sbChunk);
-        if (error) {
-          console.error(`Supabase batch ${i} y\xFCkleme hatas\u0131:`, error.message);
-        }
-      }
-    }
-    setSiparislerVeritabani([...digerSiparisler, ...eklenecekler]);
-    console.log(`\u2705 Demo verileri y\xFCklendi (${hedefTenant}): ${eklenecekler.length} sipari\u015F.`);
-    res.json({
-      basarili: true,
-      mesaj: `${eklenecekler.length} demo sifari\u015F "${hedefTenant}" \xFC\xE7\xFCn bazaya u\u011Furla b\u0259rpa edildi!`,
-      toplam: eklenecekler.length,
-      kaynak: supabase ? "supabase" : "bellek"
-    });
-  } catch (err) {
-    console.error("Demo y\xFCkleme istisnas\u0131:", err);
-    res.status(500).json({ basarili: false, hata: "Demo y\xFCkleme ba\u015Far\u0131s\u0131z: " + err.message });
+    const tenant = concreteTenant(req);
+    if (tenant !== "demo_sandbox")
+      throw new PublicResourceError(
+        "Demo verileri yaln\u0131zca demo_sandbox alan\u0131na y\xFCklenebilir.",
+        403
+      );
+    const rows2 = prepareRows(BASLANGIC_SIPARISLER, tenant, true);
+    const result = await maintain(tenant, operationKey(req), "replace", rows2);
+    res.json({ basarili: true, ...result, mesaj: "Demo alan\u0131 s\u0131f\u0131rland\u0131." });
+  } catch (error) {
+    fail2(res, error);
   }
 });
 router8.get("/veritabani/yedek-al", async (req, res) => {
   try {
-    let siparisler = [];
-    if (supabase) {
-      let query = supabase.from("siparisler").select("*").order("olusturma_tarihi", { ascending: false });
-      if (req.tenantId !== "all") query = query.eq("tenant_id", req.tenantId);
-      const { data, error } = await query;
-      if (error) return res.status(503).json({ basarili: false, hata: "Yedek verisi okunamad\u0131." });
-      siparisler = (data || []).map(formatlaSiparis);
-    } else {
-      siparisler = siparislerVeritabani.filter((s) => req.tenantId === "all" || s.tenant_id === req.tenantId).map(formatlaSiparis);
-    }
-    const yedekPaketi = {
-      proje: "Kanada Shopper Baku ERP",
-      tarih: (/* @__PURE__ */ new Date()).toISOString(),
-      versiyon: "2.0-saas",
-      toplam_siparis: siparisler.length,
-      siparisler
-    };
-    res.setHeader("Content-Type", "application/json");
+    const tenant = req.tenantId;
+    let rows2;
+    if (dbActive3(tenant)) {
+      const { data, error } = await supabase.rpc("tomnap_export_orders", { p_tenant_id: tenant });
+      if (error) throw error;
+      if (!Array.isArray(data)) throw new Error("Invalid backup");
+      rows2 = data;
+    } else rows2 = localRows(tenant).filter((r) => tenant === "all" || tenantOf(r) === tenant);
+    if (rows2.length > 5e3 || Buffer.byteLength(JSON.stringify(rows2)) > 10 * 1024 * 1024)
+      throw { code: "54000" };
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=knb_backup_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`
+      `attachment; filename=tomnap_${tenant}_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`
     );
-    res.json(yedekPaketi);
-  } catch (err) {
-    res.status(500).json({ basarili: false, hata: "Yedek olu\u015Fturulamad\u0131: " + err.message });
+    res.json({
+      proje: "TOMNAP",
+      versiyon: "3.0-orders",
+      tarih: (/* @__PURE__ */ new Date()).toISOString(),
+      tenant_id: tenant,
+      kaynak: dbActive3(tenant) ? "supabase" : "bellek",
+      toplam_siparis: rows2.length,
+      siparisler: rows2.map(formatlaSiparis)
+    });
+  } catch (error) {
+    fail2(res, error);
   }
 });
 router8.post("/veritabani/yedek-yukle", async (req, res) => {
   try {
-    const { siparisler, temizleVeYukle = true } = req.body;
-    if (!Array.isArray(siparisler) || siparisler.length === 0) {
-      return res.status(400).json({ basarili: false, hata: "Ge\xE7erli bir sipari\u015F listesi bulunamad\u0131." });
-    }
-    if (temizleVeYukle) {
-      if (supabase) {
-        await supabase.from("siparisler").delete().neq("adet", -999999);
-      }
-      setSiparislerVeritabani([]);
-    }
-    if (supabase) {
-      const chunkSize = 25;
-      for (let i = 0; i < siparisler.length; i += chunkSize) {
-        const chunk = siparisler.slice(i, i + chunkSize);
-        const sbChunk = chunk.map((s) => hazirlaSupabasePayload(s));
-        const { error } = await supabase.from("siparisler").insert(sbChunk);
-        if (error) console.error("Yedek y\xFCkleme chunk hatas\u0131:", error.message);
+    const tenant = concreteTenant(req), key = operationKey(req);
+    if (req.body.temizleVeYukle !== void 0 && typeof req.body.temizleVeYukle !== "boolean")
+      throw new PublicResourceError("Y\xFCkleme bi\xE7imi ge\xE7ersiz.", 400);
+    const replace = req.body.temizleVeYukle === true;
+    if (replace && req.body.onay_kodu !== `DEGISTIR:${tenant}`)
+      throw new PublicResourceError(`De\u011Fi\u015Ftirmek i\xE7in DEGISTIR:${tenant} onay\u0131 gerekiyor.`, 403);
+    const rows2 = prepareRows(req.body.siparisler, tenant);
+    for (const row of rows2) {
+      const customerId = row.ek_veriler?.musteri_id;
+      if (customerId !== void 0 && customerId !== null && customerId !== "") {
+        if (typeof customerId !== "string")
+          throw new PublicResourceError("M\xFC\u015Fteri kimli\u011Fi ge\xE7ersiz.", 400);
+        if (!dbActive3(tenant) && !musterilerVeritabani.some((m) => m.id === customerId && tenantOf(m) === tenant))
+          throw new PublicResourceError("Yedekteki m\xFC\u015Fteri se\xE7ili firmada bulunamad\u0131.", 404);
       }
     }
-    const formatlanmis = siparisler.map((s) => formatlaSiparis(s));
-    setSiparislerVeritabani(
-      temizleVeYukle ? [...formatlanmis] : [...formatlanmis, ...siparislerVeritabani]
-    );
-    res.json({
-      basarili: true,
-      mesaj: `${siparisler.length} sifari\u015F u\u011Furla bazaya idxal edildi v\u0259 b\u0259rpa olundu!`,
-      toplam: siparisler.length
-    });
-  } catch (err) {
-    res.status(500).json({ basarili: false, hata: "Yedek y\xFCkleme ba\u015Far\u0131s\u0131z: " + err.message });
+    await assertTenantImageReferences(req, rows2);
+    const result = await maintain(tenant, key, replace ? "replace" : "merge", rows2);
+    res.json({ basarili: true, ...result, mesaj: "Sipari\u015F yede\u011Fi se\xE7ili firmaya y\xFCklendi." });
+  } catch (error) {
+    fail2(res, error);
   }
 });
-router8.post("/ornek-verileri-yukle", async (req, res) => {
-  res.redirect(307, "/api/veritabani/demo-yukle");
-});
+router8.post(
+  "/ornek-verileri-yukle",
+  (_req, res) => res.redirect(307, "/api/veritabani/demo-yukle")
+);
 var veritabani_default = router8;
 
 // src/server/routes/kargoEntegrasyon.ts
 import { Router as Router9 } from "express";
 
 // src/server/services/kargo/kargoMerkezi.ts
-import fs4 from "fs";
-import path6 from "path";
+import path7 from "path";
 
 // src/server/services/kargo/providers/aramex.ts
 import * as XLSX from "xlsx";
@@ -8183,7 +8589,7 @@ var UpsProvider = class {
 };
 
 // src/server/services/kargo/kargoMerkezi.ts
-var AYARLAR_DOSYA_YOLU = path6.join(DATA_DIR, "kargo_ayarlari.json");
+var AYARLAR_DOSYA_YOLU = path7.join(DATA_DIR, "kargo_ayarlari.json");
 var VARSAYILAN_AYARLAR = {
   tenantId: "kanada_shopper_baku",
   saglayici: "ARAMEX",
@@ -8253,9 +8659,11 @@ var KargoMerkezi = class {
     if (yeniAyarlar.kimlikBilgileri && (!yeniAyarlar.kimlikBilgileri.pin || yeniAyarlar.kimlikBilgileri.pin === "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022")) {
       guncel.kimlikBilgileri.pin = mevcut.kimlikBilgileri.pin;
     }
-    this.tenantAyarlari.set(tid, guncel);
-    this.kaydetAyarlariDosyaya();
-    return guncel;
+    const pending = new Map(this.tenantAyarlari);
+    pending.set(tid, structuredClone(guncel));
+    this.kaydetAyarlariDosyaya(pending);
+    this.tenantAyarlari = pending;
+    return structuredClone(guncel);
   }
   /**
    * İstemciye (Frontend) gönderilirken şifre ve PIN kodlarını maskeler.
@@ -8361,54 +8769,54 @@ var KargoMerkezi = class {
       detaylar
     };
   }
-  // Kalıcılık (Persistence)
+  // Persist settings before publishing them to providers or callers.
   yukleAyarlariDosyadan() {
-    try {
-      if (fs4.existsSync(AYARLAR_DOSYA_YOLU)) {
-        const content = fs4.readFileSync(AYARLAR_DOSYA_YOLU, "utf-8");
-        const data = JSON.parse(content);
-        if (Array.isArray(data)) {
-          for (const item of data) {
-            if (item.tenantId) {
-              if (item.kimlikBilgileri) {
-                if (item.kimlikBilgileri.sifre) {
-                  item.kimlikBilgileri.sifre = cozMetin(item.kimlikBilgileri.sifre);
-                }
-                if (item.kimlikBilgileri.pin) {
-                  item.kimlikBilgileri.pin = cozMetin(item.kimlikBilgileri.pin);
-                }
-              }
-              this.tenantAyarlari.set(item.tenantId, item);
-            }
-          }
-        }
-      } else {
-        this.tenantAyarlari.set(VARSAYILAN_AYARLAR.tenantId, { ...VARSAYILAN_AYARLAR });
-        this.kaydetAyarlariDosyaya();
+    const valid = (value) => {
+      if (!Array.isArray(value)) return false;
+      const tenants = /* @__PURE__ */ new Set();
+      for (const row of value) {
+        if (!row || typeof row !== "object" || typeof row.tenantId !== "string" || !row.tenantId || row.tenantId === "all" || tenants.has(row.tenantId) || !row.kimlikBilgileri || typeof row.kimlikBilgileri !== "object" || Array.isArray(row.kimlikBilgileri))
+          return false;
+        for (const field of ["kullaniciAdi", "sifre", "hesapNo", "pin", "entity"])
+          if (row.kimlikBilgileri[field] !== void 0 && typeof row.kimlikBilgileri[field] !== "string")
+            return false;
+        tenants.add(row.tenantId);
       }
-    } catch (err) {
-      console.warn("Kargo ayarlar\u0131 dosyas\u0131 okunamad\u0131, varsay\u0131lan y\xFCklendi:", err);
-      this.tenantAyarlari.set(VARSAYILAN_AYARLAR.tenantId, { ...VARSAYILAN_AYARLAR });
+      return true;
+    };
+    const stored = readJsonFile(AYARLAR_DOSYA_YOLU, valid);
+    const loaded = /* @__PURE__ */ new Map();
+    for (const row of stored || []) {
+      const item = structuredClone(row);
+      for (const field of ["sifre", "pin"]) {
+        const encoded = item.kimlikBilgileri[field];
+        if (!encoded) continue;
+        const decoded = cozMetin(encoded);
+        if (encoded.startsWith("enc:") && decoded === encoded)
+          throw new JsonStorageError("Kargo kimlik bilgileri \xE7\xF6z\xFClemedi.");
+        item.kimlikBilgileri[field] = decoded;
+      }
+      loaded.set(item.tenantId, item);
     }
+    this.tenantAyarlari = loaded;
   }
-  kaydetAyarlariDosyaya() {
-    try {
-      const dir = path6.dirname(AYARLAR_DOSYA_YOLU);
-      if (!fs4.existsSync(dir)) {
-        fs4.mkdirSync(dir, { recursive: true });
+  kaydetAyarlariDosyaya(settings) {
+    const encode = (value) => {
+      if (!value) return "";
+      const encoded = sifreleMetin(value);
+      if (!encoded.startsWith("enc:"))
+        throw new JsonStorageError("Kargo kimlik bilgileri \u015Fifrelenemedi.");
+      return encoded;
+    };
+    const list = Array.from(settings.values()).map((item) => ({
+      ...item,
+      kimlikBilgileri: {
+        ...item.kimlikBilgileri,
+        sifre: encode(item.kimlikBilgileri?.sifre),
+        pin: encode(item.kimlikBilgileri?.pin)
       }
-      const list = Array.from(this.tenantAyarlari.values()).map((item) => ({
-        ...item,
-        kimlikBilgileri: {
-          ...item.kimlikBilgileri,
-          sifre: item.kimlikBilgileri?.sifre ? sifreleMetin(item.kimlikBilgileri.sifre) : "",
-          pin: item.kimlikBilgileri?.pin ? sifreleMetin(item.kimlikBilgileri.pin) : ""
-        }
-      }));
-      fs4.writeFileSync(AYARLAR_DOSYA_YOLU, JSON.stringify(list, null, 2), "utf-8");
-    } catch (err) {
-      console.error("Kargo ayarlar\u0131 dosyaya yaz\u0131lamad\u0131:", err);
-    }
+    }));
+    writeJsonAtomic(AYARLAR_DOSYA_YOLU, list);
   }
 };
 var kargoMerkezi = new KargoMerkezi();
@@ -8642,7 +9050,7 @@ var kargoEntegrasyon_default = router9;
 
 // src/server/routes/auth.ts
 import { Router as Router10 } from "express";
-import { randomUUID as randomUUID4 } from "node:crypto";
+import { randomUUID as randomUUID6 } from "node:crypto";
 var router10 = Router10();
 function isUnexpired(value) {
   return typeof value === "string" && Date.parse(value) > Date.now();
@@ -8675,7 +9083,8 @@ async function findInvite(token) {
     olusturmaTarihi: data.olusturma_tarihi,
     gecerlilikTarihi: data.son_kullanma_tarihi,
     kullanildiMi: data.durum !== "AKTIF",
-    kullananKisi: data.kullanan_adi
+    kullananKisi: data.kullanan_adi,
+    email: data.email || void 0
   };
 }
 async function findFirma(tenantId) {
@@ -8683,12 +9092,6 @@ async function findFirma(tenantId) {
   const { data, error } = await supabase.from("firmalar").select("*").eq("id", tenantId).maybeSingle();
   if (error) throw error;
   return data || void 0;
-}
-function cacheUser(user) {
-  const index = kullanicilarVeritabani.findIndex((item) => item.id === user.id);
-  if (index < 0) kullanicilarVeritabani.push(user);
-  else kullanicilarVeritabani[index] = user;
-  kullanicilariKaydetDosyaya(kullanicilarVeritabani);
 }
 router10.get(["/auth/token-kontrol/:token", "/firmalar/davet/:token"], async (req, res) => {
   try {
@@ -8751,8 +9154,11 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
     if (typeof token !== "string" || !token.trim()) {
       return res.status(400).json({ basarili: false, hata: "T\u0259hl\xFCk\u0259sizlik tokeni m\xFCtl\u0259qdir." });
     }
-    if (typeof sifre !== "string" || sifre.length < 6) {
+    if (typeof sifre !== "string" || sifre.length < 6 || sifre.length > 1024) {
       return res.status(400).json({ basarili: false, hata: "\u015Eifr\u0259 \u0259n az\u0131 6 simvoldan ibar\u0259t olmal\u0131d\u0131r." });
+    }
+    if (adSoyad !== void 0 && (typeof adSoyad !== "string" || adSoyad.trim().length > 150) || telefon !== void 0 && (typeof telefon !== "string" || telefon.trim() && !normalizePhone(telefon.trim()))) {
+      return res.status(400).json({ basarili: false, hata: "Ad v\u0259 telefon m\u0259lumatlar\u0131n\u0131 yoxlay\u0131n." });
     }
     const cleanToken = token.trim();
     const user = await findActivationUser(cleanToken);
@@ -8763,41 +9169,11 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
           hata: "Bu aktivasiya linki etibars\u0131zd\u0131r v\u0259 ya vaxt\u0131 bitmi\u015Fdir."
         });
       }
-      const firma2 = await findFirma(user.tenant_id);
-      if (!isPendingActivation(user, cleanToken)) {
-        return res.status(400).json({ basarili: false, hata: "Bu aktivasiya linki art\u0131q etibarl\u0131 deyil." });
-      }
-      const changes = {
+      const { user: activatedUser, firma: firma2 } = await activateUser(cleanToken, {
         sifre_hash: sifreHashle(sifre),
-        durum: "AKTIF",
-        aktivasyon_token: null,
-        token_gecerlilik: null,
         ad_soyad: typeof adSoyad === "string" && adSoyad.trim() ? adSoyad.trim() : user.ad_soyad,
         telefon: typeof telefon === "string" && telefon.trim() ? telefon.trim() : user.telefon
-      };
-      if (supabase) {
-        const { data: updated, error } = await supabase.from("kullanicilar").update(changes).eq("id", user.id).eq("aktivasyon_token", cleanToken).eq("durum", "BEKLEMEDE_SIFRE").gt("token_gecerlilik", (/* @__PURE__ */ new Date()).toISOString()).select("id").maybeSingle();
-        if (error) throw error;
-        if (!updated)
-          return res.status(409).json({ basarili: false, hata: "Bu aktivasiya linki art\u0131q etibarl\u0131 deyil." });
-        if (firma2?.onay_durumu === "BEKLEMEDE") {
-          const { error: firmaError } = await supabase.from("firmalar").update({ onay_durumu: "AKTIF" }).eq("id", user.tenant_id).eq("onay_durumu", "BEKLEMEDE");
-          if (firmaError) throw firmaError;
-          firma2.onay_durumu = "AKTIF";
-        }
-      } else {
-        if (!isPendingActivation(user, cleanToken)) {
-          return res.status(400).json({ basarili: false, hata: "Bu aktivasiya linki art\u0131q etibarl\u0131 deyil." });
-        }
-        Object.assign(user, changes);
-      }
-      const activatedUser = { ...user, ...changes };
-      cacheUser(activatedUser);
-      const localFirma2 = firmalarVeritabani.find((item) => item.id === user.tenant_id);
-      if (localFirma2?.onayDurumu === "BEKLEMEDE") {
-        localFirma2.onayDurumu = "AKTIF";
-        firmalariKaydetDosyaya(firmalarVeritabani);
-      }
+      });
       return res.json({
         basarili: true,
         mesaj: "\u015Eifr\u0259niz u\u011Furla t\u0259yin edildi! \u0130ndi daxil ola bil\u0259rsiniz.",
@@ -8827,9 +9203,12 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
     if (email !== void 0 && typeof email !== "string" || telefon !== void 0 && typeof telefon !== "string") {
       return res.status(400).json({ basarili: false, hata: "E-po\xE7t v\u0259 telefon m\u0259tn format\u0131nda olmal\u0131d\u0131r." });
     }
+    if (invite.email && typeof email === "string" && email.trim() && email.trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
+      return res.status(403).json({ basarili: false, hata: "E-po\xE7t \xFCnvan\u0131 d\u0259v\u0259td\u0259ki \xFCnvanla uy\u011Fun g\u0259lmir." });
+    }
     const userEmail = (typeof invite.email === "string" ? invite.email.trim().toLowerCase() : "") || (typeof email === "string" ? email.trim().toLowerCase() : "");
     const userPhone = typeof telefon === "string" ? telefon.trim() : "";
-    const validEmail = userEmail.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail);
+    const validEmail = userEmail.length <= 150 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail);
     const phoneDigits = userPhone.replace(/\D/g, "");
     const validPhone = /^[+\d\s().-]+$/.test(userPhone) && phoneDigits.length >= 7 && phoneDigits.length <= 15;
     if (userEmail && !validEmail || userPhone && !validPhone || !validEmail && !validPhone) {
@@ -8844,10 +9223,10 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
       return res.status(400).json({ basarili: false, hata: "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil." });
     }
     const newUser = {
-      id: "usr_" + randomUUID4(),
+      id: "usr_" + randomUUID6(),
       tenant_id: invite.tenantId,
       ad_soyad: typeof adSoyad === "string" && adSoyad.trim() ? adSoyad.trim() : invite.kullananKisi || "Komanda \xDCzv\xFC",
-      email: userEmail || `invite-${randomUUID4()}@tomnap.internal`,
+      email: userEmail || `invite-${randomUUID6()}@tomnap.internal`,
       telefon: userPhone,
       rol: invite.rol,
       sifre_hash: sifreHashle(sifre),
@@ -8856,60 +9235,26 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
       token_gecerlilik: null,
       olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString()
     };
-    if (supabase) {
-      const { data: claimed, error } = await supabase.from("davetler").update({
-        durum: "KULLANILDI",
-        kullanan_adi: newUser.ad_soyad,
-        kullanan_telefon: newUser.telefon,
-        kullanildi_tarih: (/* @__PURE__ */ new Date()).toISOString()
-      }).eq("token", cleanToken).eq("durum", "AKTIF").gt("son_kullanma_tarihi", (/* @__PURE__ */ new Date()).toISOString()).select("token").maybeSingle();
-      if (error) throw error;
-      if (!claimed)
-        return res.status(409).json({ basarili: false, hata: "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil." });
-      const { data: inserted, error: insertError } = await supabase.from("kullanicilar").insert(newUser).select("id").maybeSingle();
-      if (insertError) throw insertError;
-      if (!inserted)
-        return res.status(503).json({ basarili: false, hata: "\u0130stifad\u0259\xE7i qeydi yarad\u0131la bilm\u0259di." });
-    }
-    if (!supabase && !isAvailableInvite(invite, cleanToken)) {
-      return res.status(400).json({ basarili: false, hata: "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil." });
-    }
-    invite.kullanildiMi = true;
-    invite.kullananKisi = newUser.ad_soyad;
-    const localInvite = davetlerVeritabani.find((item) => item.token === cleanToken);
-    if (localInvite) Object.assign(localInvite, invite);
-    cacheUser(newUser);
-    const localFirma = firmalarVeritabani.find((item) => item.id === invite.tenantId);
-    if (localFirma) {
-      localFirma.aktifKullaniciSayilari ||= {
-        PATRON: 1,
-        KANADA_SATINALMA: 0,
-        SATIS_SORUMLUSU: 0,
-        BAKU_FINANS: 0,
-        BAKU_KURYE: 0
-      };
-      const role = invite.rol;
-      if (localFirma.aktifKullaniciSayilari[role] !== void 0)
-        localFirma.aktifKullaniciSayilari[role] += 1;
-      firmalariKaydetDosyaya(firmalarVeritabani);
-    }
+    const { user: acceptedUser, firma: acceptedFirma } = await acceptInvite(cleanToken, newUser);
     return res.json({
       basarili: true,
       tenantId: invite.tenantId,
-      tenantAd: firma.ad,
+      tenantAd: acceptedFirma.ad,
       rol: invite.rol,
-      mesaj: `T\u0259brikl\u0259r! "${firma.ad}" komandas\u0131na ${invite.rol} olaraq \u015Fifr\u0259niz t\u0259yin edildi.`,
+      mesaj: `T\u0259brikl\u0259r! "${acceptedFirma.ad}" komandas\u0131na ${invite.rol} olaraq \u015Fifr\u0259niz t\u0259yin edildi.`,
       kullanici: {
-        id: newUser.id,
-        adSoyad: newUser.ad_soyad,
-        email: newUser.email,
-        telefon: newUser.telefon,
-        rol: newUser.rol,
-        tenantId: newUser.tenant_id
+        id: acceptedUser.id,
+        adSoyad: acceptedUser.ad_soyad,
+        email: acceptedUser.email,
+        telefon: acceptedUser.telefon,
+        rol: acceptedUser.rol,
+        tenantId: acceptedUser.tenant_id
       },
-      firma
+      firma: acceptedFirma
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof OnboardingError)
+      return res.status(error.status).json({ basarili: false, hata: error.message });
     return res.status(503).json({
       basarili: false,
       hata: "\u015Eifr\u0259 haz\u0131rda t\u0259yin edil\u0259 bilmir. Daha sonra yenid\u0259n c\u0259hd edin."
@@ -9067,8 +9412,8 @@ function createApp() {
   app2.use("/api/veritabani/demo-yukle", veritabaniYonetimLimiter);
   app2.use("/api/veritabani/yedek-yukle", veritabaniYonetimLimiter);
   try {
-    if (!fs5.existsSync(UPLOADS_DIR)) {
-      fs5.mkdirSync(UPLOADS_DIR, { recursive: true });
+    if (!fs4.existsSync(UPLOADS_DIR)) {
+      fs4.mkdirSync(UPLOADS_DIR, { recursive: true });
     }
   } catch {
   }

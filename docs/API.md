@@ -21,6 +21,8 @@ Değişiklik isteklerinde `x-csrf-token` zorunludur. Çerez dışında API anaht
 Firma kapsamı oturumdan gelir. Sistem yöneticisi firma işlemlerinde `x-tenant-id` ile somut firma seçmelidir.
 Normal kullanıcı başka firma veya `all` seçemez. Uyumsuz query/body/header değerleri reddedilir.
 
+Atomik kayıt/davet, e-posta kuyruğu, işlem kimliği gerektiren yedek yükleme ve boyut sınırları: [PERSISTENCE_SECURITY.md](PERSISTENCE_SECURITY.md). Bakım isteğinde `islem_id` UUID olmalı; belirsiz ağ sonucunda aynı kimlik korunmalıdır. Varsayılan restore ekleme modudur; değiştirme/silme somut tenant onayı gerektirir.
+
 Tam rol matrisi, public rota listesi ve geçiş koşulları: [SESSION_SECURITY.md](SESSION_SECURITY.md).
 
 ---

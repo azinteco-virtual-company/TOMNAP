@@ -15,3 +15,8 @@ data/oturumlar.json
 data/oturumlar.json.*.tmp
 
 supabase/.temp/
+
+# Local identity snapshot contains password hashes, invitation tokens and email jobs.
+data/identity.json
+data/identity.json.*
+data/.identity.json.*.tmp

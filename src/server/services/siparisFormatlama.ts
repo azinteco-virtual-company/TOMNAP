@@ -22,6 +22,38 @@ export function uretUluslararasiKargoKodu(): string {
   return `${p}-${randomNum}-YYZ`;
 }
 
+// Business fields without dedicated physical columns. Identity, tenant and
+// access-control fields must never be hydrated from this JSON object.
+export const SIPARIS_EK_ALANLAR = [
+  'guncellenme_tarihi',
+  'musteri_id',
+  'musteri_tipi',
+  'kanada_magaza_adi',
+  'kanada_alis_fiyati_cad',
+  'kanada_alis_fiyati_azn',
+  'kargo_agirligi_kg',
+  'kargo_ucreti_azn',
+  'kanada_fatura_no',
+  'kanada_fatura_gorseli',
+  'kanada_gumruk_fin_kodu',
+  'islem_gecmisi',
+] as const;
+
+/** Preserve unedited extras while explicit top-level edits (including null)
+ * take precedence. Unknown nested fields never become order properties. */
+export function siparisEkVerileriniAl(input: any): Record<string, unknown> {
+  const stored =
+    input.ek_veriler && typeof input.ek_veriler === 'object' && !Array.isArray(input.ek_veriler)
+      ? input.ek_veriler
+      : {};
+  const result: Record<string, unknown> = {};
+  for (const field of SIPARIS_EK_ALANLAR) {
+    if (Object.hasOwn(stored, field) && stored[field] !== undefined) result[field] = stored[field];
+    if (Object.hasOwn(input, field) && input[field] !== undefined) result[field] = input[field];
+  }
+  return result;
+}
+
 // Supabase tablosunda tanımlı fiziksel ve yazılabilir kolonlar (Tenant İzolasyonlu)
 export const SUPABASE_GECERLI_KOLONLAR = new Set([
   'tenant_id',
@@ -52,6 +84,7 @@ export const SUPABASE_GECERLI_KOLONLAR = new Set([
   'eksik_bilgiler',
   'ai_guven_skoru',
   'is_demo',
+  'ek_veriler',
 ]);
 
 // Supabase'e yazarken payload'ı filtreleyen, özel teslimat notunu ve metadata'yı koruyan yardımcı
@@ -82,10 +115,13 @@ export function hazirlaSupabasePayload(input: any): Record<string, any> {
 
   const raw: Record<string, any> = {
     ...input,
+    ek_veriler: siparisEkVerileriniAl(input),
     tenant_id: input.tenant_id || 'kanada_shopper_baku',
     baku_tahsilat_notu: tahsilatNotu,
     eksik_bilgiler: eksikBilgiler,
-    ham_mesaj: input.ham_mesaj || (input.ozel_not ? `Talimat: ${input.ozel_not}` : (input.urun_aciklamasi || '')),
+    ham_mesaj:
+      input.ham_mesaj ||
+      (input.ozel_not ? `Talimat: ${input.ozel_not}` : input.urun_aciklamasi || ''),
     adet: Number(input.adet || 1),
     toplam_tutar: Number(input.toplam_tutar || 0),
     alinan_tutar: Number(input.alinan_tutar || 0),
@@ -105,6 +141,8 @@ export function hazirlaSupabasePayload(input: any): Record<string, any> {
 
 // Supabase'den veya bellekten gelen veriyi normalize eden yardımcı
 export function formatlaSiparis(s: any): any {
+  const extra = siparisEkVerileriniAl(s);
+  s = { ...extra, ...s, ek_veriler: extra };
   let bakuTahsilatNotu = (s.baku_tahsilat_notu || '').trim();
   let ozelNot = (s.ozel_not || '').trim();
 
@@ -163,13 +201,14 @@ export function formatlaSiparis(s: any): any {
   // Urunler dizisini normalize et ve alanları eşitle
   urunler = urunler.map((u: any, idx: number) => {
     const adi = u.urun_adi || u.urun_aciklamasi || `Ürün #${idx + 1}`;
-    const fiyati = u.tutar !== undefined ? Number(u.tutar) : (u.birim_fiyat !== undefined ? Number(u.birim_fiyat) : undefined);
+    const fiyati =
+      u.tutar !== undefined
+        ? Number(u.tutar)
+        : u.birim_fiyat !== undefined
+          ? Number(u.birim_fiyat)
+          : undefined;
 
-    let gorsel = u.urun_gorseli || u.gorsel_url || undefined;
-    // Özel durum: Könül İsaq siparişiyse ve Karl Lagerfeld çantalarıysa, hazırladığımız kaliteli görselleri bağla
-    if (!gorsel && (s.musteri_adi?.includes('Könül') || s.musteri_adi?.includes('Konul'))) {
-      gorsel = idx === 0 ? '/uploads/karl_lagerfeld_canta_1.svg' : '/uploads/karl_lagerfeld_canta_2.svg';
-    }
+    const gorsel = u.urun_gorseli || u.gorsel_url || undefined;
 
     return {
       ...u,
@@ -182,20 +221,12 @@ export function formatlaSiparis(s: any): any {
     };
   });
 
-  // Eğer Könül İsaq siparişiyse ve gorselUrlleri eski dosya adıysa, geçerli görsel yollarına güncelle
-  if (s.musteri_adi?.includes('Könül') || s.musteri_adi?.includes('Konul')) {
-    if (!gorselUrlleri || gorselUrlleri.length === 0 || gorselUrlleri.some((g: string) => typeof g === 'string' && g.includes('Panodan_'))) {
-      gorselUrlleri = [
-        '/uploads/whatsapp_konul_screenshot.svg',
-        '/uploads/karl_lagerfeld_canta_1.svg',
-        '/uploads/karl_lagerfeld_canta_2.svg',
-      ];
-    }
-  }
-
   const toplam = Number(s.toplam_tutar || 0);
   const alinan = Number(s.alinan_tutar || 0);
-  const kalan = s.kalan_tutar !== undefined && s.kalan_tutar !== null ? Number(s.kalan_tutar) : Math.max(0, toplam - alinan);
+  const kalan =
+    s.kalan_tutar !== undefined && s.kalan_tutar !== null
+      ? Number(s.kalan_tutar)
+      : Math.max(0, toplam - alinan);
 
   return {
     ...s,

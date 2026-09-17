@@ -1,3 +1,5 @@
+> Faz 3 bu rapordaki işlem bütünlüğü/kalıcılık açıklarını ele alır: [güncel düzeltmeler ve geçiş](PERSISTENCE_SECURITY.md). Aşağıdaki Faz 2 sonuçları tarihsel doğrulama kaydıdır.
+
 # TOMNAP — Oturum ve firma yetkilendirmesi, Faz 2
 
 17 Eylül 2026. Başlangıç: Faz 1 `a5fb15a`; dal: `codex/security-phase2`.

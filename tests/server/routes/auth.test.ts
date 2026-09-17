@@ -192,6 +192,7 @@ describe('E-poçt ilə Aktivasiya və Şifrəli Giriş Sistemi (/api/auth & /api
 
     // A real owner session authorizes the invitation and binds its tenant.
     firma.onayDurumu = 'AKTIF';
+    firma.rolLimitleri = { ...firma.rolLimitleri, BAKU_KURYE: 5 } as any;
     const ownerPassword = 'Existing owner password!';
     const ownerEmail = 'invite-owner@example.test';
     kullanicilarVeritabani.push({

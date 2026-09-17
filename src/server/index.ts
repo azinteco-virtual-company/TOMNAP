@@ -140,12 +140,16 @@ export async function startServer() {
   }
 
   return new Promise((resolve) => {
-    const server = app.listen(PORT, '0.0.0.0', () => {
-      logger.info(`Kanada-Bakü Lojistik Portalı port ${PORT} üzerinde hazır.`, {
-        port: PORT,
-        env: process.env.NODE_ENV || 'development',
-      });
-      resolve(server);
-    });
+    const server = app.listen(
+      PORT,
+      process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1',
+      () => {
+        logger.info(`Kanada-Bakü Lojistik Portalı port ${PORT} üzerinde hazır.`, {
+          port: PORT,
+          env: process.env.NODE_ENV || 'development',
+        });
+        resolve(server);
+      }
+    );
   });
 }
