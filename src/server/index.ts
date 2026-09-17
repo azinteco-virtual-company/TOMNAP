@@ -5,7 +5,11 @@ import helmet from 'helmet';
 
 import { PORT, UPLOADS_DIR } from './config';
 import { apiKeyAuth } from './middleware/auth';
-import { genelApiLimiter, aiEndpointLimiter, veritabaniYonetimLimiter } from './middleware/rateLimiter';
+import {
+  genelApiLimiter,
+  aiEndpointLimiter,
+  veritabaniYonetimLimiter,
+} from './middleware/rateLimiter';
 import { corsMiddleware } from './middleware/security';
 import { errorHandler } from './middleware/errorHandler';
 import { logger, requestLogger } from './logger';
@@ -16,7 +20,7 @@ import musterilerRouter from './routes/musteriler';
 import inboxRouter from './routes/inbox';
 import firmalarRouter from './routes/firmalar';
 import kuryelerRouter from './routes/kuryeler';
-import gorselRouter from './routes/gorsel';
+import gorselRouter, { serveUploadedImage } from './routes/gorsel';
 import veritabaniRouter from './routes/veritabani';
 import kargoRouter from './routes/kargoEntegrasyon';
 import authRouter from './routes/auth';
@@ -28,11 +32,13 @@ export function createApp() {
   app.set('trust proxy', 1);
 
   // 1. HTTP Güvenlik Başlıkları (Helmet)
-  app.use(helmet({
-    contentSecurityPolicy: false, // SPA için CSP'yi devre dışı bırak (Vite dev server uyumu)
-    crossOriginResourcePolicy: { policy: 'cross-origin' }, // Görsel servisi için
-    crossOriginEmbedderPolicy: false,
-  }));
+  app.use(
+    helmet({
+      contentSecurityPolicy: false, // SPA için CSP'yi devre dışı bırak (Vite dev server uyumu)
+      crossOriginResourcePolicy: { policy: 'cross-origin' }, // Görsel servisi için
+      crossOriginEmbedderPolicy: false,
+    })
+  );
 
   // 2. CORS Yapılandırması
   app.use(corsMiddleware());
@@ -83,8 +89,7 @@ export function createApp() {
   });
 
   // Uploads ve Görsel Servisi
-  app.use(gorselRouter);
-  app.use('/uploads', express.static(UPLOADS_DIR));
+  app.get('/uploads/:dosyaAdi', serveUploadedImage);
 
   // Route'ları Mount Et (Yalnızca /api altında güvenli ve korumalı)
   const mountRoutes = (basePath: string) => {
@@ -130,7 +135,10 @@ export async function startServer() {
 
   return new Promise((resolve) => {
     const server = app.listen(PORT, '0.0.0.0', () => {
-      logger.info(`Kanada-Bakü Lojistik Portalı port ${PORT} üzerinde hazır.`, { port: PORT, env: process.env.NODE_ENV || 'development' });
+      logger.info(`Kanada-Bakü Lojistik Portalı port ${PORT} üzerinde hazır.`, {
+        port: PORT,
+        env: process.env.NODE_ENV || 'development',
+      });
       resolve(server);
     });
   });

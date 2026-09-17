@@ -2,9 +2,9 @@ name: TOMNAP CI / CD Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   test-and-build:
@@ -32,7 +32,13 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Vitest Birim ve Entegrasyon Testlerini Çalıştır
-        run: npm test
+        run: npm run test:coverage
+
+      - name: Testlerin depo verisini değiştirmediğini doğrula
+        run: test -z "$(git status --porcelain -- data public/uploads)"
+
+      - name: Production bağımlılık güvenlik denetimi
+        run: npm audit --omit=dev --audit-level=moderate
 
       - name: Production Bundle Derlemesi (Vite + esbuild)
         run: npm run build

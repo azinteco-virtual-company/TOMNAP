@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { DATA_DIR } from '../../config';
 import {
   KargoSaglayiciInterface,
   KargoSaglayiciTipi,
@@ -15,7 +16,7 @@ import { supabase } from '../supabase';
 import { formatlaSiparis, hazirlaSupabasePayload } from '../siparisFormatlama';
 import { sifreleMetin, cozMetin } from '../crypto';
 
-const AYARLAR_DOSYA_YOLU = path.join(process.cwd(), 'data', 'kargo_ayarlari.json');
+const AYARLAR_DOSYA_YOLU = path.join(DATA_DIR, 'kargo_ayarlari.json');
 
 // Varsayılan Kargo Ayarı (Kanada Aramex Kurumsal Hesabı #72470858)
 const VARSAYILAN_AYARLAR: KargoSaglayiciAyarlari = {
@@ -77,7 +78,9 @@ class KargoMerkezi {
     };
   }
 
-  public kaydetAyarlar(yeniAyarlar: Partial<KargoSaglayiciAyarlari> & { tenantId: string }): KargoSaglayiciAyarlari {
+  public kaydetAyarlar(
+    yeniAyarlar: Partial<KargoSaglayiciAyarlari> & { tenantId: string }
+  ): KargoSaglayiciAyarlari {
     const tid = yeniAyarlar.tenantId || 'kanada_shopper_baku';
     const mevcut = this.getAyarlar(tid);
 
@@ -151,7 +154,13 @@ class KargoMerkezi {
     basarili: boolean;
     sorgulananSayi: number;
     guncellenenSayi: number;
-    detaylar: Array<{ id: string; takipNo: string; eskiDurum: string; yeniDurum: string; konum: string }>;
+    detaylar: Array<{
+      id: string;
+      takipNo: string;
+      eskiDurum: string;
+      yeniDurum: string;
+      konum: string;
+    }>;
   }> {
     const ayarlar = this.getAyarlar(tenantId);
     const provider = this.getProvider(ayarlar.saglayici);
@@ -200,7 +209,8 @@ class KargoMerkezi {
         // Sipariş notlarına canlı kargo durum güncellemesini ekle
         const kargoLog = `[${ayarlar.saglayici} Canlı: ${guncelleme.konum} - ${guncelleme.hamAciklama}]`;
         if (!siparis.baku_tahsilat_notu?.includes(guncelleme.konum)) {
-          siparis.baku_tahsilat_notu = `${siparis.baku_tahsilat_notu ? siparis.baku_tahsilat_notu + ' ' : ''}${kargoLog}`.trim();
+          siparis.baku_tahsilat_notu =
+            `${siparis.baku_tahsilat_notu ? siparis.baku_tahsilat_notu + ' ' : ''}${kargoLog}`.trim();
         }
 
         guncellenenSayi++;

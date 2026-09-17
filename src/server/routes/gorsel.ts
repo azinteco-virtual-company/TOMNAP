@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { UPLOADS_DIR, GEMINI_API_KEY } from '../config';
@@ -7,28 +7,24 @@ import { getGeminiClient, generateContentWithRetryAndFallback } from '../service
 import { supabase } from '../services/supabase';
 import { hazirlaSupabasePayload, formatlaSiparis } from '../services/siparisFormatlama';
 import { siparislerVeritabani } from '../services/state';
+import { fetchPublicResource, MAX_IMAGE_BYTES, PublicResourceError } from '../services/publicFetch';
 
 const router = Router();
 
 // Sayfadan og:image çekerek yüksek çözünürlüklü stüdyo fotoğrafını bulan yardımcı fonksiyon
 export async function fetchOgImageFromUrl(pageUrl: string): Promise<string | null> {
-  if (!pageUrl || !pageUrl.startsWith('http')) return null;
+  if (typeof pageUrl !== 'string' || !pageUrl.startsWith('http')) return null;
   const urlKontrol = urlGuvenlimi(pageUrl);
   if (!urlKontrol.guvenli) {
     console.warn(`[SSRF Engellendi] fetchOgImageFromUrl: ${pageUrl} — Sebep: ${urlKontrol.sebep}`);
     return null;
   }
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4500);
-    const resp = await fetch(pageUrl, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
-      },
+    const resp = await fetchPublicResource(pageUrl, {
+      timeoutMs: 4500,
+      maxBytes: 2 * 1024 * 1024,
+      accept: 'text/html,application/xhtml+xml',
     });
-    clearTimeout(timeout);
     if (!resp.ok) return null;
     const html = await resp.text();
     const ogMatch =
@@ -39,7 +35,11 @@ export async function fetchOgImageFromUrl(pageUrl: string): Promise<string | nul
     if (ogMatch && ogMatch[1]) {
       let imgUrl = ogMatch[1].trim();
       if (imgUrl.startsWith('//')) imgUrl = 'https:' + imgUrl;
-      if (imgUrl.startsWith('http') && !imgUrl.includes('placeholder') && !imgUrl.includes('logo')) {
+      if (
+        imgUrl.startsWith('http') &&
+        !imgUrl.includes('placeholder') &&
+        !imgUrl.includes('logo')
+      ) {
         return imgUrl;
       }
     }
@@ -51,72 +51,99 @@ export async function fetchOgImageFromUrl(pageUrl: string): Promise<string | nul
 
 // URL'nin gerçekten erişilebilir ve geçerli bir görsel olup olmadığını test eden yardımcı fonksiyon
 export async function isValidImageUrl(url: string): Promise<boolean> {
-  if (!url || !url.startsWith('http')) return false;
+  if (typeof url !== 'string' || !url.startsWith('http')) return false;
   const urlKontrol = urlGuvenlimi(url);
   if (!urlKontrol.guvenli) {
     console.warn(`[SSRF Engellendi] isValidImageUrl: ${url} — Sebep: ${urlKontrol.sebep}`);
     return false;
   }
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
-    const resp = await fetch(url, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-        'Referer': new URL(url).origin,
-      },
-    });
-    clearTimeout(timeout);
+    const resp = await fetchPublicResource(url, { timeoutMs: 3500 });
     if (!resp.ok) return false;
     const contentType = resp.headers.get('content-type') || '';
-    return contentType.startsWith('image/');
+    if (!contentType.startsWith('image/')) return false;
+    inspectImage(Buffer.from(await resp.arrayBuffer()), contentType.split(';')[0]);
+    return true;
   } catch {
     return false;
   }
 }
 
-// 1. Akıllı görsel servisi: Dosya birebir yoksa aynı indeksteki veya mevcut son görselle kurtarır
-router.get('/uploads/:dosyaAdi', (req, res, next) => {
-  const dosyaAdi = sanitizeDosyaAdi(req.params.dosyaAdi);
-  const tamYol = path.join(UPLOADS_DIR, dosyaAdi);
-
-  if (!yolGuvenlimi(tamYol, UPLOADS_DIR)) {
-    return res.status(403).send('Erişim reddedildi.');
+function decodeImage(base64: string, declaredMime?: string) {
+  const dataUrl = base64.match(/^data:([^;]+);base64,(.*)$/s);
+  const encoded = dataUrl ? dataUrl[2] : base64;
+  if (encoded.length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4) {
+    throw new PublicResourceError('Görsel en fazla 10 MB olabilir.', 413);
   }
-
-  if (fs.existsSync(tamYol)) {
-    return res.sendFile(tamYol);
+  if (!encoded || encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
+    throw new PublicResourceError('Geçersiz base64 görsel verisi.', 400);
   }
+  const buffer = Buffer.from(encoded, 'base64');
+  return inspectImage(buffer, declaredMime, dataUrl?.[1]);
+}
 
-  // Akıllı Fallback: Eğer dosya adı örn. gorsel_*_1.jpg veya gorsel_*_2.jpg ise
+function inspectImage(buffer: Buffer, ...declaredMimes: (string | undefined)[]) {
+  if (buffer.length > MAX_IMAGE_BYTES)
+    throw new PublicResourceError('Görsel en fazla 10 MB olabilir.', 413);
+  const png = buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  const jpeg = buffer.length >= 3 && buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255;
+  const webp =
+    buffer.length >= 12 &&
+    buffer.toString('ascii', 0, 4) === 'RIFF' &&
+    buffer.toString('ascii', 8, 12) === 'WEBP';
+  const mimeType = png ? 'image/png' : jpeg ? 'image/jpeg' : webp ? 'image/webp' : '';
+  if (!mimeType)
+    throw new PublicResourceError('Yalnızca PNG, JPEG veya WebP görselleri desteklenir.', 415);
+  for (const claimed of declaredMimes) {
+    if (claimed !== undefined && typeof claimed !== 'string')
+      throw new PublicResourceError('Geçersiz görsel türü.', 400);
+    if (
+      claimed &&
+      claimed.trim().toLowerCase() !== mimeType &&
+      !(claimed === 'image/jpg' && jpeg)
+    ) {
+      throw new PublicResourceError('Görsel türü dosya içeriğiyle eşleşmiyor.', 415);
+    }
+  }
+  return { buffer, mimeType, ext: png ? 'png' : jpeg ? 'jpg' : 'webp' };
+}
+
+// Only the exact uploaded file may be served. Missing files must not reveal
+// another customer's latest image.
+function uploadPath(dosyaAdi: string): string {
+  if (!dosyaAdi || sanitizeDosyaAdi(dosyaAdi) !== dosyaAdi) {
+    throw new PublicResourceError('Geçersiz görsel dosya yolu.');
+  }
+  const candidate = path.join(UPLOADS_DIR, dosyaAdi);
+  if (!yolGuvenlimi(candidate, UPLOADS_DIR)) {
+    throw new PublicResourceError('Erişim reddedildi.');
+  }
+  if (fs.existsSync(candidate)) {
+    const actual = fs.realpathSync(candidate);
+    const root = fs.realpathSync(UPLOADS_DIR);
+    if (!yolGuvenlimi(actual, root)) {
+      throw new PublicResourceError('Erişim reddedildi.');
+    }
+    return actual;
+  }
+  return candidate;
+}
+
+export function serveUploadedImage(req: Request, res: Response) {
   try {
-    const tumDosyalar = fs.readdirSync(UPLOADS_DIR).filter(f => !f.startsWith('.'));
-    const indexMatch = dosyaAdi.match(/_([0-9]+)\.(jpe?g|png|webp|svg)$/i);
-
-    if (indexMatch && indexMatch[1]) {
-      const arananIndex = indexMatch[1];
-      const uzanti = indexMatch[2];
-      const eslesenler = tumDosyalar.filter(f => f.endsWith(`_${arananIndex}.${uzanti}`) || f.endsWith(`_${arananIndex}.jpg`) || f.endsWith(`_${arananIndex}.png`));
-      if (eslesenler.length > 0) {
-        eslesenler.sort((a, b) => fs.statSync(path.join(UPLOADS_DIR, b)).mtimeMs - fs.statSync(path.join(UPLOADS_DIR, a)).mtimeMs);
-        return res.sendFile(path.join(UPLOADS_DIR, eslesenler[0]));
-      }
+    const file = uploadPath(req.params.dosyaAdi);
+    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+      return res.status(404).send('Görsel bulunamadı.');
     }
-
-    const resimDosyalari = tumDosyalar.filter(f => /\.(jpe?g|png|webp|svg)$/i.test(f));
-    if (resimDosyalari.length > 0) {
-      resimDosyalari.sort((a, b) => fs.statSync(path.join(UPLOADS_DIR, b)).mtimeMs - fs.statSync(path.join(UPLOADS_DIR, a)).mtimeMs);
-      return res.sendFile(path.join(UPLOADS_DIR, resimDosyalari[0]));
-    }
-  } catch (fbErr) {
-    console.warn('Görsel akıllı kurtarma hatası:', fbErr);
+    return res.sendFile(file);
+  } catch (error) {
+    return res
+      .status(error instanceof PublicResourceError ? error.status : 500)
+      .send('Görsele erişilemiyor.');
   }
+}
 
-  next();
-});
+router.get('/uploads/:dosyaAdi', serveUploadedImage);
 
 // 2. POST /api/upload-gorsel — Tekil Görsel Yükle
 router.post('/upload-gorsel', (req, res) => {
@@ -126,12 +153,10 @@ router.post('/upload-gorsel', (req, res) => {
       return res.status(400).json({ basarili: false, hata: 'Geçersiz görsel verisi' });
     }
 
-    const cleanBase64 = base64.replace(/^data:image\/\w+;base64,/, '');
-    const ext = (mimeType || '').includes('png') ? 'png' : (mimeType || '').includes('webp') ? 'webp' : 'jpg';
-    const benzersizAd = `urun_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+    const image = decodeImage(base64, mimeType);
+    const benzersizAd = `urun_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${image.ext}`;
     const dosyaYolu = path.join(UPLOADS_DIR, benzersizAd);
-
-    fs.writeFileSync(dosyaYolu, Buffer.from(cleanBase64, 'base64'));
+    fs.writeFileSync(dosyaYolu, image.buffer);
 
     res.json({
       basarili: true,
@@ -140,14 +165,16 @@ router.post('/upload-gorsel', (req, res) => {
     });
   } catch (err: any) {
     console.error('Görsel yükleme hatası:', err);
-    res.status(500).json({ basarili: false, hata: 'Görsel kaydedilemedi: ' + err.message });
+    res
+      .status(err instanceof PublicResourceError ? err.status : 500)
+      .json({ basarili: false, hata: 'Görsel kaydedilemedi: ' + err.message });
   }
 });
 
 // 3. GET /api/proxy-gorsel — Harici Resimler için Güvenli Vekil Sunucu (SSRF Korumalı)
 router.get('/proxy-gorsel', async (req, res) => {
   const gorselUrl = req.query.url as string;
-  if (!gorselUrl || !gorselUrl.startsWith('http')) {
+  if (typeof gorselUrl !== 'string' || !gorselUrl.startsWith('http')) {
     return res.status(400).send('Geçersiz görsel adresi');
   }
 
@@ -159,17 +186,7 @@ router.get('/proxy-gorsel', async (req, res) => {
   }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 7000);
-    const resp = await fetch(gorselUrl, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-        'Referer': new URL(gorselUrl).origin,
-      },
-    });
-    clearTimeout(timeout);
+    const resp = await fetchPublicResource(gorselUrl);
 
     if (!resp.ok) {
       return res.status(resp.status).send(`Görsel indirilemedi (${resp.status})`);
@@ -180,12 +197,14 @@ router.get('/proxy-gorsel', async (req, res) => {
       return res.status(400).send('Hedef adres resim dosyası değil');
     }
 
-    res.setHeader('Content-Type', contentType);
+    const image = inspectImage(Buffer.from(await resp.arrayBuffer()), contentType.split(';')[0]);
+    res.setHeader('Content-Type', image.mimeType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    const arrayBuf = await resp.arrayBuffer();
-    res.send(Buffer.from(arrayBuf));
+    res.send(image.buffer);
   } catch (err: any) {
-    res.status(500).send('Vekil sunucu hatası: ' + err.message);
+    res
+      .status(err instanceof PublicResourceError ? err.status : 502)
+      .send('Vekil sunucu hatası: ' + err.message);
   }
 });
 
@@ -279,7 +298,9 @@ Yanıtını YALNIZCA aşağıdaki JSON formatında döndür (başka açıklama e
     });
   } catch (err: any) {
     console.error('Katalog arama hatası:', err);
-    res.status(500).json({ basarili: false, hata: err.message || 'Ürün görsel araması başarısız oldu.' });
+    res
+      .status(500)
+      .json({ basarili: false, hata: err.message || 'Ürün görsel araması başarısız oldu.' });
   }
 });
 
@@ -287,47 +308,56 @@ Yanıtını YALNIZCA aşağıdaki JSON formatında döndür (başka açıklama e
 router.post('/gorselden-urun-ara', async (req, res) => {
   try {
     const { gorsel, mevcut_urun_adi, ek_ipucu } = req.body;
-    if (!gorsel) {
+    if (!gorsel || typeof gorsel !== 'string') {
       return res.status(400).json({ basarili: false, hata: 'Aranacak görsel verisi bulunamadı.' });
     }
 
     if (!GEMINI_API_KEY) {
-      return res.status(500).json({ basarili: false, hata: 'Gemini API anahtarı yapılandırılmamış.' });
+      return res
+        .status(500)
+        .json({ basarili: false, hata: 'Gemini API anahtarı yapılandırılmamış.' });
     }
 
     let base64Data = '';
     let mimeType = 'image/jpeg';
 
     if (gorsel.startsWith('data:')) {
-      const match = gorsel.match(/^data:([^;]+);base64,(.+)$/);
-      if (match) {
-        mimeType = match[1];
-        base64Data = match[2];
-      }
+      const image = decodeImage(gorsel);
+      mimeType = image.mimeType;
+      base64Data = image.buffer.toString('base64');
     } else if (gorsel.startsWith('/uploads/')) {
       const dosyaAdi = gorsel.replace('/uploads/', '');
-      const dosyaYolu = path.join(UPLOADS_DIR, dosyaAdi);
+      const dosyaYolu = uploadPath(dosyaAdi);
       if (fs.existsSync(dosyaYolu)) {
-        const buffer = fs.readFileSync(dosyaYolu);
-        base64Data = buffer.toString('base64');
-        mimeType = dosyaAdi.endsWith('.png') ? 'image/png' : 'image/jpeg';
+        const stat = fs.statSync(dosyaYolu);
+        if (!stat.isFile()) throw new PublicResourceError('Geçersiz görsel dosyası.');
+        if (stat.size > MAX_IMAGE_BYTES)
+          throw new PublicResourceError('Görsel boyut sınırını aşıyor.', 413);
+        const image = inspectImage(fs.readFileSync(dosyaYolu));
+        base64Data = image.buffer.toString('base64');
+        mimeType = image.mimeType;
       }
     } else if (gorsel.startsWith('http')) {
       try {
-        const fetchRes = await fetch(gorsel);
+        const fetchRes = await fetchPublicResource(gorsel);
         if (fetchRes.ok) {
-          const arrayBuffer = await fetchRes.arrayBuffer();
-          base64Data = Buffer.from(arrayBuffer).toString('base64');
-          const ct = fetchRes.headers.get('content-type');
-          if (ct && ct.startsWith('image/')) mimeType = ct;
+          const image = inspectImage(
+            Buffer.from(await fetchRes.arrayBuffer()),
+            fetchRes.headers.get('content-type')?.split(';')[0]
+          );
+          base64Data = image.buffer.toString('base64');
+          mimeType = image.mimeType;
         }
       } catch (err) {
+        if (err instanceof PublicResourceError) throw err;
         console.warn('Görsel URL indirilemedi:', err);
       }
     }
 
     if (!base64Data) {
-      return res.status(400).json({ basarili: false, hata: 'Görsel verisi okunamadı veya format desteklenmiyor.' });
+      return res
+        .status(400)
+        .json({ basarili: false, hata: 'Görsel verisi okunamadı veya format desteklenmiyor.' });
     }
 
     const ai = getGeminiClient();
@@ -412,24 +442,31 @@ Cevabını YALNIZCA geçerli bir JSON nesnesi formatında ver:
     if (sonuc.katalog_gorsel_url) {
       const gecerliMi = await isValidImageUrl(sonuc.katalog_gorsel_url);
       if (!gecerliMi) {
-        console.log(`[Görsel Doğrulama] Modelin ürettiği katalog URL geçersiz çıktı, temizleniyor.`);
+        console.log(
+          `[Görsel Doğrulama] Modelin ürettiği katalog URL geçersiz çıktı, temizleniyor.`
+        );
         sonuc.katalog_gorsel_url = '';
       }
     }
 
     if (!sonuc.katalog_gorsel_url) {
-      const adayLinkler = [sonuc.urun_sayfasi_url, ...(webLinkleri.map((w: any) => w.url))].filter(Boolean);
+      const adayLinkler = [sonuc.urun_sayfasi_url, ...webLinkleri.map((w: any) => w.url)].filter(
+        Boolean
+      );
       for (const link of adayLinkler) {
         if (!link || link.includes('google.com') || link.includes('google.com.tr')) continue;
         const ogResmi = await fetchOgImageFromUrl(link);
-        if (ogResmi && await isValidImageUrl(ogResmi)) {
+        if (ogResmi && (await isValidImageUrl(ogResmi))) {
           sonuc.katalog_gorsel_url = ogResmi;
           break;
         }
       }
     }
 
-    const aramaKelimeleri = (sonuc.google_arama_kelimeleri || `${sonuc.marka || ''} ${sonuc.resmi_urun_adi || ''}`).trim() || 'Ürün Ara';
+    const aramaKelimeleri =
+      (
+        sonuc.google_arama_kelimeleri || `${sonuc.marka || ''} ${sonuc.resmi_urun_adi || ''}`
+      ).trim() || 'Ürün Ara';
     const googleGorselAramaUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(aramaKelimeleri)}`;
     const googleWebAramaUrl = `https://www.google.com/search?q=${encodeURIComponent(aramaKelimeleri)}`;
     const googleAlisverisUrl = `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(aramaKelimeleri)}`;
@@ -438,20 +475,23 @@ Cevabını YALNIZCA geçerli bir JSON nesnesi formatında ver:
       sonuc.urun_sayfasi_url = googleWebAramaUrl;
     }
 
-    const sonWebLinkleri = webLinkleri.length > 0 ? webLinkleri.slice(0, 5) : [
-      {
-        baslik: `Google Görseller: ${aramaKelimeleri}`,
-        url: googleGorselAramaUrl,
-      },
-      {
-        baslik: `Google Alışveriş / Fiyatlar: ${aramaKelimeleri}`,
-        url: googleAlisverisUrl,
-      },
-      {
-        baslik: `Google Web Arama: ${aramaKelimeleri}`,
-        url: googleWebAramaUrl,
-      },
-    ];
+    const sonWebLinkleri =
+      webLinkleri.length > 0
+        ? webLinkleri.slice(0, 5)
+        : [
+            {
+              baslik: `Google Görseller: ${aramaKelimeleri}`,
+              url: googleGorselAramaUrl,
+            },
+            {
+              baslik: `Google Alışveriş / Fiyatlar: ${aramaKelimeleri}`,
+              url: googleAlisverisUrl,
+            },
+            {
+              baslik: `Google Web Arama: ${aramaKelimeleri}`,
+              url: googleWebAramaUrl,
+            },
+          ];
 
     res.json({
       basarili: true,
@@ -461,20 +501,31 @@ Cevabını YALNIZCA geçerli bir JSON nesnesi formatında ver:
     });
   } catch (err: any) {
     console.error('Görselden arama hatası:', err);
-    res.status(500).json({ basarili: false, hata: err.message || 'Görsel üzerinden arama yapılamadı.' });
+    res
+      .status(err instanceof PublicResourceError ? err.status : 500)
+      .json({ basarili: false, hata: err.message || 'Görsel üzerinden arama yapılamadı.' });
   }
 });
 
 // 6. POST /api/katalog-gorseli-kaydet — Web'den Bulunan Katalog Görselini Sipariş Ürününe Tanımla
 router.post('/katalog-gorseli-kaydet', async (req, res) => {
   try {
-    const { siparis_id, urun_indeksi, katalog_gorsel_url, urun_sayfasi_url, resmi_urun_adi } = req.body;
+    const { siparis_id, urun_indeksi, katalog_gorsel_url, urun_sayfasi_url, resmi_urun_adi } =
+      req.body;
     if (!siparis_id || urun_indeksi === undefined || !katalog_gorsel_url) {
-      return res.status(400).json({ basarili: false, hata: 'siparis_id, urun_indeksi ve katalog_gorsel_url gereklidir.' });
+      return res
+        .status(400)
+        .json({
+          basarili: false,
+          hata: 'siparis_id, urun_indeksi ve katalog_gorsel_url gereklidir.',
+        });
     }
 
     // SSRF Koruması: Dış URL verilmişse veritabanına sorgu atmadan önce doğrula
-    if (typeof katalog_gorsel_url === 'string' && (katalog_gorsel_url.startsWith('http://') || katalog_gorsel_url.startsWith('https://'))) {
+    if (
+      typeof katalog_gorsel_url === 'string' &&
+      (katalog_gorsel_url.startsWith('http://') || katalog_gorsel_url.startsWith('https://'))
+    ) {
       const urlKontrol = urlGuvenlimi(katalog_gorsel_url);
       if (!urlKontrol.guvenli) {
         return res.status(403).json({
@@ -490,7 +541,7 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
       if (data) mevcutSiparis = data;
     }
     if (!mevcutSiparis) {
-      mevcutSiparis = siparislerVeritabani.find(s => s.id === siparis_id);
+      mevcutSiparis = siparislerVeritabani.find((s) => s.id === siparis_id);
     }
 
     if (!mevcutSiparis) {
@@ -505,7 +556,11 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
     }
 
     const mevcutUrun = guncelUrunler[urun_indeksi];
-    const korunanOrijinalGorsel = mevcutUrun.orijinal_gorsel_url || mevcutUrun.urun_gorseli || (formatli.gorseller && formatli.gorseller[0]) || '';
+    const korunanOrijinalGorsel =
+      mevcutUrun.orijinal_gorsel_url ||
+      mevcutUrun.urun_gorseli ||
+      (formatli.gorseller && formatli.gorseller[0]) ||
+      '';
 
     let kaydedilecekGorselUrl = katalog_gorsel_url;
 
@@ -518,21 +573,15 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
     }
 
     if (kaydedilecekGorselUrl.startsWith('data:image/')) {
-      try {
-        const matches = kaydedilecekGorselUrl.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
-        if (matches) {
-          const rawExt = matches[1].toLowerCase();
-          const ext = rawExt.includes('png') ? '.png' : rawExt.includes('webp') ? '.webp' : '.jpg';
-          const buffer = Buffer.from(matches[2], 'base64');
-          const dosyaAdi = `kirpinti_${Date.now()}_${urun_indeksi}${ext}`;
-          const dosyaYolu = path.join(UPLOADS_DIR, dosyaAdi);
-          fs.writeFileSync(dosyaYolu, buffer);
-          kaydedilecekGorselUrl = `/uploads/${dosyaAdi}`;
-        }
-      } catch (errKirpinti) {
-        console.warn('Kırpıntı görseli dosyaya kaydedilemedi:', errKirpinti);
-      }
-    } else if (kaydedilecekGorselUrl.startsWith('http://') || kaydedilecekGorselUrl.startsWith('https://')) {
+      const image = decodeImage(kaydedilecekGorselUrl);
+      const dosyaAdi = `kirpinti_${Date.now()}_${urun_indeksi}.${image.ext}`;
+      const dosyaYolu = path.join(UPLOADS_DIR, dosyaAdi);
+      fs.writeFileSync(dosyaYolu, image.buffer);
+      kaydedilecekGorselUrl = `/uploads/${dosyaAdi}`;
+    } else if (
+      kaydedilecekGorselUrl.startsWith('http://') ||
+      kaydedilecekGorselUrl.startsWith('https://')
+    ) {
       const urlKontrol = urlGuvenlimi(kaydedilecekGorselUrl);
       if (!urlKontrol.guvenli) {
         return res.status(403).json({
@@ -541,13 +590,7 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
         });
       }
       try {
-        const response = await fetch(kaydedilecekGorselUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-            'Referer': new URL(kaydedilecekGorselUrl).origin,
-          },
-        });
+        const response = await fetchPublicResource(kaydedilecekGorselUrl);
 
         const contentType = response.headers.get('content-type') || '';
         if (contentType.includes('text/html')) {
@@ -559,14 +602,16 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
 
         if (response.ok && contentType.startsWith('image/')) {
           const arrayBuffer = await response.arrayBuffer();
-          const buffer = Buffer.from(arrayBuffer);
-          const ext = contentType.includes('png') ? '.png' : contentType.includes('webp') ? '.webp' : '.jpg';
-          const dosyaAdi = `katalog_${Date.now()}_${urun_indeksi}${ext}`;
+          const image = inspectImage(Buffer.from(arrayBuffer), contentType.split(';')[0]);
+          const dosyaAdi = `katalog_${Date.now()}_${urun_indeksi}.${image.ext}`;
           const dosyaYolu = path.join(UPLOADS_DIR, dosyaAdi);
-          fs.writeFileSync(dosyaYolu, buffer);
+          fs.writeFileSync(dosyaYolu, image.buffer);
           kaydedilecekGorselUrl = `/uploads/${dosyaAdi}`;
         }
       } catch (fetchErr) {
+        if (fetchErr instanceof PublicResourceError) {
+          return res.status(fetchErr.status).json({ basarili: false, hata: fetchErr.message });
+        }
         console.warn('Görsel yerel indirme uyarısı (URL doğrudan kullanılacak):', fetchErr);
       }
     }
@@ -594,19 +639,29 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
         .single();
       if (error) console.error('Supabase katalog görseli güncelleme hatası:', error.message);
       if (data) {
-        return res.json({ basarili: true, siparis: formatlaSiparis(data), mesaj: 'Orijinal web katalog görseli kaydedildi!' });
+        return res.json({
+          basarili: true,
+          siparis: formatlaSiparis(data),
+          mesaj: 'Orijinal web katalog görseli kaydedildi!',
+        });
       }
     }
 
-    const idx = siparislerVeritabani.findIndex(s => s.id === siparis_id);
+    const idx = siparislerVeritabani.findIndex((s) => s.id === siparis_id);
     if (idx !== -1) {
       siparislerVeritabani[idx].urunler = guncelUrunler;
     }
 
-    res.json({ basarili: true, siparis: { ...formatli, urunler: guncelUrunler }, mesaj: 'Orijinal web katalog görseli kaydedildi!' });
+    res.json({
+      basarili: true,
+      siparis: { ...formatli, urunler: guncelUrunler },
+      mesaj: 'Orijinal web katalog görseli kaydedildi!',
+    });
   } catch (err: any) {
     console.error('Katalog görseli kaydetme hatası:', err);
-    res.status(500).json({ basarili: false, hata: err.message });
+    res
+      .status(err instanceof PublicResourceError ? err.status : 500)
+      .json({ basarili: false, hata: err.message });
   }
 });
 
@@ -615,7 +670,9 @@ router.post('/urun-orijinal-gorsele-don', async (req, res) => {
   try {
     const { siparis_id, urun_indeksi } = req.body;
     if (!siparis_id || urun_indeksi === undefined) {
-      return res.status(400).json({ basarili: false, hata: 'siparis_id ve urun_indeksi gereklidir.' });
+      return res
+        .status(400)
+        .json({ basarili: false, hata: 'siparis_id ve urun_indeksi gereklidir.' });
     }
 
     let mevcutSiparis: any = null;
@@ -624,7 +681,7 @@ router.post('/urun-orijinal-gorsele-don', async (req, res) => {
       if (data) mevcutSiparis = data;
     }
     if (!mevcutSiparis) {
-      mevcutSiparis = siparislerVeritabani.find(s => s.id === siparis_id);
+      mevcutSiparis = siparislerVeritabani.find((s) => s.id === siparis_id);
     }
 
     if (!mevcutSiparis) {
@@ -639,7 +696,8 @@ router.post('/urun-orijinal-gorsele-don', async (req, res) => {
     }
 
     const u = guncelUrunler[urun_indeksi];
-    const geriDonecekGorsel = u.orijinal_gorsel_url || (formatli.gorseller && formatli.gorseller[0]) || '';
+    const geriDonecekGorsel =
+      u.orijinal_gorsel_url || (formatli.gorseller && formatli.gorseller[0]) || '';
 
     guncelUrunler[urun_indeksi] = {
       ...u,
@@ -663,16 +721,24 @@ router.post('/urun-orijinal-gorsele-don', async (req, res) => {
         .single();
       if (error) console.error('Supabase orijinal görsele dönme hatası:', error.message);
       if (data) {
-        return res.json({ basarili: true, siparis: formatlaSiparis(data), mesaj: 'Orijinal ekran görüntüsü başarıyla geri yüklendi.' });
+        return res.json({
+          basarili: true,
+          siparis: formatlaSiparis(data),
+          mesaj: 'Orijinal ekran görüntüsü başarıyla geri yüklendi.',
+        });
       }
     }
 
-    const idx = siparislerVeritabani.findIndex(s => s.id === siparis_id);
+    const idx = siparislerVeritabani.findIndex((s) => s.id === siparis_id);
     if (idx !== -1) {
       siparislerVeritabani[idx].urunler = guncelUrunler;
     }
 
-    res.json({ basarili: true, siparis: { ...formatli, urunler: guncelUrunler }, mesaj: 'Orijinal ekran görüntüsü başarıyla geri yüklendi.' });
+    res.json({
+      basarili: true,
+      siparis: { ...formatli, urunler: guncelUrunler },
+      mesaj: 'Orijinal ekran görüntüsü başarıyla geri yüklendi.',
+    });
   } catch (err: any) {
     console.error('Orijinal görsele dönme hatası:', err);
     res.status(500).json({ basarili: false, hata: err.message });

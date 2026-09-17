@@ -7,9 +7,10 @@ import {
   kullanicilariKaydetDosyaya,
 } from '../services/state';
 import { supabase } from '../services/supabase';
-import { tokenUret, sifreDogrula, sifreHashle } from '../services/crypto';
-import { sendActivationEmail, sendInviteEmail } from '../services/emailService';
+import { tokenUret } from '../services/crypto';
+import { sendActivationEmail, sendInviteEmail, getApplicationUrl } from '../services/emailService';
 import { FirmaTenantItem, KullaniciKaydi } from '../types';
+import { IS_PRODUCTION, RESEND_API_KEY } from '../config';
 
 const router = Router();
 
@@ -40,8 +41,20 @@ router.get('/firmalar', async (req, res) => {
           sahipEmail: d.sahip_email || '',
           sahipTelefon: d.sahip_telefon || '',
           menseiUlke: d.mensei_ulke || 'CA',
-          rolLimitleri: d.rol_limitleri || { PATRON: 1, KANADA_SATINALMA: 2, SATIS_SORUMLUSU: 4, BAKU_FINANS: 2, BAKU_KURYE: 10 },
-          aktifKullaniciSayilari: d.aktif_kullanici_sayilari || { PATRON: 1, KANADA_SATINALMA: 0, SATIS_SORUMLUSU: 0, BAKU_FINANS: 0, BAKU_KURYE: 0 },
+          rolLimitleri: d.rol_limitleri || {
+            PATRON: 1,
+            KANADA_SATINALMA: 2,
+            SATIS_SORUMLUSU: 4,
+            BAKU_FINANS: 2,
+            BAKU_KURYE: 10,
+          },
+          aktifKullaniciSayilari: d.aktif_kullanici_sayilari || {
+            PATRON: 1,
+            KANADA_SATINALMA: 0,
+            SATIS_SORUMLUSU: 0,
+            BAKU_FINANS: 0,
+            BAKU_KURYE: 0,
+          },
           kayitTarihi: d.kayit_tarihi || new Date().toISOString(),
         }));
         return res.json({
@@ -87,11 +100,30 @@ router.post('/firmalar/kayit', async (req, res) => {
       });
     }
 
-    const slug = ad
-      .toLowerCase()
-      .replace(/ə/g, 'e').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ü/g, 'u')
-      .replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ğ/g, 'g')
-      .replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36).slice(-4);
+    if (IS_PRODUCTION && !RESEND_API_KEY) {
+      return res
+        .status(503)
+        .json({
+          basarili: false,
+          hata: 'Aktivasiya məktubu xidməti hazır deyil. Daha sonra yenidən cəhd edin.',
+        });
+    }
+
+    getApplicationUrl();
+
+    const slug =
+      ad
+        .toLowerCase()
+        .replace(/ə/g, 'e')
+        .replace(/ı/g, 'i')
+        .replace(/ö/g, 'o')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ç/g, 'c')
+        .replace(/ğ/g, 'g')
+        .replace(/[^a-z0-9]/g, '_') +
+      '_' +
+      Date.now().toString(36).slice(-4);
 
     const upper = String(paket || 'PRO').toUpperCase();
     const normalPaket: 'BASLANGIC' | 'PRO' | 'ENTERPRISE' =
@@ -149,9 +181,6 @@ router.post('/firmalar/kayit', async (req, res) => {
       },
     };
 
-    firmalarVeritabani.push(yeniFirma);
-    firmalariKaydetDosyaya(firmalarVeritabani);
-
     // 1. Patron üçün İstifadəçi Qeydi və Şifrə Təyin Tokeni Yarat
     const aktivasyonToken = tokenUret(32);
     const tokenGecerlilik = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 saat
@@ -168,9 +197,6 @@ router.post('/firmalar/kayit', async (req, res) => {
       token_gecerlilik: tokenGecerlilik,
       olusturma_tarihi: new Date().toISOString(),
     };
-
-    kullanicilarVeritabani.push(yeniPatronUser);
-    kullanicilariKaydetDosyaya(kullanicilarVeritabani);
 
     // Supabase-ə yazmağa cəhd et (Etibarlı və tam ardıcıl, gizli timeout olmadan)
     if (supabase) {
@@ -193,7 +219,12 @@ router.post('/firmalar/kayit', async (req, res) => {
           aktif_kullanici_sayilari: yeniFirma.aktifKullaniciSayilari,
         });
         if (fErr) {
-          console.error('Supabase firmalar insert xətası:', fErr);
+          return res
+            .status(503)
+            .json({
+              basarili: false,
+              hata: 'Qeydiyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
+            });
         }
 
         const { error: uErr } = await supabase.from('kullanicilar').insert({
@@ -209,198 +240,44 @@ router.post('/firmalar/kayit', async (req, res) => {
           olusturma_tarihi: yeniPatronUser.olusturma_tarihi,
         });
         if (uErr) {
-          console.error('Supabase kullanicilar insert xətası:', uErr);
+          return res
+            .status(503)
+            .json({
+              basarili: false,
+              hata: 'İstifadəçi qeydi saxlanılmadı. Dəstək xidməti ilə əlaqə saxlayın.',
+            });
         }
       } catch (errDb) {
-        console.error('Supabase qeydiyyat yazma xətası:', errDb);
+        return res
+          .status(503)
+          .json({
+            basarili: false,
+            hata: 'Qeydiyyat xidməti əlçatan deyil. Daha sonra yenidən cəhd edin.',
+          });
       }
     }
 
-    // 2. Təhlükəsiz Şifrə Təyini E-poçtu Göndər
-    const protocol = req.protocol || 'http';
-    const host = req.get('host') || 'localhost:3000';
-    const appUrl = `${protocol}://${host}`;
+    firmalarVeritabani.push(yeniFirma);
+    firmalariKaydetDosyaya(firmalarVeritabani);
+    kullanicilarVeritabani.push(yeniPatronUser);
+    kullanicilariKaydetDosyaya(kullanicilarVeritabani);
+
+    // Activation links use the configured application origin, never request headers.
 
     const emailResult = await sendActivationEmail({
       email: sahipEmail,
       adSoyad: sahipAdi,
       butikAdi: ad,
       token: aktivasyonToken,
-      appUrl,
     });
 
     res.json({
       basarili: true,
-      mesaj: `Təbriklər! "${ad}" butiki üçün qeydiyyat qəbul edildi. Şifrənizi təyin etmək üçün təhlükəsizlik linki ${sahipEmail} ünvanına göndərildi.`,
+      mesaj: emailResult.basarili
+        ? `Qeydiyyat qəbul edildi. Şifrə təyini linki ${sahipEmail} ünvanına göndərildi.`
+        : 'Qeydiyyat qəbul edildi, lakin aktivasiya məktubu göndərilə bilmədi. Dəstək xidməti ilə əlaqə saxlayın.',
       firma: yeniFirma,
-      aktivasyonLinki: emailResult.link,
-    });
-  } catch (err: any) {
-    res.status(500).json({ basarili: false, hata: err.message });
-  }
-});
-
-// POST /api/firmalar/giris — Butik Sahibi və ya Komanda Üzvü Girişi (Boutique Login)
-router.post('/firmalar/giris', async (req, res) => {
-  try {
-    const body = req.body || {};
-    const girisMetni = String(body.identifikator || body.telefon || body.kod || '').trim();
-    const sifreMetni = String(body.sifre || '').trim();
-
-    if (!girisMetni) {
-      return res.status(400).json({
-        basarili: false,
-        hata: 'Zəhmət olmasa əlaqə nömrənizi, e-poçt və ya giriş kodunuzu daxil edin.',
-      });
-    }
-
-    const lower = girisMetni.toLowerCase();
-
-    // 1. Super Admin Kodları Yoxlanışı
-    if (lower === 'admin2026' || (lower === 'admin' && sifreMetni === 'admin2026')) {
-      return res.json({
-        basarili: true,
-        tip: 'super_admin',
-        rol: 'SUPER_ADMIN',
-        tenantId: 'all',
-        mesaj: 'Səlahiyyətli Super Admin girişi təsdiqləndi.',
-      });
-    }
-
-    // 2. Canlı Demo Kodları Yoxlanışı (Təqdimatlar üçün toxunulmaz)
-    if (lower === 'tomnap2026' || lower === 'tomnap' || (lower === 'demo' && sifreMetni === 'tomnap2026')) {
-      return res.json({
-        basarili: true,
-        tip: 'demo',
-        rol: 'SUPER_ADMIN',
-        tenantId: 'demo_sandbox',
-        mesaj: 'Canlı Sandbox Demo Mühitinə keçid edildi.',
-      });
-    }
-
-    // 3. Telefon nömrəsini təmizləyərək rəqəmlər üzrə müqayisə
-    const reqDigits = girisMetni.replace(/[^0-9]/g, '');
-
-    // Əvvəlcə istifadəçilər bazasında (kullanicilar) axtar
-    const tapilanKullanici = kullanicilarVeritabani.find((u) => {
-      const emailMatch = u.email && u.email.toLowerCase() === lower;
-      const uDigits = String(u.telefon || '').replace(/[^0-9]/g, '');
-      const phoneMatch =
-        reqDigits.length >= 7 &&
-        uDigits.length >= 7 &&
-        (reqDigits.endsWith(uDigits.slice(-7)) || uDigits.endsWith(reqDigits.slice(-7)));
-      return emailMatch || phoneMatch;
-    });
-
-    if (tapilanKullanici) {
-      if (tapilanKullanici.sifre_hash) {
-        if (!sifreMetni) {
-          return res.status(400).json({
-            basarili: false,
-            hata: 'Zəhmət olmasa şifrənizi daxil edin.',
-          });
-        }
-        if (!sifreDogrula(sifreMetni, tapilanKullanici.sifre_hash)) {
-          return res.status(401).json({
-            basarili: false,
-            hata: 'Daxil edilmiş şifrə yanlışdır. Zəhmət olmasa yenidən yoxlayın.',
-          });
-        }
-      } else if (sifreMetni && tapilanKullanici.durum === 'BEKLEMEDE_SIFRE') {
-        return res.status(403).json({
-          basarili: false,
-          hata: 'Hesabınız hələ aktivləşdirilməyib. Zəhmət olmasa e-poçt ünvanınıza göndərilən təhlükəsiz linkə keçid edərək şifrənizi təyin edin.',
-        });
-      }
-
-      const f = firmalarVeritabani.find((item) => item.id === tapilanKullanici.tenant_id);
-      return res.json({
-        basarili: true,
-        tip: 'butik',
-        rol: tapilanKullanici.rol,
-        tenantId: tapilanKullanici.tenant_id,
-        kullanici: {
-          id: tapilanKullanici.id,
-          adSoyad: tapilanKullanici.ad_soyad,
-          email: tapilanKullanici.email,
-          telefon: tapilanKullanici.telefon,
-          rol: tapilanKullanici.rol,
-          tenantId: tapilanKullanici.tenant_id,
-        },
-        firma: f,
-        mesaj: `Xoş gəldiniz, ${tapilanKullanici.ad_soyad}!`,
-      });
-    }
-
-    // Yaddaşdakı firmalarda axtar
-    let tapilanFirma: any = null;
-
-    // Supabase varsa ən son firmaları yoxla (3s timeout)
-    if (supabase) {
-      try {
-        const { data: dbFirmalar } = await supabase.from('firmalar').select('*');
-        if (Array.isArray(dbFirmalar) && dbFirmalar.length > 0) {
-          for (const dbF of dbFirmalar) {
-            if (!firmalarVeritabani.find((f) => f.id === dbF.id)) {
-              firmalarVeritabani.push({
-                id: dbF.id,
-                ad: dbF.ad,
-                sehir: dbF.sehir,
-                varsayilanParaBirimi: dbF.varsayilan_para_birimi || 'AZN',
-                varsayilanKomisyonYuzdesi: dbF.varsayilan_komisyon_yuzdesi || 15,
-                aciklama: dbF.aciklama,
-                isDemo: dbF.is_demo,
-                onayDurumu: dbF.onay_durumu || 'AKTIF',
-                paket: dbF.paket || 'PRO',
-                sahipAdi: dbF.sahip_adi,
-                sahipEmail: dbF.sahip_email,
-                sahipTelefon: dbF.sahip_telefon,
-                kayitTarihi: dbF.kayit_tarihi,
-                menseiUlke: dbF.mensei_ulke,
-                rolLimitleri: dbF.rol_limitleri,
-                aktifKullaniciSayilari: dbF.aktif_kullanici_sayilari,
-              });
-            }
-          }
-        }
-      } catch (dbErr) {
-        console.warn('Supabase firmalar axtarış xətası (yerli davam edir):', dbErr);
-      }
-    }
-
-    for (const f of firmalarVeritabani) {
-      const fPhoneDigits = String(f.sahipTelefon || '').replace(/[^0-9]/g, '');
-      const phoneMatch =
-        reqDigits.length >= 7 &&
-        fPhoneDigits.length >= 7 &&
-        (reqDigits.endsWith(fPhoneDigits.slice(-7)) || fPhoneDigits.endsWith(reqDigits.slice(-7)));
-
-      const emailMatch =
-        f.sahipEmail && f.sahipEmail.toLowerCase() === lower;
-
-      const adMatch =
-        f.ad.toLowerCase() === lower || f.id.toLowerCase() === lower;
-
-      if (phoneMatch || emailMatch || adMatch) {
-        tapilanFirma = f;
-        break;
-      }
-    }
-
-    if (!tapilanFirma) {
-      return res.status(404).json({
-        basarili: false,
-        hata: 'Bu məlumatlara uyğun aktiv butik tapılmadı. Zəhmət olmasa daxil etdiyiniz nömrəni yoxlayın və ya qeydiyyatdan keçin.',
-      });
-    }
-
-    res.json({
-      basarili: true,
-      tip: 'butik',
-      rol: 'PATRON',
-      tenantId: tapilanFirma.id,
-      firma: tapilanFirma,
-      mesaj: `Xoş gəldiniz! "${tapilanFirma.ad}" idarəetmə masasına daxil oldunuz.`,
+      emailGonderildi: emailResult.basarili,
     });
   } catch (err: any) {
     res.status(500).json({ basarili: false, hata: err.message });
@@ -442,6 +319,12 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
       return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
     }
 
+    if (
+      !['PATRON', 'KANADA_SATINALMA', 'SATIS_SORUMLUSU', 'BAKU_FINANS', 'BAKU_KURYE'].includes(rol)
+    ) {
+      return res.status(400).json({ basarili: false, hata: 'Etibarsız komanda rolu.' });
+    }
+
     // Limit yoxlanışı
     const limit = (firma.rolLimitleri as any)?.[rol] ?? 5;
     const movcud = (firma.aktifKullaniciSayilari as any)?.[rol] ?? 0;
@@ -453,7 +336,7 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
       });
     }
 
-    const token = 'inv_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+    const token = 'inv_' + tokenUret(32);
     const gecerlilikTarihi = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 gün
 
     const davet = {
@@ -469,6 +352,31 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
       kullananKisi: adSoyad ? String(adSoyad).trim() : undefined,
     };
 
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('davetler')
+          .insert({
+            id: davet.token,
+            token: davet.token,
+            firma_id: davet.tenantId,
+            rol: davet.rol,
+            olusturan_rol: davet.olusturanKisi,
+            durum: 'AKTIF',
+            son_kullanma_tarihi: davet.gecerlilikTarihi,
+          })
+          .select('token')
+          .maybeSingle();
+        if (error || !data) {
+          return res
+            .status(503)
+            .json({ basarili: false, hata: 'Dəvət saxlanılmadı. Daha sonra yenidən cəhd edin.' });
+        }
+      } catch {
+        return res.status(503).json({ basarili: false, hata: 'Dəvət xidməti əlçatan deyil.' });
+      }
+    }
+
     davetlerVeritabani.push(davet);
 
     // E-poçt göstərilibsə real dəvət göndər
@@ -476,10 +384,6 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
     let davetUrlTam = `/davet-qebul?token=${token}`;
 
     if (email && String(email).includes('@')) {
-      const protocol = req.protocol || 'http';
-      const host = req.get('host') || 'localhost:3000';
-      const appUrl = `${protocol}://${host}`;
-
       const emailSonuc = await sendInviteEmail({
         email: String(email).trim().toLowerCase(),
         adSoyad: adSoyad ? String(adSoyad).trim() : undefined,
@@ -487,27 +391,12 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
         rol,
         token,
         davetEden: olusturanKisi,
-        appUrl,
       });
 
       emailGonderildi = emailSonuc.basarili;
       if (emailSonuc.link) {
         davetUrlTam = emailSonuc.link;
       }
-    }
-
-    if (supabase) {
-      try {
-        await supabase.from('davetler').insert({
-          id: davet.token,
-          token: davet.token,
-          firma_id: davet.tenantId,
-          rol: davet.rol,
-          olusturan_rol: davet.olusturanKisi,
-          durum: 'AKTIF',
-          son_kullanma_tarihi: davet.gecerlilikTarihi,
-        });
-      } catch (errDb) {}
     }
 
     res.json({
@@ -526,128 +415,33 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
   }
 });
 
-// GET /api/firmalar/davet/:token — Dəvət Linkini Yoxlama
-router.get('/firmalar/davet/:token', async (req, res) => {
-  const { token } = req.params;
-  const davet = davetlerVeritabani.find((d) => d.token === token);
-  if (!davet) {
-    return res.status(404).json({ basarili: false, hata: 'Dəvət linki etibarsızdır və ya tapılmadı.' });
-  }
-
-  if (new Date(davet.gecerlilikTarihi) < new Date()) {
-    return res.status(400).json({ basarili: false, hata: 'Bu dəvət linkinin vaxtı bitmişdir.' });
-  }
-
-  const firma = firmalarVeritabani.find((f) => f.id === davet.tenantId);
-  res.json({
-    basarili: true,
-    davet,
-    firma: firma ? { id: firma.id, ad: firma.ad, sehir: firma.sehir } : null,
-  });
-});
-
-// POST /api/firmalar/davet/katil — Komandaya Qoşulma (Dəvəti Təsdiqləmə)
-router.post('/firmalar/davet/katil', async (req, res) => {
-  const { token, adSoyad, telefon, sifre } = req.body;
-  const davet = davetlerVeritabani.find((d) => d.token === token);
-  if (!davet) {
-    return res.status(404).json({ basarili: false, hata: 'Dəvət tapılmadı.' });
-  }
-
-  const firma = firmalarVeritabani.find((f) => f.id === davet.tenantId);
-  if (!firma) {
-    return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
-  }
-
-  davet.kullanildiMi = true;
-  davet.kullananKisi = adSoyad;
-
-  // Əgər şifrə təqdim edilibsə istifadəçi qeydi yaradılır
-  if (sifre && typeof sifre === 'string' && sifre.length >= 6) {
-    const yeniUser: KullaniciKaydi = {
-      id: 'usr_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4),
-      tenant_id: firma.id,
-      ad_soyad: adSoyad,
-      email: davet.email || `${davet.token.slice(0, 8)}@tomnap.internal`,
-      telefon: telefon || '',
-      rol: davet.rol as any,
-      sifre_hash: sifreHashle(sifre),
-      durum: 'AKTIF',
-      aktivasyon_token: null,
-      token_gecerlilik: null,
-      olusturma_tarihi: new Date().toISOString(),
-    };
-    kullanicilarVeritabani.push(yeniUser);
-    kullanicilariKaydetDosyaya(kullanicilarVeritabani);
-
-    if (supabase) {
-      try {
-        await supabase.from('kullanicilar').insert({
-          id: yeniUser.id,
-          tenant_id: yeniUser.tenant_id,
-          ad_soyad: yeniUser.ad_soyad,
-          email: yeniUser.email,
-          telefon: yeniUser.telefon,
-          rol: yeniUser.rol,
-          sifre_hash: yeniUser.sifre_hash,
-          durum: 'AKTIF',
-          olusturma_tarihi: yeniUser.olusturma_tarihi,
-        });
-      } catch (e) {}
-    }
-  }
-
-  // Sayı artır
-  if (!firma.aktifKullaniciSayilari) {
-    firma.aktifKullaniciSayilari = {
-      PATRON: 1,
-      KANADA_SATINALMA: 0,
-      SATIS_SORUMLUSU: 0,
-      BAKU_FINANS: 0,
-      BAKU_KURYE: 0,
-    };
-  }
-  const rol = davet.rol as keyof typeof firma.aktifKullaniciSayilari;
-  if (firma.aktifKullaniciSayilari[rol] !== undefined) {
-    firma.aktifKullaniciSayilari[rol] = (firma.aktifKullaniciSayilari[rol] || 0) + 1;
-  }
-  firmalariKaydetDosyaya(firmalarVeritabani);
-
-  if (supabase) {
-    try {
-      await supabase.from('davetler').update({
-        durum: 'KULLANILDI',
-        kullanildi_tarih: new Date().toISOString(),
-        kullanan_adi: adSoyad,
-        kullanan_telefon: telefon,
-      }).eq('token', token);
-
-      await supabase.from('firmalar').update({
-        aktif_kullanici_sayilari: firma.aktifKullaniciSayilari,
-      }).eq('id', firma.id);
-    } catch (errDb) {}
-  }
-
-  res.json({
-    basarili: true,
-    mesaj: `Xoş gəldiniz! "${firma.ad}" komandasına ${davet.rol} olaraq uğurla qoşuldunuz.`,
-    tenantId: firma.id,
-    tenantAd: firma.ad,
-    rol: davet.rol,
-  });
-});
-
 // POST /api/firmalar — Yeni Butik / Firma Ekle (Mövcud Admin endpointi)
 router.post('/firmalar', (req, res) => {
   try {
-    const { ad, sehir, varsayilanParaBirimi = 'AZN', varsayilanKomisyonYuzdesi = 15, aciklama } = req.body;
+    const {
+      ad,
+      sehir,
+      varsayilanParaBirimi = 'AZN',
+      varsayilanKomisyonYuzdesi = 15,
+      aciklama,
+    } = req.body;
     if (!ad) {
       return res.status(400).json({ basarili: false, hata: 'Firma / butik adı zorunludur.' });
     }
 
-    const slug = ad.toLowerCase()
-      .replace(/ə/g, 'e').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ç/g, 'c').replace(/ğ/g, 'g')
-      .replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36).slice(-4);
+    const slug =
+      ad
+        .toLowerCase()
+        .replace(/ə/g, 'e')
+        .replace(/ı/g, 'i')
+        .replace(/ö/g, 'o')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ç/g, 'c')
+        .replace(/ğ/g, 'g')
+        .replace(/[^a-z0-9]/g, '_') +
+      '_' +
+      Date.now().toString(36).slice(-4);
 
     const yeniFirma: FirmaTenantItem = {
       id: slug,
@@ -691,7 +485,7 @@ router.post('/firmalar', (req, res) => {
 // DELETE /api/firmalar/:id — Butik Sil
 router.delete('/firmalar/:id', (req, res) => {
   const { id } = req.params;
-  const index = firmalarVeritabani.findIndex(f => f.id === id);
+  const index = firmalarVeritabani.findIndex((f) => f.id === id);
   if (index === -1) {
     return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
   }

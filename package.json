@@ -14,13 +14,14 @@
     "clean": "rm -rf dist server.js",
     "test": "vitest run",
     "format": "prettier --write .",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@supabase/supabase-js": "^2.115.0",
     "dotenv": "^17.2.3",
-    "express": "^4.21.2",
+    "express": "4.22.3",
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
     "jspdf": "^4.2.1",
@@ -31,7 +32,7 @@
     "react-dom": "^19.0.1",
     "react-router-dom": "^7.18.3",
     "recharts": "^3.10.1",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
@@ -40,6 +41,7 @@
     "@types/node": "^22.14.0",
     "@types/supertest": "^7.2.1",
     "@vitejs/plugin-react": "^5.0.4",
+    "@vitest/coverage-v8": "5.0.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "prettier": "^3.9.6",

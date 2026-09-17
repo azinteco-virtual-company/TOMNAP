@@ -3,6 +3,7 @@ import request from 'supertest';
 import fs from 'fs';
 import { createApp } from '../../../src/server/index';
 import { FIRMALAR_DOSYA_YOLU } from '../../../src/server/config';
+import { kullanicilarVeritabani } from '../../../src/server/services/state';
 
 const app = createApp();
 
@@ -51,17 +52,15 @@ describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', ()
   });
 
   it('POST /api/firmalar/kayit — ekran görüntüsündeki exact payload ile test', async () => {
-    const res = await request(app)
-      .post('/api/firmalar/kayit')
-      .send({
-        ad: 'Test123',
-        sehir: 'Baku',
-        sahipAdi: 'TEstural',
-        sahipEmail: 'tural.musab.osmanli@gmail.com',
-        sahipTelefon: '+994103337692',
-        paket: 'PRO',
-        menseiUlke: 'CA',
-      });
+    const res = await request(app).post('/api/firmalar/kayit').send({
+      ad: 'Test123',
+      sehir: 'Baku',
+      sahipAdi: 'TEstural',
+      sahipEmail: 'signup-fixture@example.invalid',
+      sahipTelefon: '+994000000001',
+      paket: 'PRO',
+      menseiUlke: 'CA',
+    });
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
     if (res.body?.firma?.id) createdTenantIds.push(res.body.firma.id);
@@ -82,29 +81,25 @@ describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', ()
     const http = await import('http');
     const handler = (await import('../../../api/index')).default;
     const server = http.createServer((req, res) => handler(req, res));
-    const res = await request(server)
-      .post('/firmalar/kayit')
-      .send({
-        ad: 'Test123_VercelHandler',
-        sehir: 'Baku',
-        sahipAdi: 'TEstural',
-        sahipEmail: 'tural.musab.osmanli@gmail.com',
-        sahipTelefon: '+994103337692',
-        paket: 'PRO',
-        menseiUlke: 'CA',
-      });
+    const res = await request(server).post('/firmalar/kayit').send({
+      ad: 'Test123_VercelHandler',
+      sehir: 'Baku',
+      sahipAdi: 'TEstural',
+      sahipEmail: 'signup-fixture@example.invalid',
+      sahipTelefon: '+994000000001',
+      paket: 'PRO',
+      menseiUlke: 'CA',
+    });
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
     if (res.body?.firma?.id) createdTenantIds.push(res.body.firma.id);
   });
 
   it('POST /api/firmalar/kayit — çatışmayan sahələrdə 400 xətası qaytarmalı', async () => {
-    const res = await request(app)
-      .post('/api/firmalar/kayit')
-      .send({
-        ad: '',
-        sahipAdi: '',
-      });
+    const res = await request(app).post('/api/firmalar/kayit').send({
+      ad: '',
+      sahipAdi: '',
+    });
 
     expect(res.status).toBe(400);
     expect(res.body.basarili).toBe(false);
@@ -121,13 +116,11 @@ describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', ()
   });
 
   it('POST /api/firmalar/davet-olustur — kurye üçün dəvət linki yaratmalıdır', async () => {
-    const res = await request(app)
-      .post('/api/firmalar/davet-olustur')
-      .send({
-        tenantId: primaryTenantId,
-        rol: 'BAKU_KURYE',
-        olusturanKisi: 'Zəhra Qasımova',
-      });
+    const res = await request(app).post('/api/firmalar/davet-olustur').send({
+      tenantId: primaryTenantId,
+      rol: 'BAKU_KURYE',
+      olusturanKisi: 'Zəhra Qasımova',
+    });
 
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
@@ -149,13 +142,12 @@ describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', ()
   });
 
   it('POST /api/firmalar/davet/katil — komandaya qoşulmalı və kurye sayını artırmalı', async () => {
-    const res = await request(app)
-      .post('/api/firmalar/davet/katil')
-      .send({
-        token: inviteToken,
-        adSoyad: 'Kamran Əliyev (Kurye)',
-        telefon: '+994 55 123 99 88',
-      });
+    const res = await request(app).post('/api/firmalar/davet/katil').send({
+      token: inviteToken,
+      adSoyad: 'Kamran Əliyev (Kurye)',
+      telefon: '+994 55 123 99 88',
+      sifre: 'CourierTestPassword!',
+    });
 
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
@@ -163,10 +155,16 @@ describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', ()
   });
 
   it('POST /api/firmalar/giris — telefon nömrəsi ilə butik sahibinin uğurlu girişi', async () => {
+    const user = kullanicilarVeritabani.find((item) => item.tenant_id === primaryTenantId);
+    const activation = await request(app)
+      .post('/api/auth/sifre-belirle')
+      .send({ token: user?.aktivasyon_token, sifre: 'OwnerTestPassword!' });
+    expect(activation.status).toBe(200);
+
     // 1. Formatlı nömrə ilə giriş
     const res1 = await request(app)
       .post('/api/firmalar/giris')
-      .send({ identifikator: testPhone });
+      .send({ identifikator: testPhone, sifre: 'OwnerTestPassword!' });
 
     expect(res1.status).toBe(200);
     expect(res1.body.basarili).toBe(true);
@@ -176,7 +174,7 @@ describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', ()
     // 2. Fərqli formatlanmış rəqəmlərlə giriş (050...)
     const res2 = await request(app)
       .post('/api/firmalar/giris')
-      .send({ identifikator: '050' + testPhone.slice(6) });
+      .send({ identifikator: '050' + testPhone.slice(6), sifre: 'OwnerTestPassword!' });
 
     expect(res2.status).toBe(200);
     expect(res2.body.basarili).toBe(true);
@@ -206,7 +204,7 @@ describe('SaaS Onboarding, Butik Qeydiyyatı, Təsdiq və Dəvət Testləri', ()
   it('POST /api/firmalar/giris — mövcud olmayan nömrə üçün 404 qaytarmalıdır', async () => {
     const res = await request(app)
       .post('/api/firmalar/giris')
-      .send({ identifikator: '+994 99 999 99 99' });
+      .send({ identifikator: '+994 99 999 99 99', sifre: 'WrongPassword!' });
 
     expect(res.status).toBe(404);
     expect(res.body.basarili).toBe(false);

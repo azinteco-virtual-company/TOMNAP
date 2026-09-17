@@ -3,6 +3,7 @@
 > **TOMNAP**, sınır ötesi e-ticaret (cross-border commerce), çok kanallı sipariş yönetimi, yapay zeka destekli otomasyon ve son kilometre kapıya teslim lojistiğini uçtan uca yöneten kurumsal bir SaaS platformudur.
 
 ### 🧭 Marka Manifestosu (TOMNAP)
+
 - **T – Track:** Canlı kargo ve AWB barkod takibi
 - **O – Order:** Instagram, WhatsApp ve çok kanallı sipariş yönetimi
 - **M – Manage:** Butikler, müşteriler, kuryeler ve kargo entegrasyonu
@@ -10,28 +11,30 @@
 - **A – Automate:** AI destekli görsel/metin okuma ve otomatik durum güncellemeleri
 - **P – Parcel:** Son kilometre kapıya teslim ve tahsilat
 
+> Güvenlik durumu ve aşamalı iyileştirme planı: [yeniden inceleme](docs/SECURITY_RECHECK.md). Bu dal üretime hazırlık çalışmalarını içerir; kalan oturum/yetkilendirme engelleri raporda listelenmiştir.
+
 ## 🚀 Özellikler
 
 - **AI Destekli Sipariş Ayrıştırma:** Google Gemini 2.5 Flash entegrasyonu ile WhatsApp mesajları, görseller veya bağlantılardan müşteri, ürün, fiyat ve adres bilgilerini otomatik ayrıştırma.
-- **Multi-Tenant SaaS Mimarisi:** Farklı kargo ve lojistik firmaları için tam veri izolasyonu.
+- **Tenant desteği:** Firma bazlı veri alanları mevcut; sunucu oturumu, rol ve tenant yetkilendirmesi henüz tamamlanmadı.
 - **Finans & Kâr-Zarar Analitiği:** Toronto alış (CAD) ve Bakü tahsilat (AZN) kurları üzerinden dinamik ciro, net kâr marjı, kargo maliyeti ve alacak takibi.
 - **Bakü Son Mil Teslimatı:** Kurye zimmetleme, teslimat durumu güncelleme ve canlı kurye masası.
 - **Kargo Manifesto & Çeki Listesi:** Otomatik PDF manifesto ve Excel çeki listesi dışa aktarımı.
-- **Hibrit Veritabanı:** Supabase PostgreSQL bulut veritabanı ve kesinti anında sıfır kesintili in-memory bellek rejimine otomatik geçiş.
+- **Veri saklama:** Supabase ve yerel bellek/dosya yolları birlikte kullanılıyor; kesinti ve çoklu sunucu tutarlılığı için ek çalışma gerekiyor.
 - **PWA Desteği:** Masaüstü ve mobilde çevrimdışı önbellekleme ve uygulama olarak yüklenebilme.
 
 ---
 
 ## 🛠️ Teknoloji Yığını
 
-| Katman | Teknolojiler |
-|---|---|
-| **Frontend** | React 19, TypeScript, React Router v7, Zustand, Tailwind CSS v4, Lucide Icons, Recharts, Motion |
-| **Backend** | Node.js 22, Express, TypeScript, Helmet, Express-Rate-Limit |
-| **Yapay Zeka** | Google Gemini 2.5 Flash (`@google/genai`) |
-| **Veritabanı** | Supabase (PostgreSQL) + Local In-Memory Fallback |
-| **Test & Kalite** | Vitest, Supertest, Prettier, TypeScript Strict Mode |
-| **DevOps & Dağıtım** | Docker (Multi-stage build), Docker Compose, GitHub Actions CI/CD |
+| Katman               | Teknolojiler                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
+| **Frontend**         | React 19, TypeScript, React Router v7, Zustand, Tailwind CSS v4, Lucide Icons, Recharts, Motion |
+| **Backend**          | Node.js 22, Express, TypeScript, Helmet, Express-Rate-Limit                                     |
+| **Yapay Zeka**       | Google Gemini 2.5 Flash (`@google/genai`)                                                       |
+| **Veritabanı**       | Supabase (PostgreSQL) + Local In-Memory Fallback                                                |
+| **Test & Kalite**    | Vitest, Supertest, Prettier, TypeScript tip kontrolü (strict henüz kapalı)                      |
+| **DevOps & Dağıtım** | Docker (Multi-stage build), Docker Compose, GitHub Actions CI/CD                                |
 
 ---
 
@@ -74,10 +77,12 @@ TOMNAP/
 ## ⚡ Hızlı Başlangıç
 
 ### 1. Gereksinimler
-- **Node.js:** v20.x veya v22.x (v22 önerilir)
+
+- **Node.js:** v22.x (package.json gereksinimi)
 - **npm:** v10+
 
 ### 2. Kurulum
+
 ```bash
 # Depoyu klonlayın
 git clone https://github.com/your-org/tomnap.git
@@ -88,12 +93,15 @@ npm install
 ```
 
 ### 3. Ortam Değişkenleri (.env)
+
 Kök dizinde `.env` dosyasını oluşturun:
+
 ```bash
 cp .env.example .env
 ```
 
 Gerekli anahtarları yapılandırın:
+
 ```env
 PORT=3000
 NODE_ENV=development
@@ -111,9 +119,11 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 ```
 
 ### 4. Geliştirme Sunucusunu Başlatma
+
 ```bash
 npm run dev
 ```
+
 Uygulama `http://localhost:3000` adresinde açılacaktır (Hot Module Replacement ve Vite dev server etkindir).
 
 ---
@@ -138,16 +148,20 @@ npm run format
 ## 🐳 Docker ile Dağıtım
 
 ### Docker Compose ile Tek Komutta Çalıştırma:
+
 ```bash
 docker-compose up -d --build
 ```
+
 Konteyner otomatik olarak:
+
 1. Multi-stage build ile frontend ve backend'i derler.
 2. Sağlık kontrolünü (`/api/sistem-durum`) 30 saniyede bir icra eder.
 3. Güvenlik gereği izole `node` kullanıcısı ile çalışır.
 4. `3000` portundan servise açılır.
 
 Logları izlemek için:
+
 ```bash
 docker-compose logs -f
 ```
