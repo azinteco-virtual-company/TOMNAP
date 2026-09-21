@@ -1,3 +1,4 @@
+import { loadCompleteList, newestFirst } from '../lib/completeList';
 import { create } from 'zustand';
 import { Siparis, KullaniciRolu, FirmaTenant } from '../types';
 import {
@@ -41,6 +42,9 @@ interface AppState {
   bildirim: string | null;
   dbKaynak: 'supabase' | 'bellek';
   yukleniyor: boolean;
+  siparisYuklemeHatasi: string | null;
+  siparisListesiHazir: boolean;
+  inboxYuklemeHatasi: string | null;
   menuDar: boolean;
   seciliKuryeId: string;
   firmaSiparisSayilariServer: Record<string, number>;
@@ -67,8 +71,13 @@ const privateData = () => ({
   firmaSiparisSayilariServer: {},
   seciliKuryeId: '',
   yukleniyor: false,
+  siparisYuklemeHatasi: null,
+  siparisListesiHazir: false,
+  inboxYuklemeHatasi: null,
   bildirim: null,
 });
+let ordersLoad = 0;
+let inboxLoad = 0;
 let restoration: Promise<void> | undefined;
 let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -231,22 +240,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     const id = tenantId ?? get().seciliFirmaId;
     if (id !== get().seciliFirmaId) return;
     const version = getApiContextVersion();
-    set({ yukleniyor: true });
+    const run = ++ordersLoad;
+    const current = () => version === getApiContextVersion() && run === ordersLoad;
+    set({ yukleniyor: true, siparisYuklemeHatasi: null });
     try {
-      const data = await (
-        await fetchWithRetry(
-          id && id !== 'all'
-            ? `/api/siparisler?tenant_id=${encodeURIComponent(id)}`
-            : '/api/siparisler'
-        )
-      ).json();
-      if (version === getApiContextVersion() && data.basarili && Array.isArray(data.siparisler))
-        set({ siparisler: data.siparisler, dbKaynak: data.kaynak || 'supabase' });
+      const data = await loadCompleteList<Siparis>(
+        id && id !== 'all'
+          ? `/api/siparisler?tenant_id=${encodeURIComponent(id)}`
+          : '/api/siparisler',
+        'siparisler'
+      );
+      if (current())
+        set({
+          siparisler: data.items.sort(newestFirst),
+          siparisListesiHazir: true,
+          dbKaynak: data.metadata.kaynak || 'supabase',
+        });
     } catch (error) {
-      if (version === getApiContextVersion())
-        set({ siparisler: [], bildirim: 'Sifarişlər yüklənə bilmədi.' });
+      if (current())
+        set({
+          siparisYuklemeHatasi:
+            error instanceof Error ? error.message : 'Sifarişlər tam yüklənə bilmədi.',
+        });
     } finally {
-      if (version === getApiContextVersion()) set({ yukleniyor: false });
+      if (current()) set({ yukleniyor: false });
     }
   },
   firmalariYukle: async () => {
@@ -268,16 +285,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     const id = tenantId ?? get().seciliFirmaId;
     if (id !== get().seciliFirmaId) return;
     const version = getApiContextVersion();
+    const run = ++inboxLoad;
     try {
-      const data = await (
-        await fetchWithRetry(
-          id && id !== 'all' ? `/api/inbox?tenant_id=${encodeURIComponent(id)}` : '/api/inbox'
-        )
-      ).json();
-      if (version === getApiContextVersion() && data.basarili)
-        set({ inboxSayisi: typeof data.toplam === 'number' ? data.toplam : 0 });
+      const data = await loadCompleteList<any>(
+        id && id !== 'all' ? `/api/inbox?tenant_id=${encodeURIComponent(id)}` : '/api/inbox',
+        'mesajlar'
+      );
+      if (version === getApiContextVersion() && run === inboxLoad)
+        set({
+          inboxSayisi: data.items.filter((item) => item.durum === 'BEKLEMEDE').length,
+          inboxYuklemeHatasi: null,
+        });
     } catch {
-      if (version === getApiContextVersion()) set({ inboxSayisi: 0 });
+      if (version === getApiContextVersion() && run === inboxLoad)
+        set({ inboxYuklemeHatasi: 'Gələn qutunun tam sayı yüklənmədi; əvvəlki say aktual deyil.' });
     }
   },
 }));

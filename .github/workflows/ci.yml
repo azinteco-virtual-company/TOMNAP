@@ -49,6 +49,36 @@ jobs:
           test -f dist/index.html || exit 1
           echo "✅ Production derlemesi başarıyla doğrulandı."
 
+  browser-security:
+    name: Chromium UI and authorization acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Install the pinned Chromium runtime
+        run: npm run test:e2e:install -- --with-deps
+      - name: Build the production UI
+        run: npm run build
+      - name: Run isolated real-browser security scenarios
+        run: npm run test:e2e
+      - name: Check repository fixtures remained unchanged
+        if: always()
+        run: test -z "$(git status --porcelain -- data public/uploads)"
+      - name: Preserve synthetic failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromium-security-failure
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
   database-security:
     name: PostgreSQL access, transactions and concurrency
     runs-on: ubuntu-latest
@@ -70,14 +100,18 @@ jobs:
       PGDATABASE: tomnap_test
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
       - name: Synthetic schema, migration and access regression checks
         run: |
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/base-fixture.sql
           psql -X -v ON_ERROR_STOP=1 -f supabase_saas_schema.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-access-fixture.sql
-          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20260917151255_server_sessions_and_private_tables.sql
-          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20260917160612_transactional_onboarding_inbox_and_order_maintenance.sql
-          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20260917170053_secure_cargo_couriers_and_legacy_uploads.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/storage-fixture.sql
+          for migration in supabase/migrations/*.sql; do
+            psql -X -v ON_ERROR_STOP=1 -f "$migration"
+          done
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/security-rls.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/inbox-transactions.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/maintenance-transactions.sql
@@ -85,5 +119,8 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/cargo-settings.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/courier-access.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-upload-migrations.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/private-storage.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/list-pagination.sql
           node tests/sql/inbox-concurrency.mjs
           node tests/sql/courier-concurrency.mjs
+          node tests/sql/list-pagination-concurrency.mjs

@@ -27,9 +27,7 @@ import {
   CheckCircle2,
   X,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { loadSpreadsheet, loadPdf, reportDocumentError } from '../utils/documentLibraries';
 import { useDil } from '../context/DilKonteksti';
 import { cleanPdfText, safePrintHtml } from '../utils/pdfHelpers';
 import { useAppStore } from '../store/appStore';
@@ -74,6 +72,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
   const [kopyalandi, setKopyalandi] = useState(false);
   const [yazdiriliyor, setYazdiriliyor] = useState(false);
   const [pdfHazirlaniyor, setPdfHazirlaniyor] = useState(false);
+  const [excelHazirlaniyor, setExcelHazirlaniyor] = useState(false);
 
   // Kargo & Aramex Entegrasyon Durumları
   const { seciliFirmaId, siparisleriYukle } = useAppStore();
@@ -321,8 +320,11 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
   };
 
   // 1. Formatlı Excel (.xlsx) İndirme
-  const excelIndir = () => {
+  const excelIndir = async () => {
+    if (excelHazirlaniyor) return;
+    setExcelHazirlaniyor(true);
     try {
+      const XLSX = await loadSpreadsheet();
       const baslik = [
         'Sıra',
         'Müştəri Adı',
@@ -415,13 +417,18 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
       XLSX.writeFile(wb, dosyaAdi);
     } catch (err) {
       console.error('Excel endirmə xətası:', err);
+      reportDocumentError(err);
+    } finally {
+      setExcelHazirlaniyor(false);
     }
   };
 
   // 2. Formatlı PDF İndirme (A4 Landscape - Daşmayan və Dəqiq Hesablanmış)
-  const pdfIndir = () => {
+  const pdfIndir = async () => {
+    if (pdfHazirlaniyor) return;
     setPdfHazirlaniyor(true);
     try {
+      const { jsPDF, autoTable } = await loadPdf();
       const doc = new jsPDF({
         orientation: 'landscape',
         unit: 'pt',
@@ -578,7 +585,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
       doc.save(dosyaAdi);
     } catch (err) {
       console.error('PDF hazırlama xətası:', err);
-      alert('PDF hazırlanarkən xəta baş verdi.');
+      reportDocumentError(err);
     } finally {
       setPdfHazirlaniyor(false);
     }
@@ -901,11 +908,12 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
           <button
             type="button"
             onClick={excelIndir}
+            disabled={excelHazirlaniyor}
             title="Excel (.xlsx)"
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>{t.excelIndir}</span>
+            <span>{excelHazirlaniyor ? 'Hazırlanır...' : t.excelIndir}</span>
           </button>
 
           <button

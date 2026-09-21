@@ -11,6 +11,8 @@ vi.mock('dotenv', () => ({ default: { config: () => ({ parsed: {} }) } }));
 const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tomnap-test-'));
 Object.assign(process.env, {
   NODE_ENV: 'test',
+  UPLOAD_STORAGE_BACKEND: 'local',
+  VERCEL: '',
   DATA_DIR: path.join(testRoot, 'data'),
   UPLOADS_DIR: path.join(testRoot, 'uploads'),
   SUPABASE_URL: '',

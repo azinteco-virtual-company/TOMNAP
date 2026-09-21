@@ -1,9 +1,8 @@
 import express from 'express';
 import path from 'path';
-import fs from 'fs';
 import helmet from 'helmet';
 
-import { PORT, UPLOADS_DIR } from './config';
+import { PORT } from './config';
 import { apiKeyAuth } from './middleware/auth';
 import {
   genelApiLimiter,
@@ -84,15 +83,6 @@ export function createApp() {
   app.use('/api/veritabani/temizle', veritabaniYonetimLimiter);
   app.use('/api/veritabani/demo-yukle', veritabaniYonetimLimiter);
   app.use('/api/veritabani/yedek-yukle', veritabaniYonetimLimiter);
-
-  // Uploads dizini oluştur (Serverless read-only mühitlərdə EROFS xətasının qarşısını al)
-  try {
-    if (!fs.existsSync(UPLOADS_DIR)) {
-      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-    }
-  } catch {
-    // Read-only filesystem (məs. Vercel Lambda /var/task)
-  }
 
   // Uploads ve Görsel Servisi
   app.get('/uploads/:dosyaAdi', serveUploadedImage);

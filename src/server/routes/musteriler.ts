@@ -1,5 +1,12 @@
 import { Router, Request } from 'express';
 import { randomUUID } from 'node:crypto';
+import {
+  listRequest,
+  customerSnapshot,
+  memoryPage,
+  customerKey,
+  compareKeys,
+} from '../services/listPagination';
 import { supabase } from '../services/supabase';
 import { formatlaSiparis } from '../services/siparisFormatlama';
 import {
@@ -26,25 +33,31 @@ function tenantFor(req: Request, mutation = false): string {
     throw Object.assign(new Error('Bir butik seçilmelidir.'), { status: 400 });
   return tenant;
 }
-async function rows(table: 'musteriler' | 'siparisler', tenant: string): Promise<any[]> {
-  // Demo data never shares the main tenant's customers or live database.
-  if (tenant === 'demo_sandbox')
-    return table === 'siparisler'
-      ? demoSiparislerVeritabani.map(formatlaSiparis)
-      : musterilerVeritabani.filter((r) => r.tenant_id === tenant);
-  if (supabase) {
-    let query = supabase.from(table).select('*');
-    if (tenant !== 'all') query = query.eq('tenant_id', tenant);
-    const { data, error } = await query;
+async function ownedCustomer(tenant: string, id: unknown) {
+  if (typeof id !== 'string') return undefined;
+  if (supabase && tenant !== 'demo_sandbox') {
+    const { data, error } = await supabase
+      .from('musteriler')
+      .select('*')
+      .eq('tenant_id', tenant)
+      .eq('id', id)
+      .maybeSingle();
     if (error) throw error;
-    return (data || [])
-      .filter((r) => belongs(r, tenant))
-      .map((r) => (table === 'siparisler' ? formatlaSiparis(r) : r));
+    return data && belongs(data, tenant) ? data : undefined;
   }
-  return (table === 'musteriler' ? musterilerVeritabani : siparislerVeritabani)
-    .filter((r) => belongs(r, tenant))
-    .map((r) => (table === 'siparisler' ? formatlaSiparis(r) : r));
+  return musterilerVeritabani.find((customer) => customer.id === id && belongs(customer, tenant));
 }
+function localSnapshot(tenant: string) {
+  return {
+    customers: musterilerVeritabani.filter((r) => belongs(r, tenant)),
+    orders: (tenant === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani).filter(
+      (r) => belongs(r, tenant)
+    ),
+  };
+}
+const newestFirst = (a: any, b: any) =>
+  (Date.parse(b.olusturma_tarihi) || 0) - (Date.parse(a.olusturma_tarihi) || 0) ||
+  compareKeys(String(a.id), String(b.id));
 const phone = (value: any) => String(value || '').replace(/\s+/g, '');
 function matches(customer: any, order: any) {
   if (rowTenant(customer) !== rowTenant(order)) return false;
@@ -68,10 +81,10 @@ const fail = (res: any, error: any) =>
 router.get('/musteriler', async (req, res) => {
   try {
     const tenant = tenantFor(req);
-    const [customers, orders] = await Promise.all([
-      rows('musteriler', tenant),
-      rows('siparisler', tenant),
-    ]);
+    const request = listRequest(req, tenant, 'musteriler');
+    const snapshot = await customerSnapshot(request, () => localSnapshot(tenant));
+    const customers = snapshot.customers;
+    const orders = snapshot.orders.map(formatlaSiparis).sort(newestFirst);
     // Build missing customer cards only from orders already inside this authority scope.
     for (const order of orders) {
       if (!order.musteri_adi || customers.some((c) => matches(c, order))) continue;
@@ -89,9 +102,7 @@ router.get('/musteriler', async (req, res) => {
     }
     const enriched = customers
       .map((customer) => {
-        const history = orders
-          .filter((order) => matches(customer, order))
-          .sort((a, b) => Date.parse(b.olusturma_tarihi) - Date.parse(a.olusturma_tarihi));
+        const history = orders.filter((order) => matches(customer, order)).sort(newestFirst);
         const latest = history[0];
         return {
           ...customer,
@@ -107,7 +118,13 @@ router.get('/musteriler', async (req, res) => {
         };
       })
       .sort((a, b) => Date.parse(b.son_siparis_tarihi) - Date.parse(a.son_siparis_tarihi));
-    res.json({ basarili: true, toplam: enriched.length, musteriler: enriched });
+    const page = memoryPage(request, enriched, snapshot.revision, customerKey);
+    res.json({
+      basarili: true,
+      toplam: page.pagination.total,
+      musteriler: page.items,
+      pagination: page.pagination,
+    });
   } catch (error) {
     fail(res, error);
   }
@@ -116,10 +133,10 @@ router.get('/musteriler', async (req, res) => {
 router.get('/musteriler/:id/siparisler', async (req, res) => {
   try {
     const tenant = tenantFor(req);
-    const [customers, orders] = await Promise.all([
-      rows('musteriler', tenant),
-      rows('siparisler', tenant),
-    ]);
+    const request = listRequest(req, tenant, `musteri-siparisler:${req.params.id}`);
+    const snapshot = await customerSnapshot(request, () => localSnapshot(tenant));
+    const customers = snapshot.customers;
+    const orders = snapshot.orders.map(formatlaSiparis).sort(newestFirst);
     let customer = customers.find((c) => c.id === req.params.id);
     if (!customer) {
       const order = orders.find(
@@ -134,12 +151,17 @@ router.get('/musteriler/:id/siparisler', async (req, res) => {
         };
     }
     if (!customer) return res.status(404).json({ basarili: false, hata: 'Müşteri bulunamadı.' });
+    const page = memoryPage(
+      request,
+      orders.filter((o) => matches(customer, o)),
+      snapshot.revision
+    );
     res.json({
       basarili: true,
       musteri: customer,
-      siparisler: orders
-        .filter((o) => matches(customer, o))
-        .sort((a, b) => Date.parse(b.olusturma_tarihi) - Date.parse(a.olusturma_tarihi)),
+      siparisler: page.items,
+      toplam: page.pagination.total,
+      pagination: page.pagination,
     });
   } catch (error) {
     fail(res, error);
@@ -153,7 +175,7 @@ router.post('/musteriler', async (req, res) => {
       req.body;
     if (typeof ad_soyad !== 'string' || !ad_soyad.trim())
       return res.status(400).json({ basarili: false, hata: 'Müşteri adı zorunludur.' });
-    const existing = id ? (await rows('musteriler', tenant)).find((c) => c.id === id) : undefined;
+    const existing = id ? await ownedCustomer(tenant, id) : undefined;
     if (id && !existing)
       return res.status(404).json({ basarili: false, hata: 'Müşteri bulunamadı.' });
     const customer: MusteriKaydi = {

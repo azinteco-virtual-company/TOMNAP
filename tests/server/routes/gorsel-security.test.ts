@@ -34,7 +34,8 @@ const trustedRequest: any = {
   auth: { role: 'PATRON', tenantId: 'demo_sandbox' },
   tenantId: 'demo_sandbox',
 };
-const save = (bytes: Buffer) => storeTenantImage(trustedRequest, bytes.toString('base64')).url;
+const save = async (bytes: Buffer) =>
+  (await storeTenantImage(trustedRequest, bytes.toString('base64'))).url;
 const app = express();
 app.use((req, _res, next) => {
   Object.assign(req, trustedRequest);
@@ -73,7 +74,7 @@ describe('image route file boundaries', () => {
   it('rejects symlinks outside the upload directory for serving and AI reading', async () => {
     const outside = path.join(process.env.DATA_DIR!, 'outside.png');
     fs.writeFileSync(outside, png);
-    const linked = save(png);
+    const linked = await save(png);
     fs.unlinkSync(path.join(UPLOADS_DIR, path.basename(linked)));
     fs.symlinkSync(outside, path.join(UPLOADS_DIR, path.basename(linked)));
     expect((await request(app).get(linked)).status).toBe(403);
@@ -84,7 +85,7 @@ describe('image route file boundaries', () => {
   });
 
   it('returns 404 for a missing file instead of a different uploaded image', async () => {
-    const existingUrl = save(png);
+    const existingUrl = await save(png);
     expect((await request(app).get('/uploads/missing_1.png')).status).toBe(404);
     const exact = await request(app).get(existingUrl);
     expect(exact.status).toBe(200);
@@ -92,7 +93,7 @@ describe('image route file boundaries', () => {
   });
 
   it('passes an exact local upload to AI without remote fetch', async () => {
-    const url = save(png);
+    const url = await save(png);
     const res = await request(app).post('/api/gorselden-urun-ara').send({ gorsel: url });
     expect(res.status).toBe(200);
     expect(mocks.generate.mock.calls[0][1].contents[0].inlineData.data).toBe(
@@ -103,7 +104,7 @@ describe('image route file boundaries', () => {
 
   it('preserves the detected WebP MIME when sending a local upload to AI', async () => {
     const webp = Buffer.from('UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA', 'base64');
-    const url = save(webp);
+    const url = await save(webp);
     const res = await request(app).post('/api/gorselden-urun-ara').send({ gorsel: url });
     expect(res.status).toBe(200);
     expect(mocks.generate.mock.calls[0][1].contents[0].inlineData.mimeType).toBe('image/webp');

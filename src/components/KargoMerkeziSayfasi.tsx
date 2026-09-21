@@ -350,14 +350,13 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="font-extrabold text-xl sm:text-2xl text-white tracking-tight">
-                Kargo & Aramex Lojistika Mərkəzi
+                Kargo Lojistika Mərkəzi
               </h1>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-500/20 text-blue-300 border border-blue-400/30">
-                Aramex REST v2 API
+                Provayder tənzimləmələri
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                Canlı Bağlantı
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-500/20 text-slate-300 border border-slate-400/30">
+                Bağlantı vəziyyəti təsdiqlənməyib
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-300 mt-1">
@@ -376,9 +375,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
             className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-60 text-white text-xs sm:text-sm font-extrabold flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all cursor-pointer ring-1 ring-blue-400/40"
           >
             <RefreshCw className={`w-4 h-4 ${senkronizeEdiliyor ? 'animate-spin' : ''}`} />
-            <span>
-              {senkronizeEdiliyor ? 'Sinxronlaşdırılır...' : 'Aramex İlə Sinxronizasiya Et'}
-            </span>
+            <span>{senkronizeEdiliyor ? 'Sinxronlaşdırılır...' : 'Provayderdən Yenilə'}</span>
           </button>
         </div>
       </div>
@@ -418,7 +415,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
           </div>
           <div>
             <div className="text-2xs font-extrabold uppercase tracking-wider text-slate-400">
-              Aktiv Provayder
+              Seçilmiş Provayder
             </div>
             <div className="text-sm font-black text-slate-900 dark:text-white mt-0.5">
               {saglayici}
@@ -487,7 +484,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
           }`}
         >
           <Activity className="w-4 h-4" />
-          <span>Canlı İzləmə & Siyahı ({kargoluSiparisler.length})</span>
+          <span>Kargo İzləmə Siyahısı ({kargoluSiparisler.length})</span>
         </button>
 
         <button
@@ -551,7 +548,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                 className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
               >
                 <Activity className={`w-3.5 h-3.5 ${hizliSorguYukleniyor ? 'animate-spin' : ''}`} />
-                <span>Canlı Sorğu</span>
+                <span>İzləmə Sorğusu</span>
               </button>
             </form>
           </div>
@@ -569,7 +566,9 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                       {hizliSorguSonuc.takipNo}
                     </span>
                     <span className="px-2 py-0.5 rounded text-2xs font-extrabold bg-blue-200 text-blue-900 dark:bg-blue-900 dark:text-blue-200">
-                      {hizliSorguSonuc.hamDurumKodu || 'LIVE'}
+                      {hizliSorguSonuc.hamDurumKodu ||
+                        hizliSorguSonuc.kaynak ||
+                        'Mənbə göstərilməyib'}
                     </span>
                   </div>
                   <p className="text-xs text-blue-900 dark:text-blue-300 mt-0.5">
@@ -601,7 +600,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                     <th className="p-3 min-w-[200px]">Məhsul Təsviri</th>
                     <th className="p-3 text-center w-20">Çəki (kg)</th>
                     <th className="p-3 min-w-[160px]">Cari Mərhələ</th>
-                    <th className="p-3 min-w-[200px]">Son Canlı Məkan / Not</th>
+                    <th className="p-3 min-w-[200px]">Son Məkan / Not</th>
                     <th className="p-3 text-center w-16">Detay</th>
                   </tr>
                 </thead>
@@ -809,7 +808,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
             {/* 1. Kargo Provayder Seçimi */}
             <div>
               <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-2">
-                1. Aktiv Kargo Provayderi (Carrier Provider)
+                1. Kargo Provayderi Seçimi
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {saglayicilar.map((p) => {
@@ -850,11 +849,11 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                       <span
                         className={`text-3xs font-extrabold px-2 py-0.5 rounded w-fit ${
                           p.durum === 'AKTIF'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300'
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300'
                             : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300'
                         }`}
                       >
-                        {p.durum === 'AKTIF' ? 'Canlı Aktiv' : 'Genişlənə Bilən'}
+                        {p.durum === 'AKTIF' ? 'Konfiqurasiya seçimi' : 'Hazırlıq mərhələsi'}
                       </span>
                     </button>
                   );
@@ -1008,9 +1007,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                     <Activity
                       className={`w-3.5 h-3.5 text-blue-600 ${testEdiliyor ? 'animate-spin' : ''}`}
                     />
-                    <span>
-                      {testEdiliyor ? 'Yoxlanılır...' : 'Bağlantını Sına (Test Connection)'}
-                    </span>
+                    <span>{testEdiliyor ? 'Yoxlanılır...' : 'Parametrləri Yoxla'}</span>
                   </button>
                 </div>
               </div>
@@ -1021,17 +1018,21 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
               <div
                 className={`p-3.5 rounded-xl border text-xs font-semibold flex items-center justify-between ${
                   testSonucu.basarili
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300'
+                    ? 'bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300'
                     : 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300'
                 }`}
               >
                 <div className="flex items-center gap-2">
                   {testSonucu.basarili ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <CheckCircle2 className="w-4 h-4 text-blue-600" />
                   ) : (
                     <ShieldAlert className="w-4 h-4 text-rose-600" />
                   )}
-                  <span>{testSonucu.mesaj}</span>
+                  <span>
+                    {testSonucu.basarili
+                      ? 'Parametr yoxlaması tamamlandı. Canlı provayder bağlantısı təsdiqlənməyib.'
+                      : testSonucu.mesaj}
+                  </span>
                 </div>
                 <span className="font-mono text-2xs opacity-80">{testSonucu.gecikmeMs}ms</span>
               </div>

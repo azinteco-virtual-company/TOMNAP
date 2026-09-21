@@ -1,3 +1,5 @@
+> Faz 5: liste API’leri artık sayfalıdır; [tam liste sözleşmesi ve özel depolama](PHASE5_RELIABILITY.md). Güncel istemci ile sunucu birlikte yayımlanmalıdır.
+
 > Faz 4: kurye görev API'leri ve sürümlü kargo ayarları için [güncel sözleşme ve geçiş notları](PHASE4_SECURITY.md).
 
 # TOMNAP API Dokümantasyonu
@@ -62,12 +64,13 @@ Kiracılar arası veri sızıntısı olup olmadığını doğrular.
 
 ### `GET /api/siparisler`
 
-Filtrelenmiş sipariş listesini döndürür.
+Yetkili firma kapsamındaki siparişlerin tek sayfasını döndürür. Tam liste için `pagination.hasMore` bitene kadar aynı kapsamla ilerleyin; tek sayfa finans toplamı değildir.
 
 **Query Parametreleri:**
 
 - `tenant_id` (string): Firma filtresi.
-- `durum` (string): Lojistik durumu filtresi (`KANADA_SATINALIM_BEKLIYOR`, `KANADA_DEPO`, `ULUSLARARASI_KARGO`, `BAKU_DAGITIM_ARKADAS`, `TESLIM_EDILDI`).
+- `page_size` (1–500): Varsayılan 200.
+- `cursor` (string): Önceki yanıtın `pagination.nextCursor` değeri. Kayıtlar arada değişirse 409 döner.
 
 **Örnek Yanıt:**
 
@@ -75,6 +78,14 @@ Filtrelenmiş sipariş listesini döndürür.
 {
   "basarili": true,
   "kaynak": "supabase",
+  "pagination": {
+    "version": 1,
+    "total": 1,
+    "hasMore": false,
+    "nextCursor": null,
+    "revision": "ORNEK_SURUM",
+    "pageSize": 200
+  },
   "siparisler": [
     {
       "id": "sip-abc123",
@@ -164,7 +175,7 @@ WhatsApp mesajları, faturalar veya ürün bağlantılarını Google Gemini AI k
 
 ### `GET /api/musteriler`
 
-Müşteri rehberini, toplam sipariş sayılarını ve borç bakiyelerini listeler.
+Müşteri rehberinin tek sayfasını, tüm kaynak snapshot üzerinden hesaplanan sipariş/borç bilgileriyle döndürür. `page_size`, `cursor` ve `pagination` sipariş listesiyle aynı sözleşmededir. `GET /api/musteriler/:id/siparisler` geçmişi de sayfalıdır.
 
 ### `POST /api/musteriler`
 
@@ -176,9 +187,9 @@ Yeni müşteri profili ekler veya mevcut profili günceller.
 
 ### `GET /api/inbox`
 
-Otomatik webhook veya mesaj kanallarından gelen, insan operatör onayı bekleyen sipariş taslaklarını listeler.
+Mesajların tek sayfasını döndürür. `pagination.total` tüm mesajların sayısı; `toplam` bekleyenlerin sayısıdır. `page_size` ve `cursor` sipariş listesiyle aynı sözleşmededir.
 
-### `POST /api/inbox/onayla`
+### `POST /api/inbox/:id/onayla`
 
 Taslak siparişi onaylayarak aktif sipariş havuzuna aktarır.
 

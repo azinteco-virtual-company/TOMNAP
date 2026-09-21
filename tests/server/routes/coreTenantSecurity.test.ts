@@ -90,6 +90,41 @@ function database(tables: Record<string, any[]>) {
     failures,
     beforeUpdate: undefined as (() => void) | undefined,
     rpc: vi.fn(async (name: string, args: any) => {
+      if (name === 'tomnap_list_page' || name === 'tomnap_customer_snapshot') {
+        const selected =
+          name === 'tomnap_list_page' ? [args.p_dataset] : ['musteriler', 'siparisler'];
+        const failure = failures.findIndex(
+          (item) => selected.includes(item.table) && item.operation === 'select'
+        );
+        if (failure >= 0) {
+          failures.splice(failure, 1);
+          return { data: null, error: { message: 'private database detail' } };
+        }
+        const scoped = (table: string) =>
+          structuredClone(
+            (tables[table] || []).filter(
+              (row) => args.p_tenant === 'all' || row.tenant_id === args.p_tenant
+            )
+          );
+        const revision = 'a'.repeat(32);
+        if (name === 'tomnap_customer_snapshot')
+          return {
+            data: { revision, customers: scoped('musteriler'), orders: scoped('siparisler') },
+            error: null,
+          };
+        const all = scoped(args.p_dataset).sort((a, b) => (a.id < b.id ? -1 : 1));
+        return {
+          data: {
+            revision,
+            total: all.length,
+            pending: all.filter((row) => row.durum === 'BEKLEMEDE').length,
+            items: all
+              .filter((row) => !args.p_after || row.id > args.p_after)
+              .slice(0, args.p_limit + 1),
+          },
+          error: null,
+        };
+      }
       const row = tables.inbox_mesajlar.find(
         (item) => item.id === args.p_inbox_id && item.tenant_id === args.p_tenant_id
       );
@@ -377,7 +412,7 @@ describe('tenant boundaries in core routes', () => {
           .send({ musteri_id: 'customer-tenant-b', musteri_adi: 'A', urun_aciklamasi: 'B' })
       ).status
     ).toBe(404);
-    const img = storeTenantImage(
+    const img = await storeTenantImage(
       { auth: { role: 'PATRON' }, tenantId: 'tenant-b' } as any,
       'iVBORw0KGgo=',
       'image/png'
@@ -410,6 +445,8 @@ describe('authoritative database ownership and failure behavior', () => {
     }
     for (const query of environment.db.calls)
       expect(query.filters).toContainEqual(['eq', 'tenant_id', 'tenant-a']);
+    for (const [_name, args] of environment.db.rpc.mock.calls)
+      expect(args.p_tenant).toBe('tenant-a');
     expect((await request(app()).get('/api/musteriler/customer-tenant-b/siparisler')).status).toBe(
       404
     );
@@ -542,6 +579,30 @@ describe('authoritative database ownership and failure behavior', () => {
         .status
     ).toBe(503);
     expect(state.siparislerVeritabani).toEqual(before);
+  });
+
+  it('uses exact tenant + customer ID checks beyond the first 1000 directory rows', async () => {
+    environment.db.tables.musteriler = Array.from({ length: 1207 }, (_, i) => ({
+      ...customer('tenant-a'),
+      id: `customer-${String(i).padStart(4, '0')}`,
+    }));
+    const id = 'customer-1206';
+    const created = await request(app())
+      .post('/api/siparisler')
+      .send({ musteri_id: id, musteri_adi: 'Tail customer', urun_aciklamasi: 'Bag' });
+    expect(created.status).toBe(200);
+    const updated = await request(app())
+      .post('/api/musteriler')
+      .send({ id, ad_soyad: 'Updated tail customer' });
+    expect(updated.status).toBe(200);
+    const reads = environment.db.calls.filter(
+      (call: any) => call.table === 'musteriler' && call.operation === 'select'
+    );
+    expect(reads).toHaveLength(2);
+    for (const call of reads) {
+      expect(call.filters).toContainEqual(['eq', 'tenant_id', 'tenant-a']);
+      expect(call.filters).toContainEqual(['eq', 'id', id]);
+    }
   });
 
   it('updates DB-only CRM cards and rejects another tenant ID', async () => {

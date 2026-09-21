@@ -1,3 +1,5 @@
+> Güncel paket: [Faz 5 — eksiksiz listeler, özel depolama ve tarayıcı CI](docs/PHASE5_RELIABILITY.md).
+
 > Güncel güvenlik/kurulum paketi: [Faz 4 — şifreleme, kurye ve eski görsel geçişi](docs/PHASE4_SECURITY.md). Önceki raporlar kendi fazlarının anlık durumudur.
 
 > **Faz 3 güncellemesi:** [İşlem bütünlüğü, güvenli yedek yükleme ve migration](docs/PERSISTENCE_SECURITY.md).
@@ -19,7 +21,7 @@
 - **A – Automate:** AI destekli görsel/metin okuma ve otomatik durum güncellemeleri
 - **P – Parcel:** Son kilometre kapıya teslim ve tahsilat
 
-> Güvenlik durumu ve aşamalı iyileştirme planı: [yeniden inceleme](docs/SECURITY_RECHECK.md). Bu dal üretime hazırlık çalışmalarını içerir; üretim geçişi ve kalan işler güncel Faz 3 raporunda listelenmiştir.
+> Güvenlik durumu ve aşamalı iyileştirme planı: [yeniden inceleme](docs/SECURITY_RECHECK.md). Bu dal üretime hazırlık çalışmalarını içerir; üretim geçişi ve kalan işler güncel Faz 5 raporunda listelenmiştir.
 
 ## 🚀 Özellikler
 
@@ -28,7 +30,7 @@
 - **Finans & Kâr-Zarar Analitiği:** Toronto alış (CAD) ve Bakü tahsilat (AZN) kurları üzerinden dinamik ciro, net kâr marjı, kargo maliyeti ve alacak takibi.
 - **Bakü Son Mil Teslimatı:** Kurye zimmetleme, teslimat durumu güncelleme ve canlı kurye masası.
 - **Kargo Manifesto & Çeki Listesi:** Otomatik PDF manifesto ve Excel çeki listesi dışa aktarımı.
-- **Veri saklama:** Supabase ve yerel bellek/dosya yolları birlikte kullanılıyor; kesinti ve çoklu sunucu tutarlılığı için ek çalışma gerekiyor.
+- **Veri saklama:** Supabase yapılandırıldığında kalıcı işlemler DB üzerinden yürür; hata halinde yerel veriye geçilmez. Yerel geliştirme siparişleri geçicidir. Özel görseller için Supabase Storage seçeneği vardır.
 - **PWA Desteği:** Masaüstü ve mobilde çevrimdışı önbellekleme ve uygulama olarak yüklenebilme.
 
 ---
@@ -40,8 +42,8 @@
 | **Frontend**         | React 19, TypeScript, React Router v7, Zustand, Tailwind CSS v4, Lucide Icons, Recharts, Motion |
 | **Backend**          | Node.js 22, Express, TypeScript, Helmet, Express-Rate-Limit                                     |
 | **Yapay Zeka**       | Google Gemini 2.5 Flash (`@google/genai`)                                                       |
-| **Veritabanı**       | Supabase (PostgreSQL) + Local In-Memory Fallback                                                |
-| **Test & Kalite**    | Vitest, Supertest, Prettier, TypeScript tip kontrolü (strict henüz kapalı)                      |
+| **Veritabanı**       | Supabase (PostgreSQL/özel Storage); yerel geliştirme belleği/dosyaları                          |
+| **Test & Kalite**    | Vitest, Supertest, Playwright/Chromium, Prettier, TypeScript (strict henüz kapalı)              |
 | **DevOps & Dağıtım** | Docker (Multi-stage build), Docker Compose, GitHub Actions CI/CD                                |
 
 ---
@@ -139,11 +141,19 @@ Uygulama `http://localhost:3000` adresinde açılacaktır (Hot Module Replacemen
 
 ## 🧪 Testleri Çalıştırma
 
-Platformda 44 adet otomatik test bulunmaktadır (güvenlik, sanitizasyon, SSRF, rota entegrasyonu, Gemini AI mockları, Zustand store ve logger testleri):
+Güvenlik, rota, istemci, depolama ve taşıma testleri Vitest; gerçek tarayıcı senaryoları Playwright ile çalışır. Sayısal doğrulama sonuçları Faz 5 paket raporundadır:
 
 ```bash
 # Testleri çalıştır
 npm test
+
+# Kapsam raporu
+npm run test:coverage
+
+# İzole Chromium senaryoları (önce build)
+npm run build
+npm run test:e2e:install
+npm run test:e2e
 
 # TypeScript tip kontrolü
 npm run lint

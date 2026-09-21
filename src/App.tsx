@@ -92,6 +92,10 @@ export default function App() {
     aktifRol,
     inboxSayisi,
     bildirim,
+    yukleniyor,
+    siparisYuklemeHatasi,
+    siparisListesiHazir,
+    inboxYuklemeHatasi,
     dbKaynak,
     menuDar,
     seciliKuryeId,
@@ -471,7 +475,30 @@ export default function App() {
 
         {/* Ana İçerik Scroll Alanı */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 pb-24 lg:pb-8">
-          {aktifSekme === 'panel' ? (
+          {inboxYuklemeHatasi && (
+            <div role="alert" className="rounded-xl border border-amber-200 p-3 bg-amber-50">
+              {inboxYuklemeHatasi}{' '}
+              <button type="button" onClick={() => inboxSayisiGuncelle()} className="underline">
+                Yenidən yoxla
+              </button>
+            </div>
+          )}
+          {yukleniyor || (!siparisListesiHazir && !siparisYuklemeHatasi) ? (
+            <div role="status" className="rounded-xl border p-6 bg-white">
+              Sifarişlərin bütün səhifələri yoxlanılır…
+            </div>
+          ) : siparisYuklemeHatasi ? (
+            <div
+              role="alert"
+              className="rounded-xl border border-red-200 p-6 bg-red-50 text-red-900"
+            >
+              <p>Sifariş siyahısı tam yüklənmədi. Göstəricilər hazır deyil.</p>
+              <p>{siparisYuklemeHatasi}</p>
+              <button type="button" onClick={() => siparisleriYukle()} className="mt-3 underline">
+                Yenidən yüklə
+              </button>
+            </div>
+          ) : aktifSekme === 'panel' ? (
             <>
               {/* 1. Finans & Lojistik İstatistikleri (4 Metrik Kartı) */}
               <FinansLojistikOzet siparisler={goruntulenenSiparisler} />
@@ -661,7 +688,16 @@ export default function App() {
           await siparisleriYukle(seciliFirmaId);
           if (context !== getApiContextVersion())
             throw new DOMException('Oturum və ya butik dəyişdi.', 'AbortError');
-          const latest = useAppStore.getState().siparisler.find((order) => order.id === id);
+          const refreshed = useAppStore.getState();
+          if (
+            refreshed.yukleniyor ||
+            refreshed.siparisYuklemeHatasi ||
+            !refreshed.siparisListesiHazir
+          )
+            throw new Error(
+              refreshed.siparisYuklemeHatasi || 'Sifariş siyahısının yenilənməsi tamamlanmadı.'
+            );
+          const latest = refreshed.siparisler.find((order) => order.id === id);
           if (!latest) throw new Error('Sifariş yenilənə bilmədi və ya artıq əlçatan deyil.');
           setSeciliSiparis(latest);
         }}

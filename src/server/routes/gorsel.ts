@@ -1,15 +1,21 @@
 import { randomBytes } from 'node:crypto';
 import { Router, Request, Response } from 'express';
 import path from 'path';
-import fs from 'fs';
-import { UPLOADS_DIR, GEMINI_API_KEY } from '../config';
-import { sanitizeDosyaAdi, yolGuvenlimi, urlGuvenlimi } from '../middleware/security';
+import { GEMINI_API_KEY } from '../config';
+import { urlGuvenlimi } from '../middleware/security';
 import { getGeminiClient, generateContentWithRetryAndFallback } from '../services/gemini';
 import { supabase } from '../services/supabase';
 import { hazirlaSupabasePayload, formatlaSiparis } from '../services/siparisFormatlama';
 import { siparislerVeritabani } from '../services/state';
 import { fetchPublicResource, MAX_IMAGE_BYTES, PublicResourceError } from '../services/publicFetch';
 import { tenantImagePrefix as imagePrefix } from '../services/tenantImageNames';
+
+import { decodeImage, inspectImage } from '../services/imageValidation';
+import {
+  readPrivateImage,
+  writePrivateImage,
+  assertPrivateImageExists,
+} from '../services/privateImageStorage';
 
 const router = Router();
 
@@ -71,87 +77,26 @@ export async function isValidImageUrl(url: string): Promise<boolean> {
   }
 }
 
-function decodeImage(base64: string, declaredMime?: string) {
-  const dataUrl = base64.match(/^data:([^;]+);base64,(.*)$/s);
-  const encoded = dataUrl ? dataUrl[2] : base64;
-  if (encoded.length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4) {
-    throw new PublicResourceError('Görsel en fazla 10 MB olabilir.', 413);
-  }
-  if (!encoded || encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
-    throw new PublicResourceError('Geçersiz base64 görsel verisi.', 400);
-  }
-  const buffer = Buffer.from(encoded, 'base64');
-  return inspectImage(buffer, declaredMime, dataUrl?.[1]);
-}
-
-function inspectImage(buffer: Buffer, ...declaredMimes: (string | undefined)[]) {
-  if (buffer.length > MAX_IMAGE_BYTES)
-    throw new PublicResourceError('Görsel en fazla 10 MB olabilir.', 413);
-  const png = buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-  const jpeg = buffer.length >= 3 && buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255;
-  const webp =
-    buffer.length >= 12 &&
-    buffer.toString('ascii', 0, 4) === 'RIFF' &&
-    buffer.toString('ascii', 8, 12) === 'WEBP';
-  const mimeType = png ? 'image/png' : jpeg ? 'image/jpeg' : webp ? 'image/webp' : '';
-  if (!mimeType)
-    throw new PublicResourceError('Yalnızca PNG, JPEG veya WebP görselleri desteklenir.', 415);
-  for (const claimed of declaredMimes) {
-    if (claimed !== undefined && typeof claimed !== 'string')
-      throw new PublicResourceError('Geçersiz görsel türü.', 400);
-    if (
-      claimed &&
-      claimed.trim().toLowerCase() !== mimeType &&
-      !(claimed === 'image/jpg' && jpeg)
-    ) {
-      throw new PublicResourceError('Görsel türü dosya içeriğiyle eşleşmiyor.', 415);
-    }
-  }
-  return { buffer, mimeType, ext: png ? 'png' : jpeg ? 'jpg' : 'webp' };
-}
-
-// Only the exact uploaded file may be served. Missing files must not reveal
-// another customer's latest image.
-function uploadPath(dosyaAdi: string): string {
-  if (!dosyaAdi || sanitizeDosyaAdi(dosyaAdi) !== dosyaAdi) {
-    throw new PublicResourceError('Geçersiz görsel dosya yolu.');
-  }
-  const candidate = path.join(UPLOADS_DIR, dosyaAdi);
-  if (!yolGuvenlimi(candidate, UPLOADS_DIR)) {
-    throw new PublicResourceError('Erişim reddedildi.');
-  }
-  if (fs.existsSync(candidate)) {
-    const actual = fs.realpathSync(candidate);
-    const root = fs.realpathSync(UPLOADS_DIR);
-    if (!yolGuvenlimi(actual, root)) {
-      throw new PublicResourceError('Erişim reddedildi.');
-    }
-    return actual;
-  }
-  return candidate;
-}
-
-function ownedUploadPath(req: Request, name: string): string {
+// Authorize before accessing local or remote storage; object keys never grant access.
+function ownedUploadName(req: Request, name: string): string {
   if (!req.auth || !req.tenantId) throw new PublicResourceError('Oturum gerekli.', 401);
-  const candidate = uploadPath(name);
+  if (/[\\/]/.test(name)) throw new PublicResourceError('Geçersiz görsel dosya yolu.', 403);
   if (
     !/^t_[a-f0-9]{24}_[a-f0-9]{32}\.(png|jpg|webp)$/.test(name) ||
     (!(req.auth.role === 'SUPER_ADMIN' && req.tenantId === 'all') &&
       !name.startsWith(imagePrefix(req.tenantId)))
-  ) {
+  )
     throw new PublicResourceError('Görsel bulunamadı.', 404);
-  }
-  return candidate;
+  return name;
 }
 
-export function storeTenantImage(req: Request, base64: string, declaredMime?: string) {
+export async function storeTenantImage(req: Request, base64: string, declaredMime?: string) {
   if (!req.auth || !req.tenantId || req.tenantId === 'all')
     throw new PublicResourceError('Görsel için bir firma seçin.', 403);
   if (typeof base64 !== 'string') throw new PublicResourceError('Geçersiz görsel.', 400);
   const parsed = decodeImage(base64, declaredMime);
   const name = `${imagePrefix(req.tenantId)}${randomBytes(16).toString('hex')}.${parsed.ext}`;
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(uploadPath(name), parsed.buffer, { flag: 'wx', mode: 0o600 });
+  await writePrivateImage(name, parsed.buffer);
   return {
     url: `/uploads/${name}`,
     mimeType: parsed.mimeType,
@@ -163,6 +108,7 @@ export function storeTenantImage(req: Request, base64: string, declaredMime?: st
 // Unowned legacy files must be migrated explicitly; guessing ownership leaks data.
 export async function assertTenantImageReferences(req: Request, payload: unknown): Promise<void> {
   const pending: unknown[] = [payload];
+  const names = new Set<string>();
   let count = 0;
   while (pending.length) {
     if (++count > 100000) throw new PublicResourceError('İstek çok karmaşık.', 413);
@@ -170,18 +116,39 @@ export async function assertTenantImageReferences(req: Request, payload: unknown
     if (value && typeof value === 'object') pending.push(...Object.values(value));
     if (typeof value !== 'string') continue;
     const normalized = value.replace(/\\\//g, '/');
-    for (const match of normalized.matchAll(/(?:\/api)?\/uploads\/([^\s"'<>?#\\]+)/g)) {
+    for (const match of normalized.matchAll(/(?:\/api)?\/uploads\/([^\s"'<>?#]+)/g)) {
       let name: string;
       try {
         name = decodeURIComponent(match[1]);
       } catch {
         throw new PublicResourceError('Geçersiz görsel.', 400);
       }
-      const file = ownedUploadPath(req, name);
-      if (!fs.existsSync(file) || !fs.statSync(file).isFile())
-        throw new PublicResourceError('Görsel bulunamadı.', 404);
+      names.add(ownedUploadName(req, name));
+      if (names.size > 10000) throw new PublicResourceError('Çok fazla görsel bağlantısı.', 413);
     }
   }
+  // Authorize the complete payload before I/O. Bound remote fan-out and stop
+  // scheduling after an error or 30 seconds; each in-flight API call also has
+  // its own 15-second transport deadline. No writes have happened at this point.
+  const remaining = [...names];
+  const deadline = Date.now() + 30000;
+  let stopped = false;
+  const worker = async () => {
+    while (!stopped && remaining.length) {
+      if (Date.now() >= deadline) {
+        stopped = true;
+        throw new PublicResourceError('Görsel doğrulaması zaman aşımına uğradı.', 503);
+      }
+      const name = remaining.pop()!;
+      try {
+        await assertPrivateImageExists(name);
+      } catch (failure) {
+        stopped = true;
+        throw failure;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, remaining.length) }, worker));
 }
 
 const imageMetadataVersion = (row: any) =>
@@ -231,15 +198,15 @@ async function saveOrderImageMetadata(
   return updated;
 }
 
-export function serveUploadedImage(req: Request, res: Response) {
+export async function serveUploadedImage(req: Request, res: Response) {
   try {
-    const file = ownedUploadPath(req, req.params.dosyaAdi);
+    const name = ownedUploadName(req, req.params.dosyaAdi);
     res.setHeader('Cache-Control', 'private, no-store');
     res.vary('Cookie');
-    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
-      return res.status(404).send('Görsel bulunamadı.');
-    }
-    return res.sendFile(file);
+    const image = await readPrivateImage(name);
+    res.setHeader('Content-Type', image.mimeType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.send(image.buffer);
   } catch (error) {
     return res
       .status(error instanceof PublicResourceError ? error.status : 500)
@@ -250,14 +217,14 @@ export function serveUploadedImage(req: Request, res: Response) {
 router.get('/uploads/:dosyaAdi', serveUploadedImage);
 
 // 2. POST /api/upload-gorsel — Tekil Görsel Yükle
-router.post('/upload-gorsel', (req, res) => {
+router.post('/upload-gorsel', async (req, res) => {
   try {
     const { base64, mimeType, dosyaAdi } = req.body;
     if (!base64 || typeof base64 !== 'string') {
       return res.status(400).json({ basarili: false, hata: 'Geçersiz görsel verisi' });
     }
 
-    const stored = storeTenantImage(req, base64, mimeType);
+    const stored = await storeTenantImage(req, base64, mimeType);
     const benzersizAd = path.basename(stored.url);
 
     res.json({
@@ -428,18 +395,11 @@ router.post('/gorselden-urun-ara', async (req, res) => {
       const image = decodeImage(gorsel);
       mimeType = image.mimeType;
       base64Data = image.buffer.toString('base64');
-    } else if (gorsel.startsWith('/uploads/')) {
-      const dosyaAdi = gorsel.replace('/uploads/', '');
-      const dosyaYolu = ownedUploadPath(req, dosyaAdi);
-      if (fs.existsSync(dosyaYolu)) {
-        const stat = fs.statSync(dosyaYolu);
-        if (!stat.isFile()) throw new PublicResourceError('Geçersiz görsel dosyası.');
-        if (stat.size > MAX_IMAGE_BYTES)
-          throw new PublicResourceError('Görsel boyut sınırını aşıyor.', 413);
-        const image = inspectImage(fs.readFileSync(dosyaYolu));
-        base64Data = image.buffer.toString('base64');
-        mimeType = image.mimeType;
-      }
+    } else if (gorsel.startsWith('/uploads/') || gorsel.startsWith('/api/uploads/')) {
+      const name = ownedUploadName(req, gorsel.replace(/^\/(?:api\/)?uploads\//, ''));
+      const image = await readPrivateImage(name);
+      base64Data = image.buffer.toString('base64');
+      mimeType = image.mimeType;
     } else if (gorsel.startsWith('http')) {
       try {
         const fetchRes = await fetchPublicResource(gorsel);
@@ -688,7 +648,7 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
     }
 
     if (kaydedilecekGorselUrl.startsWith('data:image/')) {
-      kaydedilecekGorselUrl = storeTenantImage(req, kaydedilecekGorselUrl).url;
+      kaydedilecekGorselUrl = (await storeTenantImage(req, kaydedilecekGorselUrl)).url;
     } else if (
       kaydedilecekGorselUrl.startsWith('http://') ||
       kaydedilecekGorselUrl.startsWith('https://')
@@ -714,10 +674,8 @@ router.post('/katalog-gorseli-kaydet', async (req, res) => {
         if (response.ok && contentType.startsWith('image/')) {
           const arrayBuffer = await response.arrayBuffer();
           const image = inspectImage(Buffer.from(arrayBuffer), contentType.split(';')[0]);
-          kaydedilecekGorselUrl = storeTenantImage(
-            req,
-            image.buffer.toString('base64'),
-            image.mimeType
+          kaydedilecekGorselUrl = (
+            await storeTenantImage(req, image.buffer.toString('base64'), image.mimeType)
           ).url;
         }
       } catch (fetchErr) {

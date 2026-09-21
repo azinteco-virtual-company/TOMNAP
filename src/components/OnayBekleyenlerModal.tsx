@@ -1,7 +1,7 @@
+import { loadCompleteList, newestFirst } from '../lib/completeList';
 import { apiFetch } from '../lib/apiClient';
 import React, { useState } from 'react';
 import { OnayBekleyenMesaj, Siparis } from '../types';
-import { fetchWithRetry } from '../lib/apiClient';
 import {
   X,
   CheckCircle2,
@@ -35,8 +35,10 @@ export const OnayBekleyenlerModal: React.FC<OnayBekleyenlerModalProps> = ({
   seciliFirmaId,
   seciliFirmaAd,
 }) => {
+  const loadRun = React.useRef(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [inboxListesi, setInboxListesi] = useState<OnayBekleyenMesaj[]>([]);
-  const [yukleniyor, setYukleniyor] = useState(false);
+  const [yukleniyor, setYukleniyor] = useState(true);
   const [seciliMesaj, setSeciliMesaj] = useState<OnayBekleyenMesaj | null>(null);
   const [duzenlemeModu, setDuzenlemeModu] = useState(false);
 
@@ -67,12 +69,15 @@ export const OnayBekleyenlerModal: React.FC<OnayBekleyenlerModalProps> = ({
 
   // Inbox verilerini getir (Zorunlu Tenant İzolasyonlu)
   const inboxGetir = async () => {
+    const run = ++loadRun.current;
+    setLoadError(null);
     try {
       setYukleniyor(true);
       const aktifTenant = seciliFirmaId || 'all';
       const url = `/api/inbox?tenant_id=${encodeURIComponent(aktifTenant)}`;
-      const res = await fetchWithRetry(url, { timeoutMs: 8000, retries: 2 });
-      const data = await res.json();
+      const complete = await loadCompleteList<OnayBekleyenMesaj>(url, 'mesajlar');
+      if (run !== loadRun.current) return;
+      const data = { basarili: true, mesajlar: complete.items.sort(newestFirst) };
       if (data.basarili && Array.isArray(data.mesajlar)) {
         setInboxListesi(data.mesajlar.filter((m: OnayBekleyenMesaj) => m.durum === 'BEKLEMEDE'));
         if (data.mesajlar.length > 0 && !seciliMesaj) {
@@ -84,16 +89,20 @@ export const OnayBekleyenlerModal: React.FC<OnayBekleyenlerModalProps> = ({
         setSeciliMesaj(null);
       }
     } catch (e) {
-      console.error('Inbox verileri alınamadı:', e);
+      if (run !== loadRun.current) return;
+      setLoadError(e instanceof Error ? e.message : 'Gələn qutu tam yüklənmədi.');
       setInboxListesi([]);
       setSeciliMesaj(null);
     } finally {
-      setYukleniyor(false);
+      if (run === loadRun.current) setYukleniyor(false);
     }
   };
 
   React.useEffect(() => {
     inboxGetir();
+    return () => {
+      loadRun.current++;
+    };
   }, [seciliFirmaId]);
 
   const seciliMesajAyarla = (mesaj: OnayBekleyenMesaj) => {
@@ -190,6 +199,27 @@ export const OnayBekleyenlerModal: React.FC<OnayBekleyenlerModalProps> = ({
       setSimulasyonYukleniyor(false);
     }
   };
+
+  if (yukleniyor || loadError)
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+        <div className="rounded-xl bg-white p-6">
+          <p role={loadError ? 'alert' : 'status'}>
+            {loadError
+              ? `Gələn qutu hazır deyil. ${loadError}`
+              : 'Gələn qutunun bütün səhifələri yoxlanılır…'}
+          </p>
+          {loadError && (
+            <button onClick={inboxGetir} className="mr-4 underline">
+              Yenidən yüklə
+            </button>
+          )}
+          <button onClick={onKapat} className="underline">
+            Bağla
+          </button>
+        </div>
+      </div>
+    );
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">

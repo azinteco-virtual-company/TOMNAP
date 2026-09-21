@@ -1,5 +1,5 @@
-import { apiFetch } from '../lib/apiClient';
-import React, { useState, useEffect, useMemo } from 'react';
+import { loadCompleteList, newestFirst } from '../lib/completeList';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Users,
   Search,
@@ -48,6 +48,10 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
 }) => {
   const [musteriler, setMusteriler] = useState<Musteri[]>([]);
   const [yukleniyor, setYukleniyor] = useState(true);
+  const loadRun = useRef(0);
+  const historyRun = useRef(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [aramaMetni, setAramaMetni] = useState('');
   const [tipFiltresi, setTipFiltresi] = useState<string>('TUMU');
   const [siralama, setSiralama] = useState<SiralamaTuru>('SON_SIPARIS');
@@ -57,23 +61,21 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
 
   // Müşterileri API'den yükle (Zorunlu Tenant İzolasyonlu Veritabanı Sorgusu)
   const musterileriGetir = async () => {
+    const run = ++loadRun.current;
+    setLoadError(null);
     try {
       setYukleniyor(true);
       // tenant_id filtresini veritabanı sorgusu için her zaman zorunlu kıl
       const aktifTenant = seciliFirmaId || 'all';
       const url = `/api/musteriler?tenant_id=${encodeURIComponent(aktifTenant)}`;
-      const res = await apiFetch(url);
-      const data = await res.json();
-      if (data.basarili && Array.isArray(data.musteriler)) {
-        setMusteriler(data.musteriler);
-      } else {
-        setMusteriler([]);
-      }
+      const data = await loadCompleteList<Musteri>(url, 'musteriler');
+      if (run === loadRun.current) setMusteriler(data.items.sort(newestFirst));
     } catch (e) {
       console.error('Müşteriler alınamadı:', e);
-      setMusteriler([]);
+      if (run === loadRun.current)
+        setLoadError(e instanceof Error ? e.message : 'Müştərilər tam yüklənmədi.');
     } finally {
-      setYukleniyor(false);
+      if (run === loadRun.current) setYukleniyor(false);
     }
   };
 
@@ -85,27 +87,30 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
     setAramaMetni('');
     // Seçili firma verilerini anında veritabanından yeniden yükle
     musterileriGetir();
+    return () => {
+      loadRun.current++;
+      historyRun.current++;
+    };
   }, [seciliFirmaId]);
 
   // Seçili müşterinin sipariş geçmişini yükle (Zorunlu tenant_id filtresi ile)
   const musteriGecmisiAc = async (musteri: Musteri) => {
     setSeciliMusteri(musteri);
+    const run = ++historyRun.current;
+    setHistoryError(null);
+    setMusteriSiparisleri([]);
     try {
       setGecmisYukleniyor(true);
       const aktifTenant = seciliFirmaId || 'all';
       const url = `/api/musteriler/${encodeURIComponent(musteri.id)}/siparisler?tenant_id=${encodeURIComponent(aktifTenant)}`;
-      const res = await apiFetch(url);
-      const data = await res.json();
-      if (data.basarili && Array.isArray(data.siparisler)) {
-        setMusteriSiparisleri(data.siparisler);
-      } else {
-        setMusteriSiparisleri([]);
-      }
+      const data = await loadCompleteList<Siparis>(url, 'siparisler');
+      if (run === historyRun.current) setMusteriSiparisleri(data.items.sort(newestFirst));
     } catch (e) {
       console.error('Sipariş geçmişi hatası:', e);
-      setMusteriSiparisleri([]);
+      if (run === historyRun.current)
+        setHistoryError(e instanceof Error ? e.message : 'Tarixçə tam yüklənmədi.');
     } finally {
-      setGecmisYukleniyor(false);
+      if (run === historyRun.current) setGecmisYukleniyor(false);
     }
   };
 
@@ -248,6 +253,22 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
       return '';
     }
   };
+
+  if (yukleniyor)
+    return (
+      <div role="status" className="p-6">
+        Müştərilərin bütün səhifələri yoxlanılır…
+      </div>
+    );
+  if (loadError)
+    return (
+      <div role="alert" className="p-6 text-red-800">
+        Müştəri göstəriciləri hazır deyil. {loadError}{' '}
+        <button onClick={musterileriGetir} className="underline">
+          Yenidən yüklə
+        </button>
+      </div>
+    );
 
   return (
     <div className="space-y-6">
@@ -656,7 +677,11 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                 </span>
               </div>
 
-              {gecmisYukleniyor ? (
+              {historyError ? (
+                <div role="alert" className="p-6 text-red-800">
+                  Tarixçə tam yüklənmədi. {historyError}
+                </div>
+              ) : gecmisYukleniyor ? (
                 <div className="p-12 text-center text-slate-400 text-xs">
                   <span className="inline-block w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mr-2" />
                   Sipariş geçmişi getiriliyor...

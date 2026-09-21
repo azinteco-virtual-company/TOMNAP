@@ -74,7 +74,9 @@ export default defineConfig(async ({ command }) => {
         workbox: {
           maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-          globIgnores: ['**/uploads/**'],
+          // Optional export engines should not download during SW installation.
+          // Private API/upload data remains excluded from all application caches.
+          globIgnores: ['**/uploads/**', '**/optional-doc-*.js'],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -120,16 +122,23 @@ export default defineConfig(async ({ command }) => {
     build: {
       rollupOptions: {
         output: {
+          // Never move a shared dependency into a deferred document chunk just
+          // because that library imports it; this can make the chunk eager again.
+          onlyExplicitManualChunks: true,
           manualChunks(id) {
+            // CommonJS runtime and React's external-store/scheduler adapters must
+            // initialize with React, rather than form an eager inter-chunk cycle.
+            if (id.includes('commonjsHelpers')) return 'vendor-framework';
             if (id.includes('node_modules')) {
+              if (id.includes('/xlsx/')) return 'optional-doc-spreadsheet';
+              if (id.includes('/jspdf/') || id.includes('/jspdf-autotable/'))
+                return 'optional-doc-pdf';
               if (
-                id.includes('xlsx') ||
-                id.includes('jspdf') ||
-                id.includes('html2canvas') ||
-                id.includes('canvg')
-              ) {
-                return 'vendor-documents';
-              }
+                id.includes('/html2canvas/') ||
+                id.includes('/canvg/') ||
+                id.includes('/dompurify/')
+              )
+                return 'optional-doc-html';
               if (id.includes('recharts') || id.includes('d3-')) {
                 return 'vendor-charts';
               }
@@ -143,7 +152,9 @@ export default defineConfig(async ({ command }) => {
                 id.includes('react') ||
                 id.includes('react-dom') ||
                 id.includes('react-router-dom') ||
-                id.includes('zustand')
+                id.includes('zustand') ||
+                id.includes('/scheduler/') ||
+                id.includes('/use-sync-external-store/')
               ) {
                 return 'vendor-framework';
               }

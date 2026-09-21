@@ -1,3 +1,4 @@
+import { loadCompleteList, newestFirst } from '../lib/completeList';
 import { apiFetch } from '../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { OnayBekleyenMesaj, Siparis } from '../types';
@@ -40,8 +41,10 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
   seciliFirmaId,
   seciliFirmaAd,
 }) => {
+  const loadRun = React.useRef(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [inboxListesi, setInboxListesi] = useState<OnayBekleyenMesaj[]>([]);
-  const [yukleniyor, setYukleniyor] = useState(false);
+  const [yukleniyor, setYukleniyor] = useState(true);
   const [seciliMesaj, setSeciliMesaj] = useState<OnayBekleyenMesaj | null>(null);
   const [duzenlemeModu, setDuzenlemeModu] = useState(false);
   const [aramaMetni, setAramaMetni] = useState('');
@@ -75,14 +78,17 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
 
   // Inbox verilerini getir
   const inboxGetir = async () => {
+    const run = ++loadRun.current;
+    setLoadError(null);
     try {
       setYukleniyor(true);
       const url =
         seciliFirmaId && seciliFirmaId !== 'all'
           ? `/api/inbox?tenant_id=${encodeURIComponent(seciliFirmaId)}`
           : '/api/inbox';
-      const res = await apiFetch(url);
-      const data = await res.json();
+      const complete = await loadCompleteList<OnayBekleyenMesaj>(url, 'mesajlar');
+      if (run !== loadRun.current) return;
+      const data = { basarili: true, mesajlar: complete.items.sort(newestFirst) };
       if (data.basarili && Array.isArray(data.mesajlar)) {
         const bekleyenler = data.mesajlar.filter((m: OnayBekleyenMesaj) => m.durum === 'BEKLEMEDE');
         setInboxListesi(bekleyenler);
@@ -99,16 +105,20 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
         setSeciliMesaj(null);
       }
     } catch (e) {
-      console.error('Inbox verileri alınamadı:', e);
+      if (run !== loadRun.current) return;
+      setLoadError(e instanceof Error ? e.message : 'Gələn qutu tam yüklənmədi.');
       setInboxListesi([]);
       setSeciliMesaj(null);
     } finally {
-      setYukleniyor(false);
+      if (run === loadRun.current) setYukleniyor(false);
     }
   };
 
   useEffect(() => {
     inboxGetir();
+    return () => {
+      loadRun.current++;
+    };
   }, [seciliFirmaId]);
 
   const seciliMesajAyarla = (mesaj: OnayBekleyenMesaj) => {
@@ -235,6 +245,22 @@ export const OnayBekleyenlerSayfasi: React.FC<OnayBekleyenlerSayfasiProps> = ({
     }
     return true;
   });
+
+  if (yukleniyor)
+    return (
+      <div role="status" className="p-6">
+        Gələn qutunun bütün səhifələri yoxlanılır…
+      </div>
+    );
+  if (loadError)
+    return (
+      <div role="alert" className="p-6 text-red-800">
+        Gələn qutu hazır deyil. {loadError}{' '}
+        <button onClick={inboxGetir} className="underline">
+          Yenidən yüklə
+        </button>
+      </div>
+    );
 
   return (
     <div className="space-y-6">

@@ -1,5 +1,6 @@
 import { Router, Request } from 'express';
 import { randomUUID, createHash } from 'node:crypto';
+import { listRequest, databasePage, memoryPage } from '../services/listPagination';
 import { assertTenantImageReferences } from './gorsel';
 import { PublicResourceError } from '../services/publicFetch';
 import { Type } from '@google/genai';
@@ -67,17 +68,19 @@ async function ownedInbox(tenant: string, id: string) {
 router.get('/inbox', async (req, res) => {
   try {
     const tenant = tenantFor(req);
-    let messages: OnayBekleyenKaydi[];
-    if (dbActive(tenant)) {
-      let query = supabase.from('inbox_mesajlar').select('*');
-      if (tenant !== 'all') query = query.eq('tenant_id', tenant);
-      const { data, error } = await query;
-      if (error) throw new PublicResourceError('Gelen kutusu okunamadı.', 503);
-      messages = (data || []).filter((m) => belongs(m, tenant)).map(mappedInbox);
-    } else messages = onayBekleyenler.filter((m) => belongs(m, tenant)).map(mappedInbox);
+    const request = listRequest(req, tenant, 'inbox');
+    const local = dbActive(tenant) ? [] : onayBekleyenler.filter((m) => belongs(m, tenant));
+    const page = dbActive(tenant)
+      ? await databasePage(request, 'inbox_mesajlar')
+      : {
+          ...memoryPage(request, local),
+          pending: local.filter((m) => m.durum === 'BEKLEMEDE').length,
+        };
+    const messages = page.items.map(mappedInbox);
     res.json({
       basarili: true,
-      toplam: messages.filter((m) => m.durum === 'BEKLEMEDE').length,
+      toplam: page.pending,
+      pagination: page.pagination,
       mesajlar: messages,
     });
   } catch (error) {

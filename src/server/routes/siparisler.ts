@@ -1,5 +1,11 @@
 import { Router, Request } from 'express';
 import { randomUUID } from 'node:crypto';
+import {
+  listRequest,
+  databasePage,
+  memoryPage,
+  completeCustomerDirectory,
+} from '../services/listPagination';
 import { Type } from '@google/genai';
 import { storeTenantImage, assertTenantImageReferences } from './gorsel';
 import { PublicResourceError } from '../services/publicFetch';
@@ -41,13 +47,21 @@ const memoryOrders = (tenant: string) =>
   tenant === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani;
 async function scopedCustomers(tenant: string): Promise<any[]> {
   if (!dbActive(tenant)) return musterilerVeritabani.filter((m) => belongs(m, tenant));
-  const { data, error } = await supabase.from('musteriler').select('*').eq('tenant_id', tenant);
-  if (error) throw new PublicResourceError('Müşteriler okunamadı.', 503);
-  return (data || []).filter((m) => belongs(m, tenant));
+  return completeCustomerDirectory(tenant);
 }
 async function validateCustomerReference(tenant: string, id: unknown) {
   if (!id) return;
-  if (typeof id !== 'string' || !(await scopedCustomers(tenant)).some((m) => m.id === id))
+  if (typeof id !== 'string') throw new PublicResourceError('Müşteri bulunamadı.', 404);
+  if (dbActive(tenant)) {
+    const { data, error } = await supabase
+      .from('musteriler')
+      .select('id,tenant_id')
+      .eq('tenant_id', tenant)
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw new PublicResourceError('Müşteri doğrulanamadı.', 503);
+    if (!data || !belongs(data, tenant)) throw new PublicResourceError('Müşteri bulunamadı.', 404);
+  } else if (!musterilerVeritabani.some((m) => m.id === id && belongs(m, tenant)))
     throw new PublicResourceError('Müşteri bulunamadı.', 404);
 }
 const orderFailure = (res: any, error: any) =>
@@ -60,22 +74,19 @@ const orderFailure = (res: any, error: any) =>
 router.get('/siparisler', async (req, res) => {
   try {
     const tenant = tenantFor(req);
-    let orders: any[];
-    if (dbActive(tenant)) {
-      let query = supabase.from('siparisler').select('*');
-      if (tenant !== 'all') query = query.eq('tenant_id', tenant);
-      const { data, error } = await query.order('olusturma_tarihi', { ascending: false });
-      if (error) throw new PublicResourceError('Siparişler okunamadı.', 503);
-      orders = (data || []).filter((s) => belongs(s, tenant)).map(formatlaSiparis);
-    } else {
-      orders = memoryOrders(tenant)
-        .filter((s) => belongs(s, tenant))
-        .map(formatlaSiparis);
-    }
+    const request = listRequest(req, tenant, 'siparisler');
+    const page = dbActive(tenant)
+      ? await databasePage(request, 'siparisler')
+      : memoryPage(
+          request,
+          memoryOrders(tenant).filter((s) => belongs(s, tenant))
+        );
+    const orders = page.items.map(formatlaSiparis);
     res.json({
       basarili: true,
       kaynak: tenant === 'demo_sandbox' ? 'demo_sandbox' : dbActive(tenant) ? 'supabase' : 'bellek',
-      toplam: orders.length,
+      toplam: page.pagination.total,
+      pagination: page.pagination,
       siparisler: orders,
       ...(tenant === 'demo_sandbox' ? { isDemo: true } : {}),
     });
@@ -192,7 +203,11 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
     for (const attachment of attachments) {
       const raw = attachment?.gorsel_base64 || attachment?.base64;
       if (typeof raw !== 'string') throw new PublicResourceError('Geçersiz görsel verisi.', 400);
-      const saved = storeTenantImage(req, raw, attachment.gorsel_mime_type || attachment.mimeType);
+      const saved = await storeTenantImage(
+        req,
+        raw,
+        attachment.gorsel_mime_type || attachment.mimeType
+      );
       tumGorseller.push({ data: saved.base64, mimeType: saved.mimeType });
       kaydedilenGorselUrlleri.push(saved.url);
     }
