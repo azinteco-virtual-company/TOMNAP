@@ -1,5 +1,18 @@
 import React from 'react';
-import { Menu, Inbox, PanelLeftClose, PanelLeftOpen, Database, Plane, Globe, UserPlus, Building2, Lock, Store, ShieldCheck } from 'lucide-react';
+import {
+  Menu,
+  Inbox,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Database,
+  Plane,
+  Globe,
+  UserPlus,
+  Building2,
+  Lock,
+  Store,
+  ShieldCheck,
+} from 'lucide-react';
 import { KullaniciRolu, FirmaTenant } from '../types';
 import { RolSecici } from './RolSecici';
 import { DilSecici } from './DilSecici';
@@ -8,8 +21,30 @@ import { PWAInstallButton } from './PWAInstallButton';
 import { useDil } from '../context/DilKonteksti';
 
 interface UstBaslikProps {
-  aktifSekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'kargo-merkezi' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
-  setAktifSekme: (sekme: 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'kargo-merkezi' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi') => void;
+  aktifSekme:
+    | 'panel'
+    | 'kanban'
+    | 'gorsel-giris'
+    | 'musteriler'
+    | 'kargo-manifest'
+    | 'kargo-merkezi'
+    | 'baku-tahsilat'
+    | 'inbox'
+    | 'kodlar'
+    | 'kurye-masasi';
+  setAktifSekme: (
+    sekme:
+      | 'panel'
+      | 'kanban'
+      | 'gorsel-giris'
+      | 'musteriler'
+      | 'kargo-manifest'
+      | 'kargo-merkezi'
+      | 'baku-tahsilat'
+      | 'inbox'
+      | 'kodlar'
+      | 'kurye-masasi'
+  ) => void;
   toplamSiparis: number;
   onMobilMenuAc?: () => void;
   menuDar?: boolean;
@@ -45,8 +80,8 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
   onMenuDarDegistir,
   dbKaynak = 'supabase',
   onInboxAc,
-  inboxSayisi = 2,
-  aktifRol = 'SUPER_ADMIN',
+  inboxSayisi = 0,
+  aktifRol,
   onRolDegistir,
   seciliKuryeId,
   onKuryeSec,
@@ -131,11 +166,11 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
 
         {/* Ekmek Kırıntısı (Breadcrumb) */}
         <div className="flex items-center space-x-2 text-xs sm:text-sm truncate">
-          <span className="text-indigo-600 font-extrabold tracking-wider hidden md:inline">TOMNAP</span>
-          <span className="text-slate-300 hidden md:inline">/</span>
-          <span className="font-semibold text-slate-800 truncate">
-            {getSekmeBasligi()}
+          <span className="text-indigo-600 font-extrabold tracking-wider hidden md:inline">
+            TOMNAP
           </span>
+          <span className="text-slate-300 hidden md:inline">/</span>
+          <span className="font-semibold text-slate-800 truncate">{getSekmeBasligi()}</span>
           {aktifSekme === 'panel' && (
             <span className="hidden sm:inline-block text-[11px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full ml-2 shrink-0 border border-slate-200/60">
               {toplamSiparis}
@@ -148,7 +183,8 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
       <div className="flex items-center space-x-2 shrink-0">
         {/* Butik / Firma Təyini */}
         {aktifRol === 'SUPER_ADMIN' ? (
-          firmalar.length > 0 && onFirmaSec && (
+          firmalar.length > 0 &&
+          onFirmaSec && (
             <FirmaSecici
               firmalar={firmalar}
               seciliFirmaId={seciliFirmaId}
@@ -167,7 +203,10 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
             <div className="flex flex-col min-w-0 max-w-[120px] sm:max-w-[160px]">
               <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 leading-none flex items-center gap-1">
                 <span>{aktifRol === 'PATRON' ? 'Patron Masası' : 'İş Masası'}</span>
-                <ShieldCheck className="w-2.5 h-2.5 text-emerald-600" title="Multi-tenant izolasiya aktivdir" />
+                <ShieldCheck
+                  className="w-2.5 h-2.5 text-emerald-600"
+                  title="Multi-tenant izolasiya aktivdir"
+                />
               </span>
               <span className="text-xs font-semibold text-slate-800 truncate leading-tight mt-0.5">
                 {firmalar.find((f) => f.id === seciliFirmaId)?.ad || 'Butikim'}
@@ -194,15 +233,7 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
           </button>
         )}
 
-        {/* Canlı Rol Değiştirici (Simülasyon Butonu) */}
-        {onRolDegistir && (
-          <RolSecici
-            aktifRol={aktifRol}
-            onRolDegistir={onRolDegistir}
-            seciliKuryeId={seciliKuryeId}
-            onKuryeSec={onKuryeSec}
-          />
-        )}
+        <RolSecici aktifRol={aktifRol} />
 
         {/* PWA Masaüstü / Mobil Kurulum Butonu */}
         <PWAInstallButton variant="header" />
@@ -262,7 +293,7 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
         )}
 
         {/* Kargo / Aramex Lojistika Mərkəzi Butonu */}
-        {(aktifRol !== 'BAKU_KURYE') && (
+        {aktifRol !== 'BAKU_KURYE' && (
           <button
             type="button"
             id="btn-header-kargo-merkezi"
@@ -274,7 +305,9 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
             }`}
             title="Kargo & Aramex Lojistika Mərkəzi (Canlı İzləmə və Tənzimləmələr)"
           >
-            <Plane className={`w-3.5 h-3.5 ${aktifSekme === 'kargo-merkezi' ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`} />
+            <Plane
+              className={`w-3.5 h-3.5 ${aktifSekme === 'kargo-merkezi' ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`}
+            />
             <span className="font-bold text-[11px] hidden md:inline">Kargo Mərkəzi</span>
           </button>
         )}

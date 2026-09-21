@@ -30,9 +30,7 @@ VALUES
     ('kanada_shopper_baku', 'Kanada Shopper Bakı', 'Bakı', 'AZN', 15.00, 'Əsas Kanada alış-veriş və çatdırılma butiki', false, 'AKTIF', 'PRO', 'Tural', '+994 50 123 45 67', 'CA'),
     ('ayla_boutique', 'Ayla Boutique', 'Gəncə', 'AZN', 12.00, 'Gəncə və Qərb bölgəsi moda butiki', false, 'AKTIF', 'BASLANGIC', 'Ayla X.', '+994 50 765 43 21', 'TR'),
     ('demo_sandbox', 'Sınaq / Demo Sandbox Butiki', 'Bakı', 'AZN', 10.00, 'İctimai sınaq və təlim hesabı (izolyasiyalı)', true, 'AKTIF', 'PRO', 'Demo İstifadəçi', '+994 50 000 00 00', 'CA')
-ON CONFLICT (id) DO UPDATE SET
-    onay_durumu = EXCLUDED.onay_durumu,
-    paket = EXCLUDED.paket;
+ON CONFLICT (id) DO NOTHING;
 
 -- 2. DƏVƏT LİNKLƏRİ (TEAM INVITATIONS) CƏDVƏLİ
 CREATE TABLE IF NOT EXISTS public.davetler (
@@ -154,32 +152,39 @@ CREATE INDEX IF NOT EXISTS idx_musteriler_tenant_id ON public.musteriler(tenant_
 CREATE INDEX IF NOT EXISTS idx_musteriler_tenant_telefon ON public.musteriler(tenant_id, telefon);
 CREATE INDEX IF NOT EXISTS idx_inbox_tenant_id ON public.inbox_mesajlar(tenant_id);
 
--- 8. ROW LEVEL SECURITY (RLS) TƏHLÜKƏSİZLİK QAYDALARI
-ALTER TABLE public.firmalar ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.davetler ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.kullanicilar ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.siparisler ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.musteriler ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inbox_mesajlar ENABLE ROW LEVEL SECURITY;
+-- Server-only data access. Browser requests must pass the TOMNAP session API.
+-- service_role bypasses RLS; tenant authorization is enforced by that API.
+CREATE TABLE IF NOT EXISTS public.oturumlar (
+  token_hash text PRIMARY KEY CHECK (token_hash ~ '^[a-f0-9]{64}$'),
+  user_id text NOT NULL REFERENCES public.kullanicilar(id) ON DELETE CASCADE,
+  csrf_token text NOT NULL CHECK (csrf_token ~ '^[a-f0-9]{64}$'),
+  credential_fingerprint text NOT NULL CHECK (credential_fingerprint ~ '^[a-f0-9]{64}$'),
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS oturumlar_expires_at_idx ON public.oturumlar (expires_at);
+CREATE INDEX IF NOT EXISTS oturumlar_user_id_idx ON public.oturumlar (user_id);
 
-DO $$ 
+DO $$
+DECLARE
+  target text;
+  old_policy record;
+  column_list text;
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Firmaları Yönetebilir' AND tablename = 'firmalar') THEN
-        CREATE POLICY "Anon ve Servis Rolü Firmaları Yönetebilir" ON public.firmalar FOR ALL USING (true);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Davetleri Yönetebilir' AND tablename = 'davetler') THEN
-        CREATE POLICY "Anon ve Servis Rolü Davetleri Yönetebilir" ON public.davetler FOR ALL USING (true);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Kullanıcıları Yönetebilir' AND tablename = 'kullanicilar') THEN
-        CREATE POLICY "Anon ve Servis Rolü Kullanıcıları Yönetebilir" ON public.kullanicilar FOR ALL USING (true);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Siparişleri Yönetebilir' AND tablename = 'siparisler') THEN
-        CREATE POLICY "Anon ve Servis Rolü Siparişleri Yönetebilir" ON public.siparisler FOR ALL USING (true);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Müşterileri Yönetebilir' AND tablename = 'musteriler') THEN
-        CREATE POLICY "Anon ve Servis Rolü Müşterileri Yönetebilir" ON public.musteriler FOR ALL USING (true);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anon ve Servis Rolü Inbox Yönetebilir' AND tablename = 'inbox_mesajlar') THEN
-        CREATE POLICY "Anon ve Servis Rolü Inbox Yönetebilir" ON public.inbox_mesajlar FOR ALL USING (true);
-    END IF;
+  FOREACH target IN ARRAY ARRAY['firmalar', 'davetler', 'kullanicilar', 'siparisler', 'musteriler', 'inbox_mesajlar', 'kuryeler', 'oturumlar'] LOOP
+    IF to_regclass(format('public.%I', target)) IS NULL THEN CONTINUE; END IF;
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', target);
+    EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', target);
+    -- Permissive policies combine with OR: remove previous allow-all policies.
+    FOR old_policy IN SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = target LOOP
+      EXECUTE format('DROP POLICY %I ON public.%I', old_policy.policyname, target);
+    END LOOP;
+    EXECUTE format('REVOKE ALL PRIVILEGES ON TABLE public.%I FROM PUBLIC, anon, authenticated', target);
+    SELECT string_agg(quote_ident(attname), ', ') INTO column_list FROM pg_attribute
+      WHERE attrelid = to_regclass(format('public.%I', target)) AND attnum > 0 AND NOT attisdropped;
+    -- Table-level REVOKE does not remove previously granted column privileges.
+    EXECUTE format('REVOKE ALL PRIVILEGES (%s) ON public.%I FROM PUBLIC, anon, authenticated', column_list, target);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO service_role', target);
+  END LOOP;
 END $$;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;

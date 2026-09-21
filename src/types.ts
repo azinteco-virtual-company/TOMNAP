@@ -90,6 +90,7 @@ export interface Siparis {
   birden_fazla_urun?: boolean;
   // Bölgesel Kurye & Dağıtım Sorumlusu (Bakü)
   baku_kurye_id?: string;
+  kurye_atama_surumu?: number; // Server version for explicit courier assignment.
   baku_kurye_adi?: string; // Örn: 'Elvin M. (Nərimanov/Mərkəz)', 'Rəşad K. (Yasamal/Elmlər)', 'Vüqar T. (Gəncə/Rayonlar)', 'Ofis / Evdən Təhvil'
   baku_kurye_bolgesi?: string; // 'Nərimanov', 'Yasamal', 'Nəsimi', 'Xətai', 'Gəncə / Rayon', 'Ofis'
   teslim_tarihi?: string;
@@ -114,13 +115,13 @@ export interface Siparis {
   }[];
 }
 
-export type KullaniciRolu = 
-  | 'SUPER_ADMIN'       // Biz / Geliştirici (Her şeyi görür, sistem mimarisi dahil)
-  | 'PATRON'            // Şirket Sahibi / Baş Yönetici (Finans, kurye, sipariş tam kontrol; kod devir gizli)
-  | 'SATIS_SORUMLUSU'   // Görsel & WhatsApp sipariş girer, onay bekleyenleri işler
-  | 'KANADA_SATINALMA'  // Kanada satınalma fişleri, kargo firması belgeleri, kurye atama
-  | 'BAKU_FINANS'       // Bakü tahsilat, kasa ve kalan borç kapama
-  | 'BAKU_KURYE';       // Bakü saha kuryesi (Sadece kendi bölgesindeki paketleri görür ve teslim eder)
+export type KullaniciRolu =
+  | 'SUPER_ADMIN' // Biz / Geliştirici (Her şeyi görür, sistem mimarisi dahil)
+  | 'PATRON' // Şirket Sahibi / Baş Yönetici (Finans, kurye, sipariş tam kontrol; kod devir gizli)
+  | 'SATIS_SORUMLUSU' // Görsel & WhatsApp sipariş girer, onay bekleyenleri işler
+  | 'KANADA_SATINALMA' // Kanada satınalma fişleri, kargo firması belgeleri, kurye atama
+  | 'BAKU_FINANS' // Bakü tahsilat, kasa ve kalan borç kapama
+  | 'BAKU_KURYE'; // Yalnız sunucuda bağlı olduğu kuryeye açıkça atanmış paketleri görür.
 
 export interface BakuKuryeProfili {
   id: string;
@@ -211,5 +212,3 @@ export interface DavetLinkiItem {
   kullanildiMi: boolean;
   kullananKisi?: string;
 }
-
-

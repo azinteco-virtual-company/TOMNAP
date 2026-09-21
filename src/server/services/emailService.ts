@@ -1,10 +1,35 @@
-import { RESEND_API_KEY, EMAIL_FROM, APP_URL } from '../config';
+import { RESEND_API_KEY, EMAIL_FROM, APP_URL, IS_PRODUCTION } from '../config';
+
+/** Use a trusted deployment URL for bearer links, never Host or forwarded headers. */
+export function getApplicationUrl(): string {
+  const url = new URL(APP_URL);
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    (IS_PRODUCTION && url.protocol !== 'https:')
+  ) {
+    throw new Error('APP_URL etibarlı tətbiq ünvanı olmalıdır.');
+  }
+  return url.toString().replace(/\/+$/, '');
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>\"']/g,
+    (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' })[char]!
+  );
+}
 
 export interface EmailGonderParams {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  from?: string;
+  idempotencyKey?: string;
 }
 
 export interface ActivationEmailParams {
@@ -12,7 +37,6 @@ export interface ActivationEmailParams {
   adSoyad: string;
   butikAdi: string;
   token: string;
-  appUrl?: string;
 }
 
 export interface InviteEmailParams {
@@ -22,32 +46,33 @@ export interface InviteEmailParams {
   rol: string;
   token: string;
   davetEden?: string;
-  appUrl?: string;
 }
 
 /**
  * Ümumi e-poçt göndərmə funksiyası.
  * RESEND_API_KEY mövcuddursa Resend API vasitəsilə göndərir.
- * Yoxdursa və ya inkişaf rejimindədirsə konsola təhlükəsiz link çıxarır və xəta vermədən tamamlayır.
+ * Konfiqurasiya edilməyibsə çatdırılmanı uğursuz sayır; məxfi linkləri loglamır.
  */
-export async function sendEmail(params: EmailGonderParams): Promise<{ basarili: boolean; id?: string; hata?: string }> {
+export async function sendEmail(
+  params: EmailGonderParams
+): Promise<{ basarili: boolean; id?: string; hata?: string }> {
   const { to, subject, html, text } = params;
 
   console.log(`\n================= [TOMNAP EMAIL SERVICE] =================`);
-  console.log(`KİMƏ: ${to}`);
-  console.log(`MÖVZU: ${subject}`);
   console.log(`GÖNDƏRİLİR: ${new Date().toISOString()}`);
 
   if (RESEND_API_KEY) {
     try {
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
+        signal: AbortSignal.timeout(15_000),
         headers: {
-          'Authorization': `Bearer ${RESEND_API_KEY}`,
+          Authorization: `Bearer ${RESEND_API_KEY}`,
           'Content-Type': 'application/json',
+          ...(params.idempotencyKey ? { 'Idempotency-Key': params.idempotencyKey } : {}),
         },
         body: JSON.stringify({
-          from: EMAIL_FROM,
+          from: params.from || EMAIL_FROM,
           to: [to],
           subject,
           html,
@@ -61,28 +86,32 @@ export async function sendEmail(params: EmailGonderParams): Promise<{ basarili: 
         console.log(`==========================================================\n`);
         return { basarili: true, id: resData?.id };
       } else {
-        console.warn(`⚠️ Resend API cavab xətası:`, resData);
+        console.warn('Resend API e-poçt göndərmə xətası:', response.status);
         console.log(`==========================================================\n`);
         return { basarili: false, hata: resData?.message || 'E-poçt göndərilə bilmədi' };
       }
     } catch (err: any) {
-      console.error(`❌ Resend göndərmə xətası:`, err.message);
+      console.error(`❌ Resend göndərmə xətası.`);
       console.log(`==========================================================\n`);
-      return { basarili: false, hata: err.message };
+      return { basarili: false, hata: 'E-poçt xidməti əlçatan deyil.' };
     }
   }
 
-  // Fallback / Development: Konsola və loga təhlükəsiz çıxarış
+  if (IS_PRODUCTION) {
+    return { basarili: false, hata: 'E-poçt xidməti konfiqurasiya edilməyib.' };
+  }
+
+  // Development-only simulation; never claim delivery in production.
   console.log(`ℹ️ [TEST/DEV REJİMİ] RESEND_API_KEY təyin edilməyib, e-poçt simulyasiya edildi.`);
   console.log(`==========================================================\n`);
-  return { basarili: true, id: 'simulated_dev_id' };
+  return { basarili: false, hata: 'Geliştirme ortamında e-poçt gönderilmedi.' };
 }
 
 /**
  * Yeni Butik Qeydiyyatı üçün Aktivasiya & Şifrə Təyini E-poçtu
  */
-export async function sendActivationEmail(params: ActivationEmailParams) {
-  const baseUrl = (params.appUrl || APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+export function buildActivationEmail(params: ActivationEmailParams) {
+  const baseUrl = getApplicationUrl();
   const link = `${baseUrl}/sifre-belirle?token=${encodeURIComponent(params.token)}`;
 
   const subject = `TOMNAP — ${params.butikAdi} üçün şifrənizi təyin edin və iş masanızı aktivləşdirin`;
@@ -93,7 +122,7 @@ export async function sendActivationEmail(params: ActivationEmailParams) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${subject}</title>
+  <title>${escapeHtml(subject)}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; color: #e2e8f0; margin: 0; padding: 24px; }
     .card { max-width: 580px; margin: 0 auto; background: #1e293b; border-radius: 16px; border: 1px solid #334155; padding: 36px 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -110,9 +139,9 @@ export async function sendActivationEmail(params: ActivationEmailParams) {
 <body>
   <div class="card">
     <div class="brand">TOMNAP<span>.</span></div>
-    <h1>Hörmətli ${params.adSoyad},</h1>
+    <h1>Hörmətli ${escapeHtml(params.adSoyad)},</h1>
     <p>
-      <strong>"${params.butikAdi}"</strong> butikiniz üçün TOMNAP Beynəlxalq E-Ticarət İdarəetmə Platformasında qeydiyyat uğurla tamamlandı.
+      <strong>"${escapeHtml(params.butikAdi)}"</strong> butikiniz üçün TOMNAP Beynəlxalq E-Ticarət İdarəetmə Platformasında qeydiyyat uğurla tamamlandı.
     </p>
     <p>
       Hesabınızı aktivləşdirmək və şəxsi şifrənizi təyin etmək üçün aşağıdakı düyməyə klikləyin:
@@ -144,17 +173,14 @@ Bu link 24 saat müddətində etibarlıdır.
 TOMNAP Dəstək Komandası
   `.trim();
 
-  console.log(`🔗 [AKTİVASİYA LİNKİ] ${link}`);
-
-  const result = await sendEmail({ to: params.email, subject, html, text });
-  return { ...result, link };
+  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text }, link };
 }
 
 /**
  * Komanda Üzvləri üçün Dəvət & Şifrə Təyini E-poçtu
  */
-export async function sendInviteEmail(params: InviteEmailParams) {
-  const baseUrl = (params.appUrl || APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+export function buildInviteEmail(params: InviteEmailParams) {
+  const baseUrl = getApplicationUrl();
   const link = `${baseUrl}/davet-qebul?token=${encodeURIComponent(params.token)}`;
 
   const rolAdlari: Record<string, string> = {
@@ -174,7 +200,7 @@ export async function sendInviteEmail(params: InviteEmailParams) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${subject}</title>
+  <title>${escapeHtml(subject)}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; color: #e2e8f0; margin: 0; padding: 24px; }
     .card { max-width: 580px; margin: 0 auto; background: #1e293b; border-radius: 16px; border: 1px solid #334155; padding: 36px 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -191,10 +217,10 @@ export async function sendInviteEmail(params: InviteEmailParams) {
 <body>
   <div class="card">
     <div class="brand">TOMNAP<span>.</span></div>
-    <div class="role-badge">${rolAdi}</div>
-    <h1>${params.adSoyad ? `Hörmətli ${params.adSoyad},` : 'Salam,'}</h1>
+    <div class="role-badge">${escapeHtml(rolAdi)}</div>
+    <h1>${params.adSoyad ? `Hörmətli ${escapeHtml(params.adSoyad)},` : 'Salam,'}</h1>
     <p>
-      ${params.davetEden || 'Butik rəhbərliyi'} tərəfindən <strong>"${params.butikAdi}"</strong> butikinin idarəetmə masasına <strong>${rolAdi}</strong> vəzifəsi üzrə dəvət olundunuz.
+      ${escapeHtml(params.davetEden || 'Butik rəhbərliyi')} tərəfindən <strong>"${escapeHtml(params.butikAdi)}"</strong> butikinin idarəetmə masasına <strong>${escapeHtml(rolAdi)}</strong> vəzifəsi üzrə dəvət olundunuz.
     </p>
     <p>
       Dəvəti qəbul etmək, şifrənizi təyin etmək və iş masanıza daxil olmaq üçün aşağıdakı düyməyə klikləyin:
@@ -225,8 +251,15 @@ ${link}
 TOMNAP Dəstək Komandası
   `.trim();
 
-  console.log(`🔗 [KOMANDA DƏVƏT LİNKİ] ${link}`);
+  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text }, link };
+}
 
-  const result = await sendEmail({ to: params.email, subject, html, text });
-  return { ...result, link };
+export async function sendActivationEmail(params: ActivationEmailParams) {
+  const { payload, link } = buildActivationEmail(params);
+  return { ...(await sendEmail(payload)), link };
+}
+
+export async function sendInviteEmail(params: InviteEmailParams) {
+  const { payload, link } = buildInviteEmail(params);
+  return { ...(await sendEmail(payload)), link };
 }

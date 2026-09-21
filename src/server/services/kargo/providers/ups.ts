@@ -13,17 +13,24 @@ export class UpsProvider implements KargoSaglayiciInterface {
   readonly tip: KargoSaglayiciTipi = 'UPS';
   readonly ad: string = 'UPS Worldwide Express';
 
-  public async kargoTakipEt(takipNo: string, ayarlar: KargoSaglayiciAyarlari): Promise<KargoTakipGuncelleme> {
+  public async kargoTakipEt(
+    takipNo: string,
+    ayarlar: KargoSaglayiciAyarlari
+  ): Promise<KargoTakipGuncelleme> {
     const sonuclar = await this.topluTakipEt([takipNo], ayarlar);
     return sonuclar[0];
   }
 
-  public async topluTakipEt(takipNolari: string[], ayarlar: KargoSaglayiciAyarlari): Promise<KargoTakipGuncelleme[]> {
+  public async topluTakipEt(
+    takipNolari: string[],
+    ayarlar: KargoSaglayiciAyarlari
+  ): Promise<KargoTakipGuncelleme[]> {
     const simdi = new Date();
     const cikis = ayarlar.cikisSehri || 'Louisville (SDF) / Toronto';
 
     return takipNolari.map((takipNo) => ({
       takipNo,
+      kaynak: 'SIMULATION' as const,
       durum: 'ULUSLARARASI_KARGO' as LojistikDurumu,
       hamDurumKodu: 'UPS_ON_WAY',
       hamAciklama: `UPS Worldport departure scan (${cikis})`,
@@ -42,7 +49,10 @@ export class UpsProvider implements KargoSaglayiciInterface {
     };
   }
 
-  public async manifestoAyristir(dosyaBuffer: Buffer | ArrayBuffer, dosyaAdi: string): Promise<AyrismisManifestoSonuc> {
+  public async manifestoAyristir(
+    dosyaBuffer: Buffer | ArrayBuffer,
+    dosyaAdi: string
+  ): Promise<AyrismisManifestoSonuc> {
     const wb = XLSX.read(dosyaBuffer, { type: 'buffer' });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { header: 1 });

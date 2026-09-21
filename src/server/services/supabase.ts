@@ -24,21 +24,27 @@ if (SUPABASE_URL && SUPABASE_KEY) {
     supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { persistSession: false },
     });
-    console.log('✅ Supabase canlı PostgreSQL veritabanı bağlandı:', SUPABASE_URL);
+    console.log('Supabase istemcisi yapılandırıldı; bağlantı istek sırasında doğrulanır.');
   } catch (err) {
-    console.error('❌ Supabase bağlantı hatası:', err);
+    throw new Error('Supabase istemcisi yapılandırılamadı.');
   }
 }
 
 export { supabase };
 
-export async function checkSupabaseConnection(): Promise<{ aktif: boolean; kayitSayisi: number; hata: string | null }> {
+export async function checkSupabaseConnection(): Promise<{
+  aktif: boolean;
+  kayitSayisi: number;
+  hata: string | null;
+}> {
   if (!supabase) {
     return { aktif: false, kayitSayisi: 0, hata: 'SUPABASE_URL veya SUPABASE_KEY tanımlı değil' };
   }
 
   try {
-    const { count, error } = await supabase.from('siparisler').select('*', { count: 'exact', head: true });
+    const { count, error } = await supabase
+      .from('siparisler')
+      .select('*', { count: 'exact', head: true });
     if (error) {
       return { aktif: false, kayitSayisi: 0, hata: error.message };
     }

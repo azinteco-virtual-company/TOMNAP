@@ -1,14 +1,15 @@
+import { apiFetch } from '../lib/apiClient';
 import React, { useState, useRef } from 'react';
 import { Siparis, SiparisUrunKalemi } from '../types';
-import { 
-  Images, 
-  Maximize2, 
-  Crop, 
-  Package, 
-  X, 
-  Check, 
-  Sparkles, 
-  ZoomIn, 
+import {
+  Images,
+  Maximize2,
+  Crop,
+  Package,
+  X,
+  Check,
+  Sparkles,
+  ZoomIn,
   RotateCw,
   Image as ImageIcon,
   Upload,
@@ -20,7 +21,7 @@ import {
   Loader2,
   RotateCcw,
   AlertTriangle,
-  Scan
+  Scan,
 } from 'lucide-react';
 import { cropImageFromBox, sunucuyaGorselYukle } from '../utils/imageCropper';
 import { GorselAramaLensModal } from './GorselAramaLensModal';
@@ -34,7 +35,10 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
   siparis,
   onGuncelle,
 }) => {
-  const [seciliBuyutmeGorsel, setSeciliBuyutmeGorsel] = useState<{ url: string; baslik: string } | null>(null);
+  const [seciliBuyutmeGorsel, setSeciliBuyutmeGorsel] = useState<{
+    url: string;
+    baslik: string;
+  } | null>(null);
   const [kirpmaModalHedef, setKirpmaModalHedef] = useState<{
     urunIndex: number;
     urun: SiparisUrunKalemi;
@@ -60,7 +64,9 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
   const [katalogGorselGecerliMi, setKatalogGorselGecerliMi] = useState<boolean | null>(null);
   const [geriDonuluyorIndex, setGeriDonuluyorIndex] = useState<number | null>(null);
   const [manuelGorselUrl, setManuelGorselUrl] = useState<string>('');
-  const [kayitMesaji, setKayitMesaji] = useState<{ tur: 'basari' | 'hata'; metin: string } | null>(null);
+  const [kayitMesaji, setKayitMesaji] = useState<{ tur: 'basari' | 'hata'; metin: string } | null>(
+    null
+  );
   const [kirikGorseller, setKirikGorseller] = useState<{ [key: number]: boolean }>({});
 
   // Kırpma alan ayarları (0-1000 normalize)
@@ -70,24 +76,26 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
   const [cropXmax, setCropXmax] = useState(900);
 
   // Ürünlerin listesi
-  const urunler: SiparisUrunKalemi[] = (siparis.urunler && siparis.urunler.length > 0)
-    ? siparis.urunler
-    : [
-        {
-          urun_aciklamasi: siparis.urun_aciklamasi || 'Sipariş Edilen Ürün',
-          adet: siparis.adet || 1,
-          birim_fiyat: siparis.toplam_tutar,
-          tutar: siparis.toplam_tutar,
-          urun_gorseli: siparis.gorsel_url,
-        },
-      ];
+  const urunler: SiparisUrunKalemi[] =
+    siparis.urunler && siparis.urunler.length > 0
+      ? siparis.urunler
+      : [
+          {
+            urun_aciklamasi: siparis.urun_aciklamasi || 'Sipariş Edilen Ürün',
+            adet: siparis.adet || 1,
+            birim_fiyat: siparis.toplam_tutar,
+            tutar: siparis.toplam_tutar,
+            urun_gorseli: siparis.gorsel_url,
+          },
+        ];
 
   // Ham ekran görüntüleri (WhatsApp vs.)
-  const hamGorseller = (siparis.gorsel_urlleri && siparis.gorsel_urlleri.length > 0)
-    ? siparis.gorsel_urlleri
-    : siparis.gorsel_url
-    ? [siparis.gorsel_url]
-    : [];
+  const hamGorseller =
+    siparis.gorsel_urlleri && siparis.gorsel_urlleri.length > 0
+      ? siparis.gorsel_urlleri
+      : siparis.gorsel_url
+        ? [siparis.gorsel_url]
+        : [];
 
   // Geçerli görsel URL'i oluşturma ve çözümleme
   const urlCozumle = (url?: string, idx: number = 0): string => {
@@ -109,9 +117,10 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
   // Kırpma modalini aç
   const handleKirpmaBaslat = (urun: SiparisUrunKalemi, uIdx: number) => {
     // Kaynak ham görseli bul
-    let kaynak = urun.orijinal_gorsel_url || urun.urun_gorseli || hamGorseller[uIdx] || hamGorseller[0];
+    let kaynak =
+      urun.orijinal_gorsel_url || urun.urun_gorseli || hamGorseller[uIdx] || hamGorseller[0];
     kaynak = urlCozumle(kaynak, uIdx);
-    
+
     // Varsayılan koordinatlar varsa yükle
     if (urun.urun_alani) {
       setCropYmin(urun.urun_alani.ymin);
@@ -187,7 +196,7 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
     setKayitMesaji(null);
 
     try {
-      const res = await fetch('/api/urun-katalog-gorseli-ara', {
+      const res = await apiFetch('/api/urun-katalog-gorseli-ara', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -209,13 +218,17 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
   };
 
   // Bulunan Orijinal Görseli Ürüne Tanımla & Kaydet
-  const handleKatalogGorseliSec = async (gorselUrl: string, urunSayfasi?: string, resmiAd?: string) => {
+  const handleKatalogGorseliSec = async (
+    gorselUrl: string,
+    urunSayfasi?: string,
+    resmiAd?: string
+  ) => {
     if (!katalogAramaHedef || !gorselUrl) return;
     const { urunIndex } = katalogAramaHedef;
     setKayitMesaji(null);
 
     try {
-      const res = await fetch('/api/katalog-gorseli-kaydet', {
+      const res = await apiFetch('/api/katalog-gorseli-kaydet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -257,10 +270,15 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
   };
 
   // Google Lens / Görselden Arama ile bulunan görseli kaydet
-  const handleLensGorseliKaydet = async (urunIndex: number, gorselUrl: string, urunSayfasi?: string, resmiAd?: string) => {
+  const handleLensGorseliKaydet = async (
+    urunIndex: number,
+    gorselUrl: string,
+    urunSayfasi?: string,
+    resmiAd?: string
+  ) => {
     if (!gorselUrl) return;
     try {
-      const res = await fetch('/api/katalog-gorseli-kaydet', {
+      const res = await apiFetch('/api/katalog-gorseli-kaydet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -297,9 +315,9 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
   // Orijinal Ekran Görüntüsüne Geri Dön (Geri Al)
   const handleOrijinalGorseleDon = async (urun: SiparisUrunKalemi, idx: number) => {
     setGeriDonuluyorIndex(idx);
-    setKirikGorseller(prev => ({ ...prev, [idx]: false }));
+    setKirikGorseller((prev) => ({ ...prev, [idx]: false }));
     try {
-      const res = await fetch('/api/urun-orijinal-gorsele-don', {
+      const res = await apiFetch('/api/urun-orijinal-gorsele-don', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -371,7 +389,7 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
         }
         const safeName = `orijinal_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
         const sunucuUrl = await sunucuyaGorselYukle(base64, safeName);
-        
+
         const yeniGorselListesi = [...hamGorseller, sunucuUrl];
         if (onGuncelle) {
           onGuncelle(siparis.id, {
@@ -406,7 +424,8 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                 </span>
               </h4>
               <p className="text-[11px] text-slate-500">
-                WhatsApp konuşması ve arka plan gereksizlikleri elenerek ayrıştırılmış ürün fotoğrafları
+                WhatsApp konuşması ve arka plan gereksizlikleri elenerek ayrıştırılmış ürün
+                fotoğrafları
               </p>
             </div>
           </div>
@@ -420,8 +439,8 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
             const fiyat = urun.tutar || urun.birim_fiyat;
 
             return (
-              <div 
-                key={uIdx} 
+              <div
+                key={uIdx}
                 className="group relative rounded-xl border border-slate-200 hover:border-emerald-300 bg-slate-50/50 hover:bg-emerald-50/20 p-3 transition-all flex gap-3.5 items-center"
               >
                 {/* Ürün Fotoğraf Kutusu */}
@@ -429,11 +448,13 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                   {kirikGorseller[uIdx] ? (
                     <div className="flex flex-col items-center justify-center text-slate-400 p-1 text-center space-y-1">
                       <AlertTriangle className="w-4 h-4 text-amber-500" />
-                      <span className="text-[9px] font-bold text-slate-700 leading-tight">Yüklenemedi</span>
+                      <span className="text-[9px] font-bold text-slate-700 leading-tight">
+                        Yüklenemedi
+                      </span>
                       <button
                         type="button"
                         onClick={() => {
-                          setKirikGorseller(prev => ({ ...prev, [uIdx]: false }));
+                          setKirikGorseller((prev) => ({ ...prev, [uIdx]: false }));
                         }}
                         className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[8px] font-semibold cursor-pointer transition-colors"
                       >
@@ -446,13 +467,15 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                       alt={urunBaslik}
                       className="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-300"
                       onError={() => {
-                        setKirikGorseller(prev => ({ ...prev, [uIdx]: true }));
+                        setKirikGorseller((prev) => ({ ...prev, [uIdx]: true }));
                       }}
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center text-slate-400 p-2 text-center">
                       <ImageIcon className="w-6 h-6 text-slate-300 mb-1" />
-                      <span className="text-[10px] text-slate-400 font-semibold">Fotoğraf Bekleniyor</span>
+                      <span className="text-[10px] text-slate-400 font-semibold">
+                        Fotoğraf Bekleniyor
+                      </span>
                     </div>
                   )}
 
@@ -551,7 +574,9 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                     {gorselUrl && (
                       <button
                         type="button"
-                        onClick={() => setSeciliBuyutmeGorsel({ url: gorselUrl, baslik: urunBaslik })}
+                        onClick={() =>
+                          setSeciliBuyutmeGorsel({ url: gorselUrl, baslik: urunBaslik })
+                        }
                         className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:text-emerald-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
                       >
                         <Maximize2 className="w-3 h-3" />
@@ -582,7 +607,10 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                     </button>
 
                     {/* Orijinal Ekran Görüntüsüne Geri Dön (Geri Al) Butonu */}
-                    {(urun.katalog_gorseli || (urun.orijinal_gorsel_url && urun.urun_gorseli !== urun.orijinal_gorsel_url) || kirikGorseller[uIdx]) && (
+                    {(urun.katalog_gorseli ||
+                      (urun.orijinal_gorsel_url &&
+                        urun.urun_gorseli !== urun.orijinal_gorsel_url) ||
+                      kirikGorseller[uIdx]) && (
                       <button
                         type="button"
                         onClick={() => handleOrijinalGorseleDon(urun, uIdx)}
@@ -663,14 +691,19 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
             {hamGorseller.map((gUrl, gIdx) => {
               const gercekUrl = urlCozumle(gUrl, gIdx);
               return (
-                <div 
-                  key={gIdx} 
-                  onClick={() => setSeciliBuyutmeGorsel({ url: gercekUrl, baslik: `Ekran Görüntüsü #${gIdx + 1}` })}
+                <div
+                  key={gIdx}
+                  onClick={() =>
+                    setSeciliBuyutmeGorsel({
+                      url: gercekUrl,
+                      baslik: `Ekran Görüntüsü #${gIdx + 1}`,
+                    })
+                  }
                   className="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-700 hover:border-emerald-500 h-28 flex items-center justify-center group cursor-pointer transition-all"
                 >
-                  <img 
-                    src={gercekUrl} 
-                    alt={`Sipariş Görseli ${gIdx + 1}`} 
+                  <img
+                    src={gercekUrl}
+                    alt={`Sipariş Görseli ${gIdx + 1}`}
                     className="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
@@ -683,7 +716,7 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                           </div>
                         `;
                       }
-                    }} 
+                    }}
                   />
                   <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-black/70 text-[9px] font-bold text-white rounded">
                     #{gIdx + 1}
@@ -706,11 +739,11 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
 
       {/* Lightbox: Görseli Büyük İnceleme Modalı */}
       {seciliBuyutmeGorsel && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-6"
           onClick={() => setSeciliBuyutmeGorsel(null)}
         >
-          <div 
+          <div
             className="relative w-full max-w-4xl min-h-[420px] max-h-[92vh] bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
@@ -759,11 +792,11 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
 
       {/* Kırpma / Odaklama Modalı */}
       {kirpmaModalHedef && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => setKirpmaModalHedef(null)}
         >
-          <div 
+          <div
             className="relative max-w-2xl w-full bg-white rounded-2xl border border-slate-200 shadow-2xl p-5 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
@@ -788,7 +821,9 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
             {/* Kaynak Görsel Seçimi (Eğer birden fazla ham görsel varsa) */}
             {hamGorseller.length > 1 && (
               <div className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-xl overflow-x-auto">
-                <span className="text-xs font-bold text-slate-700 shrink-0">Kırpılacak Görsel:</span>
+                <span className="text-xs font-bold text-slate-700 shrink-0">
+                  Kırpılacak Görsel:
+                </span>
                 <div className="flex items-center gap-2">
                   {hamGorseller.map((g, gIdx) => {
                     const cUrl = urlCozumle(g, gIdx);
@@ -797,10 +832,12 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                       <button
                         key={gIdx}
                         type="button"
-                        onClick={() => setKirpmaModalHedef({ ...kirpmaModalHedef, kaynakGorsel: cUrl })}
+                        onClick={() =>
+                          setKirpmaModalHedef({ ...kirpmaModalHedef, kaynakGorsel: cUrl })
+                        }
                         className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
-                          secili 
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' 
+                          secili
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                             : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                         }`}
                       >
@@ -822,7 +859,7 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                   className="max-h-[380px] w-auto object-contain rounded opacity-80"
                 />
                 {/* Kırpma Kılavuz Çerçevesi (Overlay) */}
-                <div 
+                <div
                   className="absolute border-2 border-emerald-400 bg-emerald-500/20 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] pointer-events-none transition-all"
                   style={{
                     top: `${cropYmin / 10}%`,
@@ -846,21 +883,36 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => { setCropYmin(100); setCropYmax(520); setCropXmin(50); setCropXmax(950); }}
+                  onClick={() => {
+                    setCropYmin(100);
+                    setCropYmax(520);
+                    setCropXmin(50);
+                    setCropXmax(950);
+                  }}
                   className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 text-slate-700 cursor-pointer"
                 >
                   1. Üst Ürün (Çanta / Ayakkabı)
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setCropYmin(480); setCropYmax(900); setCropXmin(50); setCropXmax(950); }}
+                  onClick={() => {
+                    setCropYmin(480);
+                    setCropYmax(900);
+                    setCropXmin(50);
+                    setCropXmax(950);
+                  }}
                   className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 text-slate-700 cursor-pointer"
                 >
                   2. Alt Ürün (2. Çanta / Talimat)
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setCropYmin(140); setCropYmax(840); setCropXmin(80); setCropXmax(920); }}
+                  onClick={() => {
+                    setCropYmin(140);
+                    setCropYmax(840);
+                    setCropXmin(80);
+                    setCropXmax(920);
+                  }}
                   className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 text-slate-700 cursor-pointer"
                 >
                   Merkez Odak (Sohbetsiz)
@@ -966,8 +1018,12 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                   <Globe className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Web'den Orijinal Katalog Fotoğrafı Bul</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Google Search Grounding & AI ile resmi marka ve e-ticaret sitelerinde aranır.</p>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Web'den Orijinal Katalog Fotoğrafı Bul
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Google Search Grounding & AI ile resmi marka ve e-ticaret sitelerinde aranır.
+                  </p>
                 </div>
               </div>
               <button
@@ -985,7 +1041,9 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
               <div className="flex gap-2">
                 <input
                   type="text"
-                  defaultValue={katalogAramaHedef.urun.urun_adi || katalogAramaHedef.urun.urun_aciklamasi}
+                  defaultValue={
+                    katalogAramaHedef.urun.urun_adi || katalogAramaHedef.urun.urun_aciklamasi
+                  }
                   id="katalog_arama_input"
                   className="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-300 bg-white font-medium focus:ring-2 focus:ring-sky-500 focus:outline-none"
                   placeholder="Örn: Karl Lagerfeld Beyaz Terlik..."
@@ -993,14 +1051,23 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    const input = document.getElementById('katalog_arama_input') as HTMLInputElement;
+                    const input = document.getElementById(
+                      'katalog_arama_input'
+                    ) as HTMLInputElement;
                     const yeniAd = input?.value || katalogAramaHedef.urun.urun_adi || '';
-                    handleKatalogAramaBaslat({ ...katalogAramaHedef.urun, urun_adi: yeniAd }, katalogAramaHedef.urunIndex);
+                    handleKatalogAramaBaslat(
+                      { ...katalogAramaHedef.urun, urun_adi: yeniAd },
+                      katalogAramaHedef.urunIndex
+                    );
                   }}
                   disabled={katalogAraniyor}
                   className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  {katalogAraniyor ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                  {katalogAraniyor ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Search className="w-3.5 h-3.5" />
+                  )}
                   <span>Ara</span>
                 </button>
               </div>
@@ -1010,9 +1077,12 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
             {katalogAraniyor && (
               <div className="py-8 text-center space-y-3">
                 <Loader2 className="w-8 h-8 text-sky-600 animate-spin mx-auto" />
-                <div className="text-xs font-semibold text-slate-700">İnternette Resmi Siteler Taranıyor...</div>
+                <div className="text-xs font-semibold text-slate-700">
+                  İnternette Resmi Siteler Taranıyor...
+                </div>
                 <div className="text-[11px] text-slate-500 max-w-sm mx-auto">
-                  Farfetch, Nordstrom, Karl.com ve yetkili lüks kataloglar incelenerek stüdyo fotoğrafı ve ürün detayları getiriliyor.
+                  Farfetch, Nordstrom, Karl.com ve yetkili lüks kataloglar incelenerek stüdyo
+                  fotoğrafı ve ürün detayları getiriliyor.
                 </div>
               </div>
             )}
@@ -1022,7 +1092,9 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
               <div className="p-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs flex items-center justify-between">
                 <span>{katalogHata}</span>
                 <button
-                  onClick={() => handleKatalogAramaBaslat(katalogAramaHedef.urun, katalogAramaHedef.urunIndex)}
+                  onClick={() =>
+                    handleKatalogAramaBaslat(katalogAramaHedef.urun, katalogAramaHedef.urunIndex)
+                  }
                   className="underline font-bold hover:text-rose-900"
                 >
                   Tekrar Dene
@@ -1064,9 +1136,13 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
 
                   {/* Kayıt Hata Mesajı Banner'ı */}
                   {kayitMesaji && (
-                    <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
-                      kayitMesaji.tur === 'hata' ? 'bg-rose-50 text-rose-800 border border-rose-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    }`}>
+                    <div
+                      className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                        kayitMesaji.tur === 'hata'
+                          ? 'bg-rose-50 text-rose-800 border border-rose-200'
+                          : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      }`}
+                    >
                       <AlertTriangle className="w-4 h-4 shrink-0" />
                       <span>{kayitMesaji.metin}</span>
                     </div>
@@ -1080,8 +1156,12 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                           {katalogGorselGecerliMi === false ? (
                             <div className="p-2 text-center flex flex-col items-center justify-center text-rose-600 space-y-1">
                               <AlertTriangle className="w-6 h-6 text-rose-500" />
-                              <span className="text-[10px] font-bold leading-tight">Görsel Yüklenemedi</span>
-                              <span className="text-[9px] text-slate-500 leading-tight">(Web sayfası veya hotlink engeli)</span>
+                              <span className="text-[10px] font-bold leading-tight">
+                                Görsel Yüklenemedi
+                              </span>
+                              <span className="text-[9px] text-slate-500 leading-tight">
+                                (Web sayfası veya hotlink engeli)
+                              </span>
                             </div>
                           ) : (
                             <img
@@ -1102,7 +1182,9 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
 
                         <div className="flex-1 space-y-2">
                           <div className="text-xs font-bold text-slate-800">
-                            {katalogGorselGecerliMi === false ? 'Geçersiz Görsel Bağlantısı' : 'Orijinal Stüdyo Çekimi Görseli'}
+                            {katalogGorselGecerliMi === false
+                              ? 'Geçersiz Görsel Bağlantısı'
+                              : 'Orijinal Stüdyo Çekimi Görseli'}
                           </div>
                           <p className="text-[11px] text-slate-500">
                             {katalogGorselGecerliMi === false
@@ -1114,11 +1196,13 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                             <button
                               type="button"
                               disabled={katalogGorselGecerliMi === false}
-                              onClick={() => handleKatalogGorseliSec(
-                                katalogSonuc.sonuc.katalog_gorsel_url,
-                                katalogSonuc.sonuc.urun_sayfasi_url,
-                                katalogSonuc.sonuc.resmi_urun_adi
-                              )}
+                              onClick={() =>
+                                handleKatalogGorseliSec(
+                                  katalogSonuc.sonuc.katalog_gorsel_url,
+                                  katalogSonuc.sonuc.urun_sayfasi_url,
+                                  katalogSonuc.sonuc.resmi_urun_adi
+                                )
+                              }
                               className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs ${
                                 katalogGorselGecerliMi === false
                                   ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
@@ -1126,7 +1210,11 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                               }`}
                             >
                               <Check className="w-3.5 h-3.5" />
-                              <span>{katalogGorselGecerliMi === false ? 'Görsel Seçilemez' : 'Bu Görseli Ürüne Tanımla & Kaydet'}</span>
+                              <span>
+                                {katalogGorselGecerliMi === false
+                                  ? 'Görsel Seçilemez'
+                                  : 'Bu Görseli Ürüne Tanımla & Kaydet'}
+                              </span>
                             </button>
                           </div>
                         </div>
@@ -1136,10 +1224,14 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                     <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 space-y-2">
                       <div className="font-semibold flex items-center gap-1.5">
                         <AlertTriangle className="w-4 h-4 text-amber-600" />
-                        <span>Resmi ürün sayfası bulundu fakat doğrudan resim linki alınamadı.</span>
+                        <span>
+                          Resmi ürün sayfası bulundu fakat doğrudan resim linki alınamadı.
+                        </span>
                       </div>
                       <p className="text-[11px]">
-                        Aşağıdaki resmi sayfa bağlantısından görselin üzerine sağ tıklayıp "Resim adresini kopyala" diyerek URL'yi yapıştırabilir veya doğrudan cihazınızdan fotoğraf yükleyebilirsiniz.
+                        Aşağıdaki resmi sayfa bağlantısından görselin üzerine sağ tıklayıp "Resim
+                        adresini kopyala" diyerek URL'yi yapıştırabilir veya doğrudan cihazınızdan
+                        fotoğraf yükleyebilirsiniz.
                       </p>
                     </div>
                   )}
@@ -1147,7 +1239,9 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
                   {/* Google Arama Kaynakları */}
                   {katalogSonuc.web_linkleri && katalogSonuc.web_linkleri.length > 0 && (
                     <div className="pt-2 border-t border-slate-100 space-y-1.5">
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">İlgili Resmi Web Sayfaları:</div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        İlgili Resmi Web Sayfaları:
+                      </div>
                       <div className="flex flex-wrap gap-1.5">
                         {katalogSonuc.web_linkleri.map((wl: any, idx: number) => (
                           <a
@@ -1227,10 +1321,16 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
             {/* Modal Alt Aksiyonlar */}
             <div className="flex items-center justify-between pt-3 border-t border-slate-200">
               {/* Orijinal Ekran Görüntüsüne Geri Dön (Geri Al) Butonu */}
-              {katalogAramaHedef && (katalogAramaHedef.urun.katalog_gorseli || (katalogAramaHedef.urun.orijinal_gorsel_url && katalogAramaHedef.urun.urun_gorseli !== katalogAramaHedef.urun.orijinal_gorsel_url)) ? (
+              {katalogAramaHedef &&
+              (katalogAramaHedef.urun.katalog_gorseli ||
+                (katalogAramaHedef.urun.orijinal_gorsel_url &&
+                  katalogAramaHedef.urun.urun_gorseli !==
+                    katalogAramaHedef.urun.orijinal_gorsel_url)) ? (
                 <button
                   type="button"
-                  onClick={() => handleOrijinalGorseleDon(katalogAramaHedef.urun, katalogAramaHedef.urunIndex)}
+                  onClick={() =>
+                    handleOrijinalGorseleDon(katalogAramaHedef.urun, katalogAramaHedef.urunIndex)
+                  }
                   disabled={geriDonuluyorIndex === katalogAramaHedef.urunIndex}
                   className="px-3.5 py-2 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
                 >
@@ -1267,10 +1367,17 @@ export const UrunGorselleriGalerisi: React.FC<UrunGorselleriGalerisiProps> = ({
           mevcutUrunGorseli={lensAramaHedef.urun.urun_gorseli}
           onKapat={() => setLensAramaHedef(null)}
           onGorselSecildi={async (gorselUrl, urunSayfasi, resmiAd) => {
-            await handleLensGorseliKaydet(lensAramaHedef.urunIndex, gorselUrl, urunSayfasi, resmiAd);
+            await handleLensGorseliKaydet(
+              lensAramaHedef.urunIndex,
+              gorselUrl,
+              urunSayfasi,
+              resmiAd
+            );
           }}
           onOrijinaleDon={
-            (lensAramaHedef.urun.katalog_gorseli || (lensAramaHedef.urun.orijinal_gorsel_url && lensAramaHedef.urun.urun_gorseli !== lensAramaHedef.urun.orijinal_gorsel_url))
+            lensAramaHedef.urun.katalog_gorseli ||
+            (lensAramaHedef.urun.orijinal_gorsel_url &&
+              lensAramaHedef.urun.urun_gorseli !== lensAramaHedef.urun.orijinal_gorsel_url)
               ? async () => {
                   await handleOrijinalGorseleDon(lensAramaHedef.urun, lensAramaHedef.urunIndex);
                 }

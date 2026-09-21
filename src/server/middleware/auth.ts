@@ -1,204 +1,179 @@
-/**
- * API Key Kimlik Doğrulama Middleware'i
- * 
- * Tüm /api/* route'larına uygulanan basit ama etkili kimlik doğrulama katmanı.
- * - `x-api-key` header veya `?api_key=` query parametresi ile doğrulama
- * - Geliştirme ortamında API_SECRET_KEY tanımlı değilse uyarı verir ama engel olmaz
- * - Production'da API_SECRET_KEY zorunludur
- * 
- * İleride JWT tabanlı kullanıcı kimlik doğrulamasına yükseltilebilir.
- */
+import type { Request, Response, NextFunction } from 'express';
+import { timingSafeEqual } from 'node:crypto';
+import { readSession, type AuthContext } from '../services/sessions';
+import { allowedOrigins } from './security';
 
-import { Request, Response, NextFunction } from 'express';
-import crypto from 'crypto';
-
-// Kimlik doğrulama gerektirmeyen herkese açık endpoint'ler
-const HERKESE_ACIK_ENDPOINTLER: string[] = [
-  '/api/sistem-durum',
-  '/sistem-durum',
-  '/api/sistem',
-  '/sistem',
-  '/api/health',
-  '/health',
-  '/api/ping',
-  '/ping',
-  '/api/firmalar',
-  '/firmalar',
-  '/api/tenant',
-  '/tenant',
-  '/api/kargo',
-  '/kargo',
-  '/api/demo',
-  '/demo',
-  '/api/auth',
-  '/auth',
-  '/api/ayristir-siparis',
-  '/ayristir-siparis',
-  '/api/gorselden-urun-ara',
-  '/gorselden-urun-ara',
-  '/api/urun-katalog-gorseli-ara',
-  '/urun-katalog-gorseli-ara',
-  '/api/katalog-gorseli-kaydet',
-  '/katalog-gorseli-kaydet',
-  '/api/urun-orijinal-gorsele-don',
-  '/urun-orijinal-gorsele-don',
-  '/api/upload-gorsel',
-  '/upload-gorsel',
-  '/api/proxy-gorsel',
-  '/proxy-gorsel',
-];
-
-// Kimlik doğrulama gerektirmeyen HTTP metodları (CORS preflight)
-const MUAF_METODLAR = new Set(['OPTIONS']);
-
-/**
- * API Key doğrulama middleware'i oluşturur.
- * Environment'tan API_SECRET_KEY okur ve her istekte kontrol eder.
- */
-export function apiKeyAuth() {
-  const apiSecretKey = process.env.API_SECRET_KEY;
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  if (!apiSecretKey) {
-    if (isProduction) {
-      console.warn('⚠️  UYARI: API_SECRET_KEY təyin edilməyib. Əsas ictimai və demo API axınları davam edir.');
-    } else {
-      console.warn('⚠️  UYARI: API_SECRET_KEY tanımlı değil. Geliştirme ortamında kimlik doğrulama atlanıyor.');
+declare global {
+  namespace Express {
+    interface Request {
+      auth?: AuthContext;
+      tenantId?: string;
     }
   }
-
-  return (req: Request, res: Response, next: NextFunction): void => {
-    // OPTIONS (CORS preflight) isteklerini atla
-    if (MUAF_METODLAR.has(req.method)) {
-      next();
-      return;
-    }
-
-    // Herkese açık endpoint kontrolü (həm req.path, həm req.originalUrl yoxlanılır)
-    const currentPath = req.path || '';
-    const currentUrl = req.originalUrl || '';
-    if (
-      HERKESE_ACIK_ENDPOINTLER.some(
-        (ep) =>
-          currentPath === ep ||
-          currentPath.startsWith(ep + '/') ||
-          currentUrl === ep ||
-          currentUrl.startsWith(ep + '/') ||
-          currentUrl.startsWith(ep + '?')
-      )
-    ) {
-      next();
-      return;
-    }
-
-    // Sadece /api/* route'larına uygula
-    if (!currentPath.startsWith('/api/') && !currentUrl.startsWith('/api/')) {
-      next();
-      return;
-    }
-
-    // İstekten API key'i çıkar
-    const gonderilen = extractApiKey(req);
-
-    // Eğer geçerli API anahtarı gönderilmişse doğrula
-    if (gonderilen && apiSecretKey) {
-      if (timingSafeEqual(gonderilen, apiSecretKey)) {
-        next();
-        return;
-      }
-      res.status(401).json({
-        basarili: false,
-        hata: 'Geçersiz API anahtarı. Lütfen doğru anahtarı kullanın.',
-      });
-      return;
-    }
-
-    // Eyni origin / SPA veb brauzer və ya mobil müştəri sorğularına icazə ver
-    const secFetchSite = req.headers['sec-fetch-site'];
-    const origin = (req.headers['origin'] as string) || '';
-    const referer = (req.headers['referer'] as string) || '';
-    const host = (req.headers['host'] as string) || '';
-
-    const isSameOrigin =
-      secFetchSite === 'same-origin' ||
-      secFetchSite === 'same-site' ||
-      (host && origin && origin.includes(host)) ||
-      (host && referer && referer.includes(host)) ||
-      (origin && (origin.includes('tomnap.com') || origin.includes('vercel.app') || origin.includes('localhost'))) ||
-      (referer && (referer.includes('tomnap.com') || referer.includes('vercel.app') || referer.includes('localhost')));
-
-    if (isSameOrigin) {
-      next();
-      return;
-    }
-
-    // API key təyin edilməyibsə: development modunda keçidə icazə ver, production modunda kənar sorğuları 503 ilə saxla
-    if (!apiSecretKey) {
-      if (isProduction) {
-        res.status(503).json({
-          basarili: false,
-          hata: 'Sunucu kimlik doğrulama yapılandırması eksik. Yönetici ile iletişime geçin.',
-        });
-        return;
-      }
-      next();
-      return;
-    }
-
-    // Harici API çağrısı ve key yok
-    res.status(401).json({
-      basarili: false,
-      hata: 'Kimlik doğrulama gerekli. İstek başlığına x-api-key ekleyin veya ?api_key= parametresi kullanın.',
-    });
-  };
 }
 
-/**
- * İstekten API key'i çıkaran yardımcı fonksiyon.
- * Öncelik: x-api-key header > Authorization Bearer > api_key query param
- */
-function extractApiKey(req: Request): string | null {
-  // 1. x-api-key header
-  const headerKey = req.headers['x-api-key'];
-  if (typeof headerKey === 'string' && headerKey.trim()) {
-    return headerKey.trim();
-  }
+const READ = new Set(['GET', 'HEAD', 'OPTIONS']);
+const STAFF = ['SUPER_ADMIN', 'PATRON', 'KANADA_SATINALMA', 'SATIS_SORUMLUSU', 'BAKU_FINANS'];
+const OWNERS = ['SUPER_ADMIN', 'PATRON'];
+const SALES = [...OWNERS, 'SATIS_SORUMLUSU'];
+const PURCHASING = [...SALES, 'KANADA_SATINALMA'];
+const FINANCE = [...SALES, 'BAKU_FINANS'];
+const SHIPPING = [...OWNERS, 'KANADA_SATINALMA'];
+const ALL = [...STAFF, 'BAKU_KURYE'];
 
-  // 2. Authorization: Bearer <key>
-  const authHeader = req.headers['authorization'];
-  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7).trim();
-    if (token) return token;
-  }
+type Rule = [string, RegExp, string[]];
+// Explicit method + complete path allowlist. New routes are denied until reviewed.
+const rules: Rule[] = [
+  ['GET', /^\/api\/auth\/oturum$/, ALL],
+  ['POST', /^\/api\/auth\/cikis$/, ALL],
+  ['GET', /^\/api\/firmalar$/, STAFF],
+  ['POST', /^\/api\/firmalar\/davet-olustur$/, OWNERS],
+  ['POST', /^\/api\/firmalar$/, ['SUPER_ADMIN']],
+  ['PATCH', /^\/api\/firmalar\/[^/]+\/onay$/, ['SUPER_ADMIN']],
+  ['DELETE', /^\/api\/firmalar\/[^/]+$/, ['SUPER_ADMIN']],
+  [
+    'GET',
+    /^\/api\/(sistem-durum|tenant\/izolasyon-testi|veritabani\/(durum|yedek-al))$/,
+    ['SUPER_ADMIN'],
+  ],
+  [
+    'POST',
+    /^\/api\/(veritabani\/(temizle|demo-yukle|yedek-yukle)|ornek-verileri-yukle)$/,
+    ['SUPER_ADMIN'],
+  ],
+  ['GET', /^\/api\/siparisler$/, STAFF],
+  ['POST', /^\/api\/(siparisler|ayristir-siparis)$/, PURCHASING],
+  ['PATCH', /^\/api\/siparisler\/[^/]+$/, STAFF],
+  ['DELETE', /^\/api\/siparisler\/[^/]+$/, SALES],
+  ['POST', /^\/api\/siparisler\/tumunu-uluslararasi-kargo-yap$/, SHIPPING],
+  ['GET', /^\/api\/musteriler(?:\/[^/]+\/siparisler)?$/, FINANCE],
+  ['POST', /^\/api\/musteriler$/, SALES],
+  ['GET', /^\/api\/inbox$/, SALES],
+  ['POST', /^\/api\/(inbox\/[^/]+\/(onayla|reddet)|webhook\/siparis)$/, SALES],
+  ['GET', /^\/api\/kuryeler$/, [...SHIPPING, 'BAKU_FINANS']],
+  ['POST', /^\/api\/kuryeler(?:\/[^/]+\/kullanici)?$/, OWNERS],
+  ['POST', /^\/api\/siparisler\/[^/]+\/kurye$/, SHIPPING],
+  ['GET', /^\/api\/kurye\/gorevler$/, ['BAKU_KURYE']],
+  ['POST', /^\/api\/kurye\/gorevler\/[^/]+\/teslim$/, ['BAKU_KURYE']],
+  ['GET', /^\/api\/kargo\/ayarlar$/, SHIPPING],
+  ['POST', /^\/api\/kargo\/ayarlar$/, OWNERS],
+  ['POST', /^\/api\/kargo\/(test|takip|senkronize-et|manifesto-yukle)$/, SHIPPING],
+  ['GET', /^\/api\/proxy-gorsel$/, STAFF],
+  ['GET', /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
+  [
+    'POST',
+    /^\/api\/(upload-gorsel|urun-katalog-gorseli-ara|gorselden-urun-ara|katalog-gorseli-kaydet|urun-orijinal-gorsele-don)$/,
+    PURCHASING,
+  ],
+];
 
-  // 3. Query parameter
-  const queryKey = req.query.api_key;
-  if (typeof queryKey === 'string' && queryKey.trim()) {
-    return queryKey.trim();
-  }
+function isPublic(req: Request): boolean {
+  return (
+    (req.method === 'GET' && /^\/(?:api\/)?health$/.test(req.path)) ||
+    (req.method === 'GET' &&
+      /^\/api\/(auth\/token-kontrol|firmalar\/davet)\/[^/]+$/.test(req.path)) ||
+    (req.method === 'POST' &&
+      /^\/api\/(auth\/(giris|sifre-belirle)|firmalar\/(giris|kayit|davet\/katil))$/.test(req.path))
+  );
+}
 
+function equalToken(received: unknown, expected: string): boolean {
+  if (typeof received !== 'string' || !/^[a-f0-9]{64}$/.test(received)) return false;
+  return timingSafeEqual(Buffer.from(received), Buffer.from(expected));
+}
+
+function setTenant(req: Request) {
+  const values: unknown[] = [
+    req.headers['x-tenant-id'],
+    req.query.tenant_id,
+    req.query.tenantId,
+    req.body?.tenant_id,
+    req.body?.tenantId,
+    req.body?.duzeltilmis_siparis?.tenant_id,
+    req.body?.duzeltilmis_siparis?.tenantId,
+    req.body?.ayarlar?.tenantId,
+  ];
+  const present = values.filter((v) => v !== undefined);
+  if (present.some((v) => typeof v !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(v as string)))
+    return 'Geçersiz firma kimliği.';
+  if (new Set(present).size > 1) return 'Çelişen firma kimlikleri.';
+  const requested = present[0] as string | undefined;
+  if (req.auth!.role !== 'SUPER_ADMIN' && requested && requested !== req.auth!.tenantId)
+    return 'Bu firmaya erişim yetkiniz yok.';
+  req.tenantId = req.auth!.role === 'SUPER_ADMIN' ? requested || 'all' : req.auth!.tenantId;
+  const globalMutation =
+    /^\/api\/(auth\/cikis|firmalar(?:\/[^/]+(?:\/onay)?)?|veritabani\/[^/]+|ornek-verileri-yukle)$/.test(
+      req.path
+    ) && req.path !== '/api/firmalar/davet-olustur';
+  if (!READ.has(req.method) && req.tenantId === 'all' && !globalMutation)
+    return 'Bu işlem için bir firma seçin.';
+  // Routers consume server-resolved scope, never unvalidated client scope.
+  req.query.tenant_id = req.tenantId;
+  req.query.tenantId = req.tenantId;
+  if (!READ.has(req.method)) {
+    if (!req.body) req.body = {};
+    if (typeof req.body !== 'object' || Array.isArray(req.body)) return 'Geçersiz istek gövdesi.';
+    req.body.tenant_id = req.tenantId;
+    req.body.tenantId = req.tenantId;
+  }
   return null;
 }
 
-/**
- * Sabit zamanlı string karşılaştırma (timing attack koruması).
- * Node.js crypto.timingSafeEqual kullanır.
- */
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    const dummyBuffer = Buffer.alloc(Math.max(a.length, b.length));
-    const aBuffer = Buffer.from(a.padEnd(dummyBuffer.length));
-    const bBuffer = Buffer.from(b.padEnd(dummyBuffer.length));
+export function sessionAuth() {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    let normalizedPath: string;
     try {
-      return crypto.timingSafeEqual(aBuffer, bBuffer) && a.length === b.length;
+      normalizedPath = decodeURIComponent(req.path).toLowerCase();
     } catch {
-      return false;
+      res.status(400).json({ basarili: false, hata: 'Geçersiz istek yolu.' });
+      return;
     }
-  }
-
-  try {
-    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-  } catch {
-    return a === b;
-  }
+    if (
+      !normalizedPath.startsWith('/api/') &&
+      !normalizedPath.startsWith('/uploads/') &&
+      normalizedPath !== '/health'
+    )
+      return next();
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.vary('Cookie');
+    if (!READ.has(req.method) && req.headers.origin && !allowedOrigins().has(req.headers.origin)) {
+      res.status(403).json({ basarili: false, hata: 'İstek kaynağına izin verilmiyor.' });
+      return;
+    }
+    if (isPublic(req)) return next();
+    try {
+      const auth = await readSession(req);
+      if (!auth) {
+        res.status(401).json({ basarili: false, hata: 'Oturum açmanız gerekiyor.' });
+        return;
+      }
+      req.auth = auth;
+      if (!READ.has(req.method) && !equalToken(req.headers['x-csrf-token'], auth.csrfToken)) {
+        res
+          .status(403)
+          .json({ basarili: false, hata: 'İstek doğrulaması geçersiz. Sayfayı yenileyin.' });
+        return;
+      }
+      const method = req.method === 'HEAD' ? 'GET' : req.method;
+      if (
+        !rules.some(
+          ([m, path, roles]) => m === method && path.test(req.path) && roles.includes(auth.role)
+        )
+      ) {
+        res.status(403).json({ basarili: false, hata: 'Bu işlem için yetkiniz yok.' });
+        return;
+      }
+      const tenantError = setTenant(req);
+      if (tenantError) {
+        res.status(403).json({ basarili: false, hata: tenantError });
+        return;
+      }
+      next();
+    } catch {
+      res.status(503).json({ basarili: false, hata: 'Oturum doğrulama hizmeti kullanılamıyor.' });
+    }
+  };
 }
+
+// Compatibility export for integrations importing the old middleware name.
+export const apiKeyAuth = sessionAuth;

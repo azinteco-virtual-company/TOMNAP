@@ -1,8 +1,20 @@
-import fs from 'fs';
 import path from 'path';
-import { FIRMALAR_DOSYA_YOLU, KULLANICILAR_DOSYA_YOLU } from '../config';
+import {
+  DATA_DIR,
+  FIRMALAR_DOSYA_YOLU,
+  KULLANICILAR_DOSYA_YOLU,
+  IS_PRODUCTION,
+  SUPABASE_URL,
+} from '../config';
+import { JsonStorageError, readJsonFile, writeJsonAtomic } from './atomicJson';
 import { BASLANGIC_SIPARISLER } from '../../data/ornek-siparisler';
-import { MusteriKaydi, FirmaTenantItem, OnayBekleyenKaydi, KullaniciKaydi } from '../types';
+import {
+  MusteriKaydi,
+  FirmaTenantItem,
+  OnayBekleyenKaydi,
+  KullaniciKaydi,
+  DavetKaydi,
+} from '../types';
 
 // In-memory sipariş veritabanı
 export let siparislerVeritabani: any[] = [...BASLANGIC_SIPARISLER];
@@ -12,11 +24,13 @@ export function setSiparislerVeritabani(yeniListe: any[]) {
 }
 
 // DƏYİŞMƏZ QIZIL DEMO BAZASI (Golden Demo Dataset - 109 İlkin Sifariş)
-export const GOLDEN_DEMO_SIPARISLER = JSON.parse(JSON.stringify(BASLANGIC_SIPARISLER)).map((s: any) => ({
-  ...s,
-  tenant_id: 'demo_sandbox',
-  is_demo: true,
-}));
+export const GOLDEN_DEMO_SIPARISLER = JSON.parse(JSON.stringify(BASLANGIC_SIPARISLER)).map(
+  (s: any) => ({
+    ...s,
+    tenant_id: 'demo_sandbox',
+    is_demo: true,
+  })
+);
 
 // Təcrid olunmuş Canlı Demo Sandbox Hovuzu (Ziyarətçilər əsas bazanı zədələyə bilməz)
 export let demoSiparislerVeritabani: any[] = JSON.parse(JSON.stringify(GOLDEN_DEMO_SIPARISLER));
@@ -99,26 +113,96 @@ export let musterilerVeritabani: MusteriKaydi[] = [
     son_siparis_tarihi: new Date(Date.now() - 1000 * 60 * 60 * 70).toISOString(),
     son_urun_aciklamasi: 'Canada Goose çocuk kışlık mont (240 AZN)',
     son_siparis_tutari: 240.0,
-  }
+  },
 ];
 
 export function setMusterilerVeritabani(yeniListe: MusteriKaydi[]) {
   musterilerVeritabani = yeniListe;
 }
 
-// Firmalar dosyadan yükleme / kaydetme
-export function firmalariYukleDosyadan(): FirmaTenantItem[] {
-  try {
-    if (fs.existsSync(FIRMALAR_DOSYA_YOLU)) {
-      const icerik = fs.readFileSync(FIRMALAR_DOSYA_YOLU, 'utf-8');
-      const parsed = JSON.parse(icerik);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.warn('Firmalar dosyadan okunamadı:', e);
-  }
+// A single local identity snapshot keeps company, user, invitation and queued
+// email changes together. Legacy files are read only until the first snapshot;
+// they remain on disk for operator-controlled backup/migration.
+export const IDENTITY_DOSYA_YOLU = path.join(DATA_DIR, 'identity.json');
+export interface IdentitySnapshot {
+  companies: FirmaTenantItem[];
+  users: KullaniciKaydi[];
+  invites: DavetKaydi[];
+  emailJobs: Record<string, unknown>[];
+}
+type PersistedIdentity = IdentitySnapshot & { version: 1 };
+const object = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+const nonempty = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
+const roles = new Set([
+  'SUPER_ADMIN',
+  'PATRON',
+  'KANADA_SATINALMA',
+  'SATIS_SORUMLUSU',
+  'BAKU_FINANS',
+  'BAKU_KURYE',
+]);
+function companyRecord(value: unknown): value is FirmaTenantItem {
+  return (
+    object(value) &&
+    nonempty(value.id) &&
+    nonempty(value.ad) &&
+    typeof value.sehir === 'string' &&
+    ['AZN', 'CAD', 'USD'].includes(String(value.varsayilanParaBirimi)) &&
+    typeof value.varsayilanKomisyonYuzdesi === 'number' &&
+    Number.isFinite(value.varsayilanKomisyonYuzdesi) &&
+    typeof value.aciklama === 'string'
+  );
+}
+function userRecord(value: unknown): value is KullaniciKaydi {
+  return (
+    object(value) &&
+    nonempty(value.id) &&
+    nonempty(value.tenant_id) &&
+    typeof value.ad_soyad === 'string' &&
+    typeof value.email === 'string' &&
+    roles.has(String(value.rol)) &&
+    ['BEKLEMEDE_SIFRE', 'AKTIF', 'PASIF'].includes(String(value.durum)) &&
+    typeof value.olusturma_tarihi === 'string'
+  );
+}
+function inviteRecord(value: unknown): value is DavetKaydi {
+  return (
+    object(value) &&
+    nonempty(value.token) &&
+    nonempty(value.tenantId) &&
+    typeof value.tenantAd === 'string' &&
+    roles.has(String(value.rol)) &&
+    value.rol !== 'SUPER_ADMIN' &&
+    typeof value.olusturanKisi === 'string' &&
+    typeof value.olusturmaTarihi === 'string' &&
+    typeof value.gecerlilikTarihi === 'string' &&
+    typeof value.kullanildiMi === 'boolean'
+  );
+}
+function records<T>(
+  value: unknown,
+  valid: (item: unknown) => item is T,
+  key: keyof T
+): value is T[] {
+  return (
+    Array.isArray(value) &&
+    value.every(valid) &&
+    new Set(value.map((item) => item[key])).size === value.length
+  );
+}
+function snapshotRecord(value: unknown): value is PersistedIdentity {
+  return (
+    object(value) &&
+    value.version === 1 &&
+    records(value.companies, companyRecord, 'id') &&
+    records(value.users, userRecord, 'id') &&
+    records(value.invites, inviteRecord, 'token') &&
+    Array.isArray(value.emailJobs) &&
+    value.emailJobs.every(object)
+  );
+}
+function defaultCompanies(): FirmaTenantItem[] {
   return [
     {
       id: 'kanada_shopper_baku',
@@ -156,56 +240,93 @@ export function firmalariYukleDosyadan(): FirmaTenantItem[] {
   ];
 }
 
-export function firmalariKaydetDosyaya(firmalar: FirmaTenantItem[]) {
+export function loadIdentitySnapshot(): IdentitySnapshot {
+  const current = readJsonFile(IDENTITY_DOSYA_YOLU, snapshotRecord);
+  if (current !== undefined)
+    return structuredClone({
+      companies: current.companies,
+      users: current.users,
+      invites: current.invites,
+      emailJobs: current.emailJobs,
+    });
+  const companies = readJsonFile(FIRMALAR_DOSYA_YOLU, (value): value is FirmaTenantItem[] =>
+    records(value, companyRecord, 'id')
+  );
+  const users = readJsonFile(KULLANICILAR_DOSYA_YOLU, (value): value is KullaniciKaydi[] =>
+    records(value, userRecord, 'id')
+  );
+  return {
+    companies: companies === undefined ? defaultCompanies() : companies,
+    users: users ?? [],
+    invites: [],
+    emailJobs: [],
+  };
+}
+
+// The database is authoritative in configured/production deployments. Stale
+// development files must neither supply accounts nor block database startup.
+const initialIdentity: IdentitySnapshot =
+  IS_PRODUCTION || SUPABASE_URL
+    ? { companies: [], users: [], invites: [], emailJobs: [] }
+    : loadIdentitySnapshot();
+export let firmalarVeritabani = initialIdentity.companies;
+export let kullanicilarVeritabani = initialIdentity.users;
+export let davetlerVeritabani = initialIdentity.invites;
+let identityEmailJobs = initialIdentity.emailJobs;
+
+export function getIdentitySnapshot(): IdentitySnapshot {
+  return structuredClone({
+    companies: firmalarVeritabani,
+    users: kullanicilarVeritabani,
+    invites: davetlerVeritabani,
+    emailJobs: identityEmailJobs,
+  });
+}
+
+/** Callers must prepare fresh arrays/objects; never mutate exported authority
+ * before this succeeds. All memory publication follows the single rename. */
+export function saveIdentitySnapshot(
+  next: Omit<IdentitySnapshot, 'emailJobs'> & { emailJobs?: Record<string, unknown>[] }
+): void {
+  let snapshot: PersistedIdentity;
   try {
-    const dir = path.dirname(FIRMALAR_DOSYA_YOLU);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(FIRMALAR_DOSYA_YOLU, JSON.stringify(firmalar, null, 2), 'utf-8');
-  } catch (e) {
-    console.error('Firmalar dosyaya yazılamadı:', e);
+    snapshot = structuredClone({
+      version: 1 as const,
+      ...next,
+      emailJobs: next.emailJobs ?? identityEmailJobs,
+    });
+  } catch (error) {
+    throw new JsonStorageError('Yerel kimlik verileri geçersiz.', error);
   }
+  if (!snapshotRecord(snapshot)) throw new JsonStorageError('Yerel kimlik verileri geçersiz.');
+  writeJsonAtomic(IDENTITY_DOSYA_YOLU, snapshot);
+  firmalarVeritabani = snapshot.companies;
+  kullanicilarVeritabani = snapshot.users;
+  davetlerVeritabani = snapshot.invites;
+  identityEmailJobs = snapshot.emailJobs;
 }
 
-export let firmalarVeritabani: FirmaTenantItem[] = firmalariYukleDosyadan();
-
-export function setFirmalarVeritabani(yeniListe: FirmaTenantItem[]) {
-  firmalarVeritabani = yeniListe;
+export function firmalariYukleDosyadan(): FirmaTenantItem[] {
+  return loadIdentitySnapshot().companies;
 }
-
-// Kullanıcılar dosyadan yükleme / kaydetme
 export function kullanicilariYukleDosyadan(): KullaniciKaydi[] {
-  try {
-    if (fs.existsSync(KULLANICILAR_DOSYA_YOLU)) {
-      const icerik = fs.readFileSync(KULLANICILAR_DOSYA_YOLU, 'utf-8');
-      const parsed = JSON.parse(icerik);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.warn('Kullanıcılar dosyadan okunamadı:', e);
-  }
-  return [];
+  return loadIdentitySnapshot().users;
 }
-
-export function kullanicilariKaydetDosyaya(kullanicilar: KullaniciKaydi[]) {
-  try {
-    const dir = path.dirname(KULLANICILAR_DOSYA_YOLU);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(KULLANICILAR_DOSYA_YOLU, JSON.stringify(kullanicilar, null, 2), 'utf-8');
-  } catch (e) {
-    console.error('Kullanıcılar dosyaya yazılamadı:', e);
-  }
+export function firmalariKaydetDosyaya(companies: FirmaTenantItem[]): void {
+  saveIdentitySnapshot({ ...getIdentitySnapshot(), companies });
 }
-
-export let kullanicilarVeritabani: KullaniciKaydi[] = kullanicilariYukleDosyadan();
-
-export function setKullanicilarVeritabani(yeniListe: KullaniciKaydi[]) {
-  kullanicilarVeritabani = yeniListe;
+export function kullanicilariKaydetDosyaya(users: KullaniciKaydi[]): void {
+  saveIdentitySnapshot({ ...getIdentitySnapshot(), users });
+}
+// Explicit memory-only helpers remain useful for isolated fixtures.
+export function setFirmalarVeritabani(companies: FirmaTenantItem[]) {
+  firmalarVeritabani = companies;
+}
+export function setKullanicilarVeritabani(users: KullaniciKaydi[]) {
+  kullanicilarVeritabani = users;
+}
+export function setDavetlerVeritabani(invites: DavetKaydi[]) {
+  davetlerVeritabani = invites;
 }
 
 // In-memory onay bekleyen mesajlar havuzu (Gelen Kutusu / Staging Inbox)

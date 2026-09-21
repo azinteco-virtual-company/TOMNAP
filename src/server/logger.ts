@@ -10,7 +10,8 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   error: 3,
 };
 
-const CURRENT_LOG_LEVEL: LogLevel = (process.env.LOG_LEVEL?.toLowerCase() as LogLevel) || (IS_PRODUCTION ? 'info' : 'debug');
+const CURRENT_LOG_LEVEL: LogLevel =
+  (process.env.LOG_LEVEL?.toLowerCase() as LogLevel) || (IS_PRODUCTION ? 'info' : 'debug');
 
 function shouldLog(level: LogLevel): boolean {
   return LOG_LEVELS[level] >= LOG_LEVELS[CURRENT_LOG_LEVEL];
@@ -34,40 +35,70 @@ export const logger = {
   debug(message: string, meta?: Record<string, any>) {
     if (!shouldLog('debug')) return;
     if (IS_PRODUCTION) {
-      console.log(JSON.stringify({ timestamp: formatTimestamp(), level: 'DEBUG', message, ...meta }));
+      console.log(
+        JSON.stringify({ timestamp: formatTimestamp(), level: 'DEBUG', message, ...meta })
+      );
     } else {
-      console.log(`${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.cyan}[DEBUG]${COLORS.reset} ${message}`, meta ? meta : '');
+      console.log(
+        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.cyan}[DEBUG]${COLORS.reset} ${message}`,
+        meta ? meta : ''
+      );
     }
   },
 
   info(message: string, meta?: Record<string, any>) {
     if (!shouldLog('info')) return;
     if (IS_PRODUCTION) {
-      console.log(JSON.stringify({ timestamp: formatTimestamp(), level: 'INFO', message, ...meta }));
+      console.log(
+        JSON.stringify({ timestamp: formatTimestamp(), level: 'INFO', message, ...meta })
+      );
     } else {
-      console.log(`${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.green}[INFO]${COLORS.reset}  ${message}`, meta ? meta : '');
+      console.log(
+        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.green}[INFO]${COLORS.reset}  ${message}`,
+        meta ? meta : ''
+      );
     }
   },
 
   warn(message: string, meta?: Record<string, any>) {
     if (!shouldLog('warn')) return;
     if (IS_PRODUCTION) {
-      console.warn(JSON.stringify({ timestamp: formatTimestamp(), level: 'WARN', message, ...meta }));
+      console.warn(
+        JSON.stringify({ timestamp: formatTimestamp(), level: 'WARN', message, ...meta })
+      );
     } else {
-      console.warn(`${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.yellow}[WARN]${COLORS.reset}  ${message}`, meta ? meta : '');
+      console.warn(
+        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.yellow}[WARN]${COLORS.reset}  ${message}`,
+        meta ? meta : ''
+      );
     }
   },
 
   error(message: string, error?: any, meta?: Record<string, any>) {
     if (!shouldLog('error')) return;
-    const errObj = error instanceof Error
-      ? { name: error.name, message: error.message, stack: error.stack }
-      : error ? { error } : {};
+    const errObj =
+      error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : error
+          ? { error }
+          : {};
 
     if (IS_PRODUCTION) {
-      console.error(JSON.stringify({ timestamp: formatTimestamp(), level: 'ERROR', message, ...errObj, ...meta }));
+      console.error(
+        JSON.stringify({
+          timestamp: formatTimestamp(),
+          level: 'ERROR',
+          message,
+          ...errObj,
+          ...meta,
+        })
+      );
     } else {
-      console.error(`${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.red}[ERROR]${COLORS.reset} ${message}`, error ? error : '', meta ? meta : '');
+      console.error(
+        `${COLORS.dim}[${formatTimestamp()}]${COLORS.reset} ${COLORS.red}[ERROR]${COLORS.reset} ${message}`,
+        error ? error : '',
+        meta ? meta : ''
+      );
     }
   },
 };
@@ -78,12 +109,22 @@ export const logger = {
  */
 export function requestLogger(req: Request, res: Response, next: NextFunction) {
   // Statik dosya ve vite asset isteklerini atla
-  if (req.path.startsWith('/@') || req.path.startsWith('/src/') || req.path.startsWith('/node_modules/') || req.path.match(/\.(js|css|png|jpg|svg|ico|woff2?)$/)) {
+  if (
+    req.path.startsWith('/@') ||
+    req.path.startsWith('/src/') ||
+    req.path.startsWith('/node_modules/') ||
+    req.path.match(/\.(js|css|png|jpg|svg|ico|woff2?)$/)
+  ) {
     return next();
   }
 
   const start = Date.now();
   const { method, originalUrl, ip } = req;
+  // Activation/invitation tokens and query credentials must not enter logs.
+  const safeUrl = originalUrl
+    .split('?')[0]
+    .replace(/(\/auth\/token-kontrol\/)[^/]+/i, '$1[REDACTED]')
+    .replace(/(\/firmalar\/davet\/)[^/]+/i, '$1[REDACTED]');
 
   res.on('finish', () => {
     const duration = Date.now() - start;
@@ -91,13 +132,13 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
 
     // Yalnızca /api rotalarını veya hata durumlarını logla
     if (originalUrl.startsWith('/api')) {
-      const meta = { method, url: originalUrl, statusCode, durationMs: duration, ip };
+      const meta = { method, url: safeUrl, statusCode, durationMs: duration, ip };
       if (statusCode >= 500) {
-        logger.error(`HTTP ${method} ${originalUrl} ${statusCode} - ${duration}ms`, undefined, meta);
+        logger.error(`HTTP ${method} ${safeUrl} ${statusCode} - ${duration}ms`, undefined, meta);
       } else if (statusCode >= 400) {
-        logger.warn(`HTTP ${method} ${originalUrl} ${statusCode} - ${duration}ms`, meta);
+        logger.warn(`HTTP ${method} ${safeUrl} ${statusCode} - ${duration}ms`, meta);
       } else {
-        logger.info(`HTTP ${method} ${originalUrl} ${statusCode} - ${duration}ms`, meta);
+        logger.info(`HTTP ${method} ${safeUrl} ${statusCode} - ${duration}ms`, meta);
       }
     }
   });

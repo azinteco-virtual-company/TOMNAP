@@ -1,5 +1,19 @@
+import { apiFetch } from '../lib/apiClient';
 import React, { useState } from 'react';
-import { X, Building2, CheckCircle2, XCircle, Clock, ShieldCheck, UserCheck, Phone, Mail, Globe, Search, RefreshCw } from 'lucide-react';
+import {
+  X,
+  Building2,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ShieldCheck,
+  UserCheck,
+  Phone,
+  Mail,
+  Globe,
+  Search,
+  RefreshCw,
+} from 'lucide-react';
 import { FirmaTenant } from '../types';
 
 interface TenantOnayMerkeziModalProps {
@@ -24,7 +38,7 @@ export const TenantOnayMerkeziModal: React.FC<TenantOnayMerkeziModalProps> = ({
   const handleOnayDegistir = async (firmaId: string, yeniDurum: 'AKTIF' | 'REDDEDILDI') => {
     setIslemSuruyorId(firmaId);
     try {
-      const res = await fetch(`/api/firmalar/${firmaId}/onay`, {
+      const res = await apiFetch(`/api/firmalar/${firmaId}/onay`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ onayDurumu: yeniDurum }),
@@ -107,7 +121,9 @@ export const TenantOnayMerkeziModal: React.FC<TenantOnayMerkeziModalProps> = ({
               type="button"
               onClick={() => setFiltre('BEKLEMEDE')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                filtre === 'BEKLEMEDE' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                filtre === 'BEKLEMEDE'
+                  ? 'bg-amber-600 text-white'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               Gözləyənlər ({bekleyenSayisi})
@@ -116,7 +132,9 @@ export const TenantOnayMerkeziModal: React.FC<TenantOnayMerkeziModalProps> = ({
               type="button"
               onClick={() => setFiltre('AKTIF')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                filtre === 'AKTIF' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                filtre === 'AKTIF'
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               Aktiv Butiklər
@@ -125,7 +143,9 @@ export const TenantOnayMerkeziModal: React.FC<TenantOnayMerkeziModalProps> = ({
               type="button"
               onClick={() => setFiltre('HEPSI')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                filtre === 'HEPSI' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                filtre === 'HEPSI'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               Hamısı ({firmalar.length})
@@ -176,8 +196,8 @@ export const TenantOnayMerkeziModal: React.FC<TenantOnayMerkeziModalProps> = ({
                             durum === 'AKTIF'
                               ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                               : durum === 'BEKLEMEDE'
-                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
-                              : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
+                                : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
                           }`}
                         >
                           {durum}
@@ -194,12 +214,17 @@ export const TenantOnayMerkeziModal: React.FC<TenantOnayMerkeziModalProps> = ({
                         {f.sahipTelefon && (
                           <span className="flex items-center gap-1">
                             <Phone className="w-3 h-3 text-slate-500" />
-                            <a href={`tel:${f.sahipTelefon}`} className="text-indigo-300 hover:underline">
+                            <a
+                              href={`tel:${f.sahipTelefon}`}
+                              className="text-indigo-300 hover:underline"
+                            >
                               {f.sahipTelefon}
                             </a>
                           </span>
                         )}
-                        <span>Paket: <strong className="text-white">{f.paket || 'PRO'}</strong></span>
+                        <span>
+                          Paket: <strong className="text-white">{f.paket || 'PRO'}</strong>
+                        </span>
                         <span>Şəhər: {f.sehir}</span>
                       </div>
                     </div>
@@ -240,16 +265,31 @@ export const TenantOnayMerkeziModal: React.FC<TenantOnayMerkeziModalProps> = ({
                   {/* Rol Limitləri Xülasəsi */}
                   <div className="mt-3 pt-2.5 border-t border-slate-700/50 flex flex-wrap items-center gap-4 text-[11px] text-slate-400">
                     <span>
-                      Patron: <strong className="text-slate-200">{f.aktifKullaniciSayilari?.PATRON || 1} / {f.rolLimitleri?.PATRON || 1}</strong>
+                      Patron:{' '}
+                      <strong className="text-slate-200">
+                        {f.aktifKullaniciSayilari?.PATRON || 1} / {f.rolLimitleri?.PATRON || 1}
+                      </strong>
                     </span>
                     <span>
-                      Kanada: <strong className="text-slate-200">{f.aktifKullaniciSayilari?.KANADA_SATINALMA || 0} / {f.rolLimitleri?.KANADA_SATINALMA || 2}</strong>
+                      Kanada:{' '}
+                      <strong className="text-slate-200">
+                        {f.aktifKullaniciSayilari?.KANADA_SATINALMA || 0} /{' '}
+                        {f.rolLimitleri?.KANADA_SATINALMA || 2}
+                      </strong>
                     </span>
                     <span>
-                      Satış: <strong className="text-slate-200">{f.aktifKullaniciSayilari?.SATIS_SORUMLUSU || 0} / {f.rolLimitleri?.SATIS_SORUMLUSU || 4}</strong>
+                      Satış:{' '}
+                      <strong className="text-slate-200">
+                        {f.aktifKullaniciSayilari?.SATIS_SORUMLUSU || 0} /{' '}
+                        {f.rolLimitleri?.SATIS_SORUMLUSU || 4}
+                      </strong>
                     </span>
                     <span>
-                      Kurye: <strong className="text-slate-200">{f.aktifKullaniciSayilari?.BAKU_KURYE || 0} / {f.rolLimitleri?.BAKU_KURYE || 10}</strong>
+                      Kurye:{' '}
+                      <strong className="text-slate-200">
+                        {f.aktifKullaniciSayilari?.BAKU_KURYE || 0} /{' '}
+                        {f.rolLimitleri?.BAKU_KURYE || 10}
+                      </strong>
                     </span>
                   </div>
                 </div>

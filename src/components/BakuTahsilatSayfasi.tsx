@@ -1,29 +1,27 @@
 import React, { useState, useMemo } from 'react';
 import { Siparis } from '../types';
-import { 
-  Building, 
-  DollarSign, 
-  AlertCircle, 
-  CheckCircle2, 
-  Phone, 
-  MapPin, 
-  Copy, 
-  Check, 
-  FileSpreadsheet, 
-  FileText, 
-  Printer, 
-  Search, 
-  Filter, 
+import {
+  Building,
+  DollarSign,
+  AlertCircle,
+  CheckCircle2,
+  Phone,
+  MapPin,
+  Copy,
+  Check,
+  FileSpreadsheet,
+  FileText,
+  Printer,
+  Search,
+  Filter,
   ArrowLeft,
   Calendar,
   RotateCcw,
   ExternalLink,
   CreditCard,
-  UserCheck
+  UserCheck,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { loadSpreadsheet, loadPdf, reportDocumentError } from '../utils/documentLibraries';
 import { cleanPdfText, safePrintHtml } from '../utils/pdfHelpers';
 
 interface BakuTahsilatSayfasiProps {
@@ -45,11 +43,12 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
   const [kopyalandi, setKopyalandi] = useState(false);
   const [yazdiriliyor, setYazdiriliyor] = useState(false);
   const [pdfHazirlaniyor, setPdfHazirlaniyor] = useState(false);
+  const [excelHazirlaniyor, setExcelHazirlaniyor] = useState(false);
 
   // Şehirler listesi
   const sehirler = useMemo(() => {
     const set = new Set<string>();
-    siparisler.forEach(s => {
+    siparisler.forEach((s) => {
       const sehir = (s.teslimat_sehri || '').trim();
       if (sehir) set.add(sehir);
     });
@@ -80,7 +79,10 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
           s.urun_aciklamasi,
           s.ozel_not,
           s.baku_tahsilat_notu,
-        ].filter(Boolean).join(' ').toLowerCase();
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
 
         if (!metin.includes(aranan)) return false;
       }
@@ -96,7 +98,7 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
   );
 
   const toplamBorcluPaketSayisi = useMemo(
-    () => siparisler.filter(s => (s.kalan_tutar || 0) > 0).length,
+    () => siparisler.filter((s) => (s.kalan_tutar || 0) > 0).length,
     [siparisler]
   );
 
@@ -117,7 +119,9 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
       alinan_tutar: siparis.toplam_tutar,
       kalan_tutar: 0,
       finans_durumu: 'ODENDI',
-      baku_tahsilat_notu: (siparis.baku_tahsilat_notu ? siparis.baku_tahsilat_notu + ' • ' : '') + `Bakıda tam ödənildi (${bugunStr})`,
+      baku_tahsilat_notu:
+        (siparis.baku_tahsilat_notu ? siparis.baku_tahsilat_notu + ' • ' : '') +
+        `Bakıda tam ödənildi (${bugunStr})`,
     });
   };
 
@@ -129,11 +133,15 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
     baslik += `💰 Toplam Toplanacaq Qalıq: *${toplamToplanacakBorc.toFixed(2)} AZN* (${listelenenSiparisler.length} bağlama)\n`;
     baslik += `--------------------------------------\n\n`;
 
-    const satirlar = listelenenSiparisler.map((s, idx) => {
-      const ozelNotMetni = s.ozel_not ? `   📌 Xüsusi Qeyd: ${s.ozel_not}\n` : '';
-      const bakiNotMetni = s.baku_tahsilat_notu ? `   💬 Bakı Notu: ${s.baku_tahsilat_notu}\n` : '';
-      return `${idx + 1}. *${s.musteri_adi}* (${s.telefon_numarasi || 'Nömrə yox'})\n   📍 Ünvan: ${s.teslimat_sehri || 'Bakı'} - ${s.teslimat_adresi || 'Bakı daxili'}\n   🛍️ Məhsul: ${s.urun_aciklamasi} (${s.adet || 1} əd)\n   🔴 *ALINACAQ QALIQ: ${s.kalan_tutar.toFixed(2)} ${s.para_birimi || 'AZN'}*\n${ozelNotMetni}${bakiNotMetni}`;
-    }).join('\n');
+    const satirlar = listelenenSiparisler
+      .map((s, idx) => {
+        const ozelNotMetni = s.ozel_not ? `   📌 Xüsusi Qeyd: ${s.ozel_not}\n` : '';
+        const bakiNotMetni = s.baku_tahsilat_notu
+          ? `   💬 Bakı Notu: ${s.baku_tahsilat_notu}\n`
+          : '';
+        return `${idx + 1}. *${s.musteri_adi}* (${s.telefon_numarasi || 'Nömrə yox'})\n   📍 Ünvan: ${s.teslimat_sehri || 'Bakı'} - ${s.teslimat_adresi || 'Bakı daxili'}\n   🛍️ Məhsul: ${s.urun_aciklamasi} (${s.adet || 1} əd)\n   🔴 *ALINACAQ QALIQ: ${s.kalan_tutar.toFixed(2)} ${s.para_birimi || 'AZN'}*\n${ozelNotMetni}${bakiNotMetni}`;
+      })
+      .join('\n');
 
     return baslik + satirlar;
   };
@@ -145,8 +153,11 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
   };
 
   // Excel (.xlsx) İndirme
-  const excelIndir = () => {
+  const excelIndir = async () => {
+    if (excelHazirlaniyor) return;
+    setExcelHazirlaniyor(true);
     try {
+      const XLSX = await loadSpreadsheet();
       const baslik = [
         'Sıra',
         'Müştəri Adı',
@@ -159,7 +170,7 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
         'Qalıq Borc (AZN)',
         'Lojistik Vəziyyəti',
         'Bakı Təhsilat Notu',
-        'Xüsusi Qeyd'
+        'Xüsusi Qeyd',
       ];
 
       const satirlar = listelenenSiparisler.map((s, index) => [
@@ -174,7 +185,7 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
         s.kalan_tutar || 0,
         s.lojistik_durumu.replace(/_/g, ' '),
         s.baku_tahsilat_notu || '',
-        s.ozel_not || ''
+        s.ozel_not || '',
       ]);
 
       satirlar.push([
@@ -189,7 +200,7 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
         toplamToplanacakBorc,
         '',
         '',
-        ''
+        '',
       ]);
 
       const ws = XLSX.utils.aoa_to_sheet([baslik, ...satirlar]);
@@ -205,7 +216,7 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
         { wch: 18 },
         { wch: 20 },
         { wch: 26 },
-        { wch: 26 }
+        { wch: 26 },
       ];
 
       // Başlık satırını dondur (Freeze Top Row)
@@ -217,17 +228,22 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
       XLSX.writeFile(wb, dosyaAdi);
     } catch (e) {
       console.error('Excel endirmə xətası:', e);
+      reportDocumentError(e);
+    } finally {
+      setExcelHazirlaniyor(false);
     }
   };
 
   // PDF İndirme
-  const pdfIndir = () => {
+  const pdfIndir = async () => {
+    if (pdfHazirlaniyor) return;
     setPdfHazirlaniyor(true);
     try {
+      const { jsPDF, autoTable } = await loadPdf();
       const doc = new jsPDF({
         orientation: 'landscape',
         unit: 'pt',
-        format: 'a4'
+        format: 'a4',
       });
 
       const bugun = new Date().toLocaleDateString('az-AZ');
@@ -240,21 +256,25 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
       doc.setFontSize(8.5);
       doc.setTextColor(100, 116, 139);
       doc.text(
-        cleanPdfText(`Tarix: ${bugun} | Borclu Baglama: ${listelenenSiparisler.length} eded | Toplam Qaliq: ${toplamToplanacakBorc.toFixed(2)} AZN`),
+        cleanPdfText(
+          `Tarix: ${bugun} | Borclu Baglama: ${listelenenSiparisler.length} eded | Toplam Qaliq: ${toplamToplanacakBorc.toFixed(2)} AZN`
+        ),
         26,
         48
       );
 
-      const head = [[
-        '#',
-        cleanPdfText('Musteri Adi & Tel'),
-        cleanPdfText('Seher / Unvan'),
-        cleanPdfText('Mehsul Tesviri'),
-        'Toplam Deyer',
-        'Odenilib',
-        cleanPdfText('Qaliq Borc'),
-        cleanPdfText('Baki Notu & Qeyd')
-      ]];
+      const head = [
+        [
+          '#',
+          cleanPdfText('Musteri Adi & Tel'),
+          cleanPdfText('Seher / Unvan'),
+          cleanPdfText('Mehsul Tesviri'),
+          'Toplam Deyer',
+          'Odenilib',
+          cleanPdfText('Qaliq Borc'),
+          cleanPdfText('Baki Notu & Qeyd'),
+        ],
+      ];
 
       const body = listelenenSiparisler.map((s, idx) => [
         String(idx + 1),
@@ -264,7 +284,7 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
         `${(s.toplam_tutar || 0).toFixed(2)} AZN`,
         `${(s.alinan_tutar || 0).toFixed(2)} AZN`,
         s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN (BORC)` : 'ODENILIB',
-        cleanPdfText([s.baku_tahsilat_notu, s.ozel_not].filter(Boolean).join('\n') || '-')
+        cleanPdfText([s.baku_tahsilat_notu, s.ozel_not].filter(Boolean).join('\n') || '-'),
       ]);
 
       autoTable(doc, {
@@ -299,16 +319,18 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
           6: { cellWidth: 85, halign: 'right', fontStyle: 'bold' },
           7: { cellWidth: 160, overflow: 'linebreak' },
         },
-        foot: [[
-          '',
-          'YEKUN TOPLAM',
-          '',
-          `${listelenenSiparisler.length} Baglama`,
-          `${listelenenSiparisler.reduce((a, b) => a + (b.toplam_tutar || 0), 0).toFixed(2)} AZN`,
-          '',
-          `${toplamToplanacakBorc.toFixed(2)} AZN`,
-          cleanPdfText('Baki Kassa ve Tehvilat Senedi')
-        ]],
+        foot: [
+          [
+            '',
+            'YEKUN TOPLAM',
+            '',
+            `${listelenenSiparisler.length} Baglama`,
+            `${listelenenSiparisler.reduce((a, b) => a + (b.toplam_tutar || 0), 0).toFixed(2)} AZN`,
+            '',
+            `${toplamToplanacakBorc.toFixed(2)} AZN`,
+            cleanPdfText('Baki Kassa ve Tehvilat Senedi'),
+          ],
+        ],
         footStyles: {
           fillColor: [241, 245, 249],
           textColor: [15, 23, 42],
@@ -316,12 +338,13 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
           fontSize: 7.5,
           cellPadding: 4,
         },
-        margin: { left: 26, right: 26, top: 25, bottom: 25 }
+        margin: { left: 26, right: 26, top: 25, bottom: 25 },
       });
 
       doc.save(`Baki_Tahsilat_Hesabati_${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (e) {
       console.error('PDF xətası:', e);
+      reportDocumentError(e);
     } finally {
       setPdfHazirlaniyor(false);
     }
@@ -332,7 +355,9 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
     setYazdiriliyor(true);
     try {
       const bugun = new Date().toLocaleDateString('az-AZ');
-      const rowsHtml = listelenenSiparisler.map((s, idx) => `
+      const rowsHtml = listelenenSiparisler
+        .map(
+          (s, idx) => `
         <tr>
           <td style="text-align:center; padding: 6px;">${idx + 1}</td>
           <td style="padding: 6px;">
@@ -354,7 +379,9 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
             ${s.ozel_not ? `<div style="color:#64748b;">📌 ${s.ozel_not}</div>` : ''}
           </td>
         </tr>
-      `).join('');
+      `
+        )
+        .join('');
 
       const content = `
         <!DOCTYPE html>
@@ -412,7 +439,9 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
       safePrintHtml(content, 'Baki_Tahsilat_Hesabati');
     } catch (e) {
       console.error('Yazdırma xətası:', e);
-      alert('Yazdırma dialoqu açılarkən xəta baş verdi. Zəhmət olmasa PDF İndir seçimindən istifadə edin.');
+      alert(
+        'Yazdırma dialoqu açılarkən xəta baş verdi. Zəhmət olmasa PDF İndir seçimindən istifadə edin.'
+      );
     } finally {
       setYazdiriliyor(false);
     }
@@ -436,7 +465,8 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
               </span>
             </div>
             <p className="text-xs text-amber-100/90 mt-1">
-              Bakıdakı nümayəndə / dost üçün nağd və ya m10 ilə toplanacaq kassa hesabatı və anlıq ödəniş qeydiyyatı
+              Bakıdakı nümayəndə / dost üçün nağd və ya m10 ilə toplanacaq kassa hesabatı və anlıq
+              ödəniş qeydiyyatı
             </p>
           </div>
         </div>
@@ -457,11 +487,12 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
           <button
             type="button"
             onClick={excelIndir}
+            disabled={excelHazirlaniyor}
             title="Formatlanmış Excel (.xlsx) cədvəli kimi yüklə"
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span>Excel İndir (.xlsx)</span>
+            <span>{excelHazirlaniyor ? 'Hazırlanır...' : 'Excel İndir (.xlsx)'}</span>
           </button>
 
           <button
@@ -497,7 +528,8 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
           <div>
             <div className="text-xs font-bold text-amber-900">Toplanacaq Qalıq Borc</div>
             <div className="text-xl font-extrabold text-amber-800">
-              {toplamToplanacakBorc.toFixed(2)} <span className="text-xs font-normal text-amber-950">AZN</span>
+              {toplamToplanacakBorc.toFixed(2)}{' '}
+              <span className="text-xs font-normal text-amber-950">AZN</span>
             </div>
           </div>
         </div>
@@ -509,7 +541,8 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
           <div>
             <div className="text-xs font-semibold text-slate-500">Öncədən Toplanan</div>
             <div className="text-xl font-extrabold text-slate-900">
-              {toplamTahsilEdilen.toFixed(2)} <span className="text-xs font-normal text-slate-500">AZN</span>
+              {toplamTahsilEdilen.toFixed(2)}{' '}
+              <span className="text-xs font-normal text-slate-500">AZN</span>
             </div>
           </div>
         </div>
@@ -521,7 +554,8 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
           <div>
             <div className="text-xs font-semibold text-slate-500">Borclu Paket Sayı</div>
             <div className="text-xl font-extrabold text-slate-900">
-              {toplamBorcluPaketSayisi} <span className="text-xs font-normal text-slate-500">bağlama</span>
+              {toplamBorcluPaketSayisi}{' '}
+              <span className="text-xs font-normal text-slate-500">bağlama</span>
             </div>
           </div>
         </div>
@@ -533,7 +567,8 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
           <div>
             <div className="text-xs font-semibold text-slate-500">Cəmi Borc Həcmi</div>
             <div className="text-xl font-extrabold text-slate-900">
-              {genelToplamBorc.toFixed(2)} <span className="text-xs font-normal text-slate-500">AZN</span>
+              {genelToplamBorc.toFixed(2)}{' '}
+              <span className="text-xs font-normal text-slate-500">AZN</span>
             </div>
           </div>
         </div>
@@ -676,14 +711,19 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
             </p>
           </div>
           <div className="text-xs font-bold text-slate-700">
-            Toplanacaq Cəmi: <span className="text-amber-700 text-sm font-extrabold">{toplamToplanacakBorc.toFixed(2)} AZN</span>
+            Toplanacaq Cəmi:{' '}
+            <span className="text-amber-700 text-sm font-extrabold">
+              {toplamToplanacakBorc.toFixed(2)} AZN
+            </span>
           </div>
         </div>
 
         {listelenenSiparisler.length === 0 ? (
           <div className="text-center py-20 text-slate-400 text-xs bg-slate-50/50">
             <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-emerald-400" />
-            <div className="font-bold text-slate-700 text-base">Əla! Bu filtrə uyğun borclu bağlama yoxdur.</div>
+            <div className="font-bold text-slate-700 text-base">
+              Əla! Bu filtrə uyğun borclu bağlama yoxdur.
+            </div>
             <p className="text-slate-500 mt-1 max-w-sm mx-auto">
               Bütün ödənişlər alınıb və ya axtarış meyarlarına uyğun sifariş tapılmadı.
             </p>
@@ -736,9 +776,12 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
                         </div>
                       </td>
                       <td className="p-3">
-                        <div className="font-medium text-slate-900 text-xs sm:text-sm">{s.urun_aciklamasi}</div>
+                        <div className="font-medium text-slate-900 text-xs sm:text-sm">
+                          {s.urun_aciklamasi}
+                        </div>
                         <div className="text-xs text-slate-500 mt-0.5">
-                          {[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')} {s.adet && s.adet > 1 ? `(${s.adet} əd)` : ''}
+                          {[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}{' '}
+                          {s.adet && s.adet > 1 ? `(${s.adet} əd)` : ''}
                         </div>
                         <div className="text-[10px] text-blue-700 font-medium mt-1">
                           Status: {s.lojistik_durumu.replace(/_/g, ' ')}
@@ -760,7 +803,9 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
                             <div className="font-black text-amber-900 text-sm">
                               {s.kalan_tutar.toFixed(2)} {s.para_birimi || 'AZN'}
                             </div>
-                            <div className="text-[9px] font-bold text-amber-800 uppercase tracking-tight">ALINACAQ BORC</div>
+                            <div className="text-[9px] font-bold text-amber-800 uppercase tracking-tight">
+                              ALINACAQ BORC
+                            </div>
                           </div>
                         ) : (
                           <span className="text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 inline-block text-xs">
@@ -823,11 +868,19 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
         {/* Cədvəl Alt Yekunu */}
         <div className="p-4 bg-amber-50/70 border-t border-amber-200 flex flex-wrap items-center justify-between gap-4 text-xs">
           <div className="text-slate-700">
-            Bakıdakı nümayəndə bu cədvələ baxaraq məhsulu müştəriyə təhvil verdiyi an <strong>"Ödənildi İşarələ"</strong> düyməsinə basaraq kassa borcunu bağlaya bilər.
+            Bakıdakı nümayəndə bu cədvələ baxaraq məhsulu müştəriyə təhvil verdiyi an{' '}
+            <strong>"Ödənildi İşarələ"</strong> düyməsinə basaraq kassa borcunu bağlaya bilər.
           </div>
           <div className="flex flex-wrap items-center gap-3 font-bold text-slate-900 bg-white px-3.5 py-2 rounded-xl border border-amber-300 shadow-2xs">
-            <span>Göstərilən: <strong className="text-slate-900">{listelenenSiparisler.length}</strong></span>
-            <span>Cəmi Məbləğ: <strong className="text-slate-900">{listelenenSiparisler.reduce((a, b) => a + (b.toplam_tutar || 0), 0).toFixed(2)} AZN</strong></span>
+            <span>
+              Göstərilən: <strong className="text-slate-900">{listelenenSiparisler.length}</strong>
+            </span>
+            <span>
+              Cəmi Məbləğ:{' '}
+              <strong className="text-slate-900">
+                {listelenenSiparisler.reduce((a, b) => a + (b.toplam_tutar || 0), 0).toFixed(2)} AZN
+              </strong>
+            </span>
             <span className="text-amber-900 bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300 text-sm">
               Toplanacaq Cəmi Borc: {toplamToplanacakBorc.toFixed(2)} AZN
             </span>

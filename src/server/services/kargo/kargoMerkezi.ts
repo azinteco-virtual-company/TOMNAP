@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import {
   KargoSaglayiciInterface,
   KargoSaglayiciTipi,
@@ -12,44 +10,23 @@ import { DhlExpressProvider } from './providers/dhl';
 import { UpsProvider } from './providers/ups';
 import { siparislerVeritabani, setSiparislerVeritabani } from '../state';
 import { supabase } from '../supabase';
-import { formatlaSiparis, hazirlaSupabasePayload } from '../siparisFormatlama';
-import { sifreleMetin, cozMetin } from '../crypto';
+import { formatlaSiparis } from '../siparisFormatlama';
+import { updateCargoOrder } from './orderUpdates';
+import {
+  loadCargoSettings,
+  saveCargoSettings,
+  SECRET_FIELDS,
+  CargoSettingsError,
+} from './settings';
 
-const AYARLAR_DOSYA_YOLU = path.join(process.cwd(), 'data', 'kargo_ayarlari.json');
-
-// Varsayılan Kargo Ayarı (Kanada Aramex Kurumsal Hesabı #72470858)
-const VARSAYILAN_AYARLAR: KargoSaglayiciAyarlari = {
-  tenantId: 'kanada_shopper_baku',
-  saglayici: 'ARAMEX',
-  aktif: true,
-  cikisUlkesi: 'CA',
-  cikisSehri: 'Toronto (YYZ)',
-  varisUlkesi: 'AZ',
-  varisHavalimani: 'Heydər Əliyev Beynəlxalq Hava Limanı (GYD)',
-  kimlikBilgileri: {
-    kullaniciAdi: 'canadian_brand_shop@aramex.com',
-    sifre: '',
-    hesapNo: '72470858',
-    pin: '',
-    entity: 'YYZ',
-    testModu: true,
-  },
-  otomatikSenkronizasyon: true,
-  guncellenmeTarihi: new Date().toISOString(),
-};
-
-class KargoMerkezi {
+export class KargoMerkezi {
   private providers: Map<KargoSaglayiciTipi, KargoSaglayiciInterface> = new Map();
-  private tenantAyarlari: Map<string, KargoSaglayiciAyarlari> = new Map();
 
   constructor() {
     // 1. Sağlayıcıları kaydet
     this.kayitSaglayici(new AramexProvider());
     this.kayitSaglayici(new DhlExpressProvider());
     this.kayitSaglayici(new UpsProvider());
-
-    // 2. Dosyadan kayıtlı tenant ayarlarını oku
-    this.yukleAyarlariDosyadan();
   }
 
   public kayitSaglayici(provider: KargoSaglayiciInterface) {
@@ -59,72 +36,29 @@ class KargoMerkezi {
   public getProvider(tip: KargoSaglayiciTipi): KargoSaglayiciInterface {
     const provider = this.providers.get(tip);
     if (!provider) {
-      // Fallback Aramex
-      return this.providers.get('ARAMEX')!;
+      throw new CargoSettingsError('Bu sağlayıcı için bağlantı henüz desteklenmiyor.', 400);
     }
     return provider;
   }
 
-  public getAyarlar(tenantId?: string): KargoSaglayiciAyarlari {
-    const tid = tenantId || 'kanada_shopper_baku';
-    const ayar = this.tenantAyarlari.get(tid) || this.tenantAyarlari.get('all');
-    if (ayar) {
-      return { ...ayar };
-    }
-    return {
-      ...VARSAYILAN_AYARLAR,
-      tenantId: tid,
-    };
+  public async getAyarlar(tenantId?: string): Promise<KargoSaglayiciAyarlari> {
+    return loadCargoSettings(tenantId!);
   }
 
-  public kaydetAyarlar(yeniAyarlar: Partial<KargoSaglayiciAyarlari> & { tenantId: string }): KargoSaglayiciAyarlari {
-    const tid = yeniAyarlar.tenantId || 'kanada_shopper_baku';
-    const mevcut = this.getAyarlar(tid);
-
-    const guncel: KargoSaglayiciAyarlari = {
-      ...mevcut,
-      ...yeniAyarlar,
-      tenantId: tid,
-      kimlikBilgileri: {
-        ...mevcut.kimlikBilgileri,
-        ...(yeniAyarlar.kimlikBilgileri || {}),
-      },
-      guncellenmeTarihi: new Date().toISOString(),
-    };
-
-    // Şifre boş geldiyse eskisini koru
-    if (
-      yeniAyarlar.kimlikBilgileri &&
-      (!yeniAyarlar.kimlikBilgileri.sifre || yeniAyarlar.kimlikBilgileri.sifre === '••••••••')
-    ) {
-      guncel.kimlikBilgileri.sifre = mevcut.kimlikBilgileri.sifre;
-    }
-    if (
-      yeniAyarlar.kimlikBilgileri &&
-      (!yeniAyarlar.kimlikBilgileri.pin || yeniAyarlar.kimlikBilgileri.pin === '••••••••')
-    ) {
-      guncel.kimlikBilgileri.pin = mevcut.kimlikBilgileri.pin;
-    }
-
-    this.tenantAyarlari.set(tid, guncel);
-    this.kaydetAyarlariDosyaya();
-    return guncel;
+  public async kaydetAyarlar(yeniAyarlar: Partial<KargoSaglayiciAyarlari> & { tenantId: string }) {
+    return saveCargoSettings(yeniAyarlar);
   }
 
   /**
    * İstemciye (Frontend) gönderilirken şifre ve PIN kodlarını maskeler.
    */
   public maskeleAyarlar(ayarlar: KargoSaglayiciAyarlari): any {
-    return {
-      ...ayarlar,
-      kimlikBilgileri: {
-        ...ayarlar.kimlikBilgileri,
-        sifre: ayarlar.kimlikBilgileri.sifre ? '••••••••' : '',
-        pin: ayarlar.kimlikBilgileri.pin ? '••••••••' : '',
-        sifreTanimli: Boolean(ayarlar.kimlikBilgileri.sifre),
-        pinTanimli: Boolean(ayarlar.kimlikBilgileri.pin),
-      },
-    };
+    const masked = structuredClone(ayarlar) as any;
+    for (const field of SECRET_FIELDS) {
+      masked.kimlikBilgileri[field] = ayarlar.kimlikBilgileri[field] ? '••••••••' : '';
+      masked.kimlikBilgileri[`${field}Tanimli`] = Boolean(ayarlar.kimlikBilgileri[field]);
+    }
+    return masked;
   }
 
   /**
@@ -139,7 +73,7 @@ class KargoMerkezi {
    * Tekil veya Toplu Canlı AWB Takip Sorgusu
    */
   public async takipEt(takipNolari: string[], tenantId?: string): Promise<KargoTakipGuncelleme[]> {
-    const ayarlar = this.getAyarlar(tenantId);
+    const ayarlar = await this.getAyarlar(tenantId);
     const provider = this.getProvider(ayarlar.saglayici);
     return provider.topluTakipEt(takipNolari, ayarlar);
   }
@@ -151,21 +85,36 @@ class KargoMerkezi {
     basarili: boolean;
     sorgulananSayi: number;
     guncellenenSayi: number;
-    detaylar: Array<{ id: string; takipNo: string; eskiDurum: string; yeniDurum: string; konum: string }>;
+    detaylar: Array<{
+      id: string;
+      takipNo: string;
+      eskiDurum: string;
+      yeniDurum: string;
+      konum: string;
+    }>;
   }> {
-    const ayarlar = this.getAyarlar(tenantId);
+    const ayarlar = await this.getAyarlar(tenantId);
     const provider = this.getProvider(ayarlar.saglayici);
 
     // 1. Senkronize edilecek siparişleri bul:
     // uluslararası kargo kodu olan ve henüz teslim edilmemiş olanlar
-    const aktifSiparisler = siparislerVeritabani.filter((s) => {
-      if (tenantId && tenantId !== 'all' && (s.tenant_id || 'kanada_shopper_baku') !== tenantId) {
-        return false;
-      }
-      const hasCode = Boolean(s.uluslararasi_kargo_kodu && s.uluslararasi_kargo_kodu.trim());
-      const notDelivered = s.lojistik_durumu !== 'TESLIM_EDILDI';
-      return hasCode && notDelivered;
-    });
+    let adaylar = siparislerVeritabani;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('siparisler')
+        .select('*')
+        .eq('tenant_id', tenantId);
+      if (error) throw new Error('Kargo siparişleri okunamadı.');
+      adaylar = (data || []).map(formatlaSiparis);
+    }
+    const aktifSiparisler = adaylar
+      .filter(
+        (s) =>
+          s.tenant_id === tenantId &&
+          Boolean(s.uluslararasi_kargo_kodu?.trim()) &&
+          s.lojistik_durumu !== 'TESLIM_EDILDI'
+      )
+      .map((order) => structuredClone(order));
 
     if (aktifSiparisler.length === 0) {
       return {
@@ -178,6 +127,10 @@ class KargoMerkezi {
 
     const awbListesi = aktifSiparisler.map((s) => s.uluslararasi_kargo_kodu.trim());
     const takipSonuclari = await provider.topluTakipEt(awbListesi, ayarlar);
+    if (takipSonuclari.some((result) => result.kaynak !== 'LIVE'))
+      throw new Error(
+        'Simülasyon sonuçları siparişlere kaydedilemez. Canlı kargo hesabı yapılandırın.'
+      );
     const takipMap = new Map<string, KargoTakipGuncelleme>();
     for (const res of takipSonuclari) {
       takipMap.set(res.takipNo.toUpperCase(), res);
@@ -194,13 +147,19 @@ class KargoMerkezi {
 
       if (siparis.lojistik_durumu !== guncelleme.durum) {
         const eski = siparis.lojistik_durumu;
+        const note = `[${ayarlar.saglayici} Canlı: ${guncelleme.konum} - ${guncelleme.hamAciklama}]`;
+        await updateCargoOrder(siparis, {
+          lojistik_durumu: guncelleme.durum,
+          ...(!siparis.baku_tahsilat_notu?.includes(guncelleme.konum) ? { kargo_notu: note } : {}),
+        });
         siparis.lojistik_durumu = guncelleme.durum;
         siparis.guncellenme_tarihi = simdiIso;
 
         // Sipariş notlarına canlı kargo durum güncellemesini ekle
         const kargoLog = `[${ayarlar.saglayici} Canlı: ${guncelleme.konum} - ${guncelleme.hamAciklama}]`;
         if (!siparis.baku_tahsilat_notu?.includes(guncelleme.konum)) {
-          siparis.baku_tahsilat_notu = `${siparis.baku_tahsilat_notu ? siparis.baku_tahsilat_notu + ' ' : ''}${kargoLog}`.trim();
+          siparis.baku_tahsilat_notu =
+            `${siparis.baku_tahsilat_notu ? siparis.baku_tahsilat_notu + ' ' : ''}${kargoLog}`.trim();
         }
 
         guncellenenSayi++;
@@ -211,14 +170,6 @@ class KargoMerkezi {
           yeniDurum: guncelleme.durum,
           konum: guncelleme.konum,
         });
-
-        // Supabase varsa arka planda güncelle
-        if (supabase) {
-          try {
-            const payload = hazirlaSupabasePayload(siparis);
-            supabase.from('siparisler').update(payload).eq('id', siparis.id).then();
-          } catch {}
-        }
       }
     }
 
@@ -228,60 +179,6 @@ class KargoMerkezi {
       guncellenenSayi,
       detaylar,
     };
-  }
-
-  // Kalıcılık (Persistence)
-  private yukleAyarlariDosyadan() {
-    try {
-      if (fs.existsSync(AYARLAR_DOSYA_YOLU)) {
-        const content = fs.readFileSync(AYARLAR_DOSYA_YOLU, 'utf-8');
-        const data = JSON.parse(content);
-        if (Array.isArray(data)) {
-          for (const item of data) {
-            if (item.tenantId) {
-              // Şifreli alanları çözerek belleğe al
-              if (item.kimlikBilgileri) {
-                if (item.kimlikBilgileri.sifre) {
-                  item.kimlikBilgileri.sifre = cozMetin(item.kimlikBilgileri.sifre);
-                }
-                if (item.kimlikBilgileri.pin) {
-                  item.kimlikBilgileri.pin = cozMetin(item.kimlikBilgileri.pin);
-                }
-              }
-              this.tenantAyarlari.set(item.tenantId, item);
-            }
-          }
-        }
-      } else {
-        // Varsayılanı kaydet
-        this.tenantAyarlari.set(VARSAYILAN_AYARLAR.tenantId, { ...VARSAYILAN_AYARLAR });
-        this.kaydetAyarlariDosyaya();
-      }
-    } catch (err) {
-      console.warn('Kargo ayarları dosyası okunamadı, varsayılan yüklendi:', err);
-      this.tenantAyarlari.set(VARSAYILAN_AYARLAR.tenantId, { ...VARSAYILAN_AYARLAR });
-    }
-  }
-
-  private kaydetAyarlariDosyaya() {
-    try {
-      const dir = path.dirname(AYARLAR_DOSYA_YOLU);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      // Hassas şifre ve PIN alanlarını AES ile şifreleyerek diske yaz
-      const list = Array.from(this.tenantAyarlari.values()).map((item) => ({
-        ...item,
-        kimlikBilgileri: {
-          ...item.kimlikBilgileri,
-          sifre: item.kimlikBilgileri?.sifre ? sifreleMetin(item.kimlikBilgileri.sifre) : '',
-          pin: item.kimlikBilgileri?.pin ? sifreleMetin(item.kimlikBilgileri.pin) : '',
-        },
-      }));
-      fs.writeFileSync(AYARLAR_DOSYA_YOLU, JSON.stringify(list, null, 2), 'utf-8');
-    } catch (err) {
-      console.error('Kargo ayarları dosyaya yazılamadı:', err);
-    }
   }
 }
 

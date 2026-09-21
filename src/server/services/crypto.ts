@@ -1,65 +1,89 @@
-import crypto from 'crypto';
-import { API_SECRET_KEY } from '../config';
+import crypto from 'node:crypto';
 
-const ALGORITHM = 'aes-256-gcm';
-const IV_LENGTH = 12; // 96-bit IV for AES-GCM
-const PREFIX = 'enc:';
-
-// Sunucu secret key'inden 32-byte anahtar türet (sha256 hash)
-function getKey(): Buffer {
-  const secret = API_SECRET_KEY || 'tomnap_default_internal_secure_key_2026';
-  return crypto.createHash('sha256').update(secret).digest();
-}
-
-/**
- * Verilen düz metni AES-256-GCM ile şifreler.
- * Format: enc:<iv_hex>:<tag_hex>:<ciphertext_hex>
- */
-export function sifreleMetin(metin: string): string {
-  if (!metin || typeof metin !== 'string') return '';
-  if (metin.startsWith(PREFIX)) return metin; // Zaten şifreli
-
-  try {
-    const iv = crypto.randomBytes(IV_LENGTH);
-    const key = getKey();
-    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-
-    let encrypted = cipher.update(metin, 'utf-8', 'hex');
-    encrypted += cipher.final('hex');
-    const authTag = cipher.getAuthTag().toString('hex');
-
-    return `${PREFIX}${iv.toString('hex')}:${authTag}:${encrypted}`;
-  } catch (err) {
-    console.error('Şifreleme hatası:', err);
-    return metin;
+export class EncryptionError extends Error {
+  status = 503;
+  constructor(message = 'Kargo şifreleme anahtarı veya kayıt bütünlüğü doğrulanamadı.') {
+    super(message);
+    this.name = 'EncryptionError';
   }
 }
 
-/**
- * AES-256-GCM ile şifrelenmiş metni çözer.
- */
-export function cozMetin(sifreliMetin: string): string {
-  if (!sifreliMetin || typeof sifreliMetin !== 'string') return '';
-  if (!sifreliMetin.startsWith(PREFIX)) return sifreliMetin; // Düz metin
-
+export interface EncryptionContext {
+  tenantId: string;
+  provider: string;
+}
+function keyring() {
   try {
-    const parts = sifreliMetin.slice(PREFIX.length).split(':');
-    if (parts.length !== 3) return sifreliMetin;
+    const keys = JSON.parse(process.env.CARGO_ENCRYPTION_KEYS || 'null');
+    const active = process.env.CARGO_ENCRYPTION_ACTIVE_KEY_ID || '';
+    if (
+      !keys ||
+      typeof keys !== 'object' ||
+      Array.isArray(keys) ||
+      !/^[A-Za-z0-9_-]{1,40}$/.test(active) ||
+      !Object.hasOwn(keys, active)
+    )
+      throw new Error();
+    for (const [id, key] of Object.entries(keys))
+      if (
+        !/^[A-Za-z0-9_-]{1,40}$/.test(id) ||
+        typeof key !== 'string' ||
+        !/^[a-f0-9]{64}$/i.test(key)
+      )
+        throw new Error();
+    return { keys: keys as Record<string, string>, active };
+  } catch {
+    throw new EncryptionError();
+  }
+}
+function aad(context: EncryptionContext, id: string) {
+  if (
+    !context ||
+    typeof context.tenantId !== 'string' ||
+    !context.tenantId ||
+    context.tenantId === 'all' ||
+    typeof context.provider !== 'string' ||
+    !context.provider
+  )
+    throw new EncryptionError();
+  return Buffer.from(JSON.stringify(['TOMNAP:cargo:v2', id, context.tenantId, context.provider]));
+}
 
-    const [ivHex, tagHex, encryptedHex] = parts;
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(tagHex, 'hex');
-    const key = getKey();
+/** Every credential envelope is authenticated for one tenant and provider. */
+export function sifreleMetin(text: string, context: EncryptionContext): string {
+  if (typeof text !== 'string') throw new EncryptionError();
+  const { keys, active } = keyring();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(keys[active], 'hex'), iv);
+  cipher.setAAD(aad(context, active));
+  const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+  return `enc:v2:${active}:${iv.toString('hex')}:${cipher.getAuthTag().toString('hex')}:${encrypted.toString('hex')}`;
+}
 
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(authTag);
-
-    let decrypted = decipher.update(encryptedHex, 'hex', 'utf-8');
-    decrypted += decipher.final('utf-8');
-    return decrypted;
-  } catch (err) {
-    console.warn('Şifre çözme uyarısı (fallback):', err);
-    return sifreliMetin;
+export function cozMetin(envelope: string, context: EncryptionContext): string {
+  try {
+    if (typeof envelope !== 'string') throw new Error();
+    const match =
+      /^enc:v2:([A-Za-z0-9_-]{1,40}):([a-f0-9]{24}):([a-f0-9]{32}):((?:[a-f0-9]{2})*)$/.exec(
+        envelope
+      );
+    if (!match) throw new Error();
+    const [, id, iv, tag, encrypted] = match;
+    const { keys } = keyring();
+    if (!Object.hasOwn(keys, id)) throw new Error();
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      Buffer.from(keys[id], 'hex'),
+      Buffer.from(iv, 'hex')
+    );
+    decipher.setAAD(aad(context, id));
+    decipher.setAuthTag(Buffer.from(tag, 'hex'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(encrypted, 'hex')),
+      decipher.final(),
+    ]).toString('utf8');
+  } catch {
+    throw new EncryptionError();
   }
 }
 

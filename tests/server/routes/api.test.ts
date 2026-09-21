@@ -1,12 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { loginFixture } from '../helpers/session';
+import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../../src/server/index';
 
 const app = createApp();
+let authenticated: any;
+beforeAll(async () => {
+  authenticated = (await loginFixture(app)).agent;
+  authenticated.set('x-tenant-id', 'kanada_shopper_baku');
+});
 
 describe('API Rota Entegrasyon Testleri', () => {
   it('GET /api/sistem-durum — sistem durumunu dönmeli', async () => {
-    const res = await request(app).get('/api/sistem-durum');
+    const res = await authenticated.get('/api/sistem-durum');
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
     expect(res.body).toHaveProperty('supabase');
@@ -15,7 +21,7 @@ describe('API Rota Entegrasyon Testleri', () => {
   });
 
   it('GET /api/siparisler — sipariş listesini getirmeli', async () => {
-    const res = await request(app).get('/api/siparisler');
+    const res = await authenticated.get('/api/siparisler');
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
     expect(Array.isArray(res.body.siparisler)).toBe(true);
@@ -23,7 +29,7 @@ describe('API Rota Entegrasyon Testleri', () => {
   });
 
   it('GET /api/firmalar — multi-tenant firma listesini getirmeli', async () => {
-    const res = await request(app).get('/api/firmalar');
+    const res = await authenticated.get('/api/firmalar');
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
     expect(Array.isArray(res.body.firmalar)).toBe(true);
@@ -31,22 +37,36 @@ describe('API Rota Entegrasyon Testleri', () => {
   });
 
   it('GET /api/kuryeler — kurye ve paket dağıtım masasını getirmeli', async () => {
-    const res = await request(app).get('/api/kuryeler');
+    const res = await authenticated.get('/api/kuryeler');
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
     expect(Array.isArray(res.body.kuryeler)).toBe(true);
-    expect(res.body.kuryeler.length).toBe(4);
+    expect(res.body.kuryeler).toEqual([]);
+    const created = await authenticated
+      .post('/api/kuryeler')
+      .send({ ad_soyad: 'Synthetic courier', telefon: '00000000', bolge: 'Test region' });
+    expect(created.status).toBe(201);
+    const reloaded = await authenticated.get('/api/kuryeler');
+    expect(reloaded.status).toBe(200);
+    expect(reloaded.body.kuryeler).toEqual([
+      expect.objectContaining({
+        id: created.body.kurye.id,
+        tenant_id: 'kanada_shopper_baku',
+        kullanici_id: null,
+        toplam_paket_sayisi: 0,
+      }),
+    ]);
   });
 
   it('GET /api/inbox — onay bekleyen gelen kutusunu getirmeli', async () => {
-    const res = await request(app).get('/api/inbox');
+    const res = await authenticated.get('/api/inbox');
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
     expect(Array.isArray(res.body.mesajlar)).toBe(true);
   });
 
   it('GET /api/veritabani/durum — veritabanı rejim durumunu getirmeli', async () => {
-    const res = await request(app).get('/api/veritabani/durum');
+    const res = await authenticated.get('/api/veritabani/durum');
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
     expect(res.body).toHaveProperty('rejim');
@@ -54,7 +74,9 @@ describe('API Rota Entegrasyon Testleri', () => {
   });
 
   it('GET /api/tenant/izolasyon-testi — izolasyon testini hatasız tamamlamalı', async () => {
-    const res = await request(app).get('/api/tenant/izolasyon-testi?tenant_id=kanada_shopper_baku');
+    const res = await authenticated.get(
+      '/api/tenant/izolasyon-testi?tenant_id=kanada_shopper_baku'
+    );
     expect(res.status).toBe(200);
     expect(res.body.basarili).toBe(true);
     expect(res.body.tum_testler_gecti).toBe(true);
@@ -72,16 +94,14 @@ describe('API Rota Entegrasyon Testleri', () => {
       tenant_id: 'kanada_shopper_baku',
     };
 
-    const ekleRes = await request(app)
-      .post('/api/siparisler')
-      .send(yeniSiparis);
+    const ekleRes = await authenticated.post('/api/siparisler').send(yeniSiparis);
     expect(ekleRes.status).toBe(200);
     expect(ekleRes.body.basarili).toBe(true);
     const eklenenId = ekleRes.body.siparis.id;
     expect(eklenenId).toBeDefined();
 
     // 2. Güncelle
-    const guncelleRes = await request(app)
+    const guncelleRes = await authenticated
       .patch(`/api/siparisler/${eklenenId}`)
       .send({ alinan_tutar: 220, finans_durumu: 'ODENDI' });
     expect(guncelleRes.status).toBe(200);
@@ -89,35 +109,31 @@ describe('API Rota Entegrasyon Testleri', () => {
     expect(guncelleRes.body.siparis.finans_durumu).toBe('ODENDI');
 
     // 3. Sil
-    const silRes = await request(app).delete(`/api/siparisler/${eklenenId}`);
+    const silRes = await authenticated.delete(`/api/siparisler/${eklenenId}`);
     expect(silRes.status).toBe(200);
     expect(silRes.body.basarili).toBe(true);
   });
 
   it('kök yoldan (/siparisler) doğrudan istek yapıldığında 404 dönmeli (bypass engeli)', async () => {
-    const res = await request(app).get('/siparisler');
+    const res = await authenticated.get('/siparisler');
     expect(res.status).toBe(404);
   });
 
   it('POST /api/katalog-gorseli-kaydet dahili ağ/metadata SSRF adreslerini 403 ile engellemeli', async () => {
-    const res = await request(app)
-      .post('/api/katalog-gorseli-kaydet')
-      .send({
-        siparis_id: 'sip-test-ssrf',
-        urun_indeksi: 0,
-        katalog_gorsel_url: 'http://169.254.169.254/latest/meta-data/',
-      });
+    const res = await authenticated.post('/api/katalog-gorseli-kaydet').send({
+      siparis_id: 'sip-test-ssrf',
+      urun_indeksi: 0,
+      katalog_gorsel_url: 'http://169.254.169.254/latest/meta-data/',
+    });
     expect(res.status).toBe(403);
     expect(res.body.basarili).toBe(false);
     expect(res.body.hata).toContain('SSRF');
   });
 
   it('POST /api/veritabani/temizle canlı tenant için onaysız çağrıldığında 403 dönmeli', async () => {
-    const res = await request(app)
-      .post('/api/veritabani/temizle')
-      .send({
-        tenant_id: 'kanada_shopper_baku',
-      });
+    const res = await authenticated.post('/api/veritabani/temizle').send({
+      tenant_id: 'kanada_shopper_baku',
+    });
     expect(res.status).toBe(403);
     expect(res.body.basarili).toBe(false);
   });

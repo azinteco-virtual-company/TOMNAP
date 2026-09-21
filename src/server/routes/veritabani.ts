@@ -1,230 +1,351 @@
-import { Router } from 'express';
+import { Router, Request } from 'express';
+import { createHash } from 'node:crypto';
 import { supabase } from '../services/supabase';
-import { hazirlaSupabasePayload, formatlaSiparis } from '../services/siparisFormatlama';
-import { siparislerVeritabani, setSiparislerVeritabani } from '../services/state';
+import {
+  hazirlaSupabasePayload,
+  formatlaSiparis,
+  SUPABASE_GECERLI_KOLONLAR,
+  SIPARIS_EK_ALANLAR,
+} from '../services/siparisFormatlama';
+import {
+  siparislerVeritabani,
+  setSiparislerVeritabani,
+  demoSiparislerVeritabani,
+  setDemoSiparislerVeritabani,
+  firmalarVeritabani,
+  musterilerVeritabani,
+} from '../services/state';
 import { BASLANGIC_SIPARISLER } from '../../data/ornek-siparisler';
+import { assertTenantImageReferences } from './gorsel';
+import { PublicResourceError } from '../services/publicFetch';
 
 const router = Router();
-
-// GET /api/veritabani/durum — Veritabanı Durumu & Rejim İnceleme
-router.get('/veritabani/durum', async (req, res) => {
-  let supabaseBagli = false;
-  let toplamKayit = 0;
-  let demoKayitSayisi = 0;
-  let canliKayitSayisi = 0;
-  let hata: string | null = null;
-
-  try {
-    let siparisler: any[] = [];
-    if (supabase) {
-      const { data, error } = await supabase.from('siparisler').select('*');
-      if (error) {
-        hata = error.message;
-      } else if (data) {
-        supabaseBagli = true;
-        siparisler = data.map(s => formatlaSiparis(s));
+const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
+const localReceipts = new Map<string, { fingerprint: string; result: any }>();
+const tenantOf = (row: any) => row.tenant_id || formatlaSiparis(row).tenant_id;
+const localRows = (tenant: string) =>
+  tenant === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani;
+const dbActive = (tenant: string) => !!supabase && tenant !== 'demo_sandbox';
+function fail(res: any, error: any) {
+  const status =
+    error instanceof PublicResourceError
+      ? error.status
+      : error?.code === '23505'
+        ? 409
+        : ['22023', '22P02', '23514', '23502'].includes(error?.code)
+          ? 400
+          : error?.code === '54000'
+            ? 413
+            : 503;
+  res.status(status).json({
+    basarili: false,
+    hata:
+      error instanceof PublicResourceError
+        ? error.message
+        : status === 409
+          ? 'İşlem kimliği veya sipariş kimliği çakışıyor. Mevcut kayıtlar değiştirilmedi.'
+          : status === 400
+            ? 'Yedek verisi geçersiz. Mevcut kayıtlar değiştirilmedi.'
+            : status === 413
+              ? 'Yedek sınırı 5000 sipariş / 10 MiB. Daha büyük veri için veritabanı yedeği kullanın.'
+              : 'Veritabanı işlemi doğrulanamadı. Aynı işlem kimliğiyle yeniden deneyin.',
+  });
+}
+function concreteTenant(req: Request) {
+  if (!req.tenantId || req.tenantId === 'all')
+    throw new PublicResourceError('İşlem için tek bir firma seçin.', 400);
+  return req.tenantId;
+}
+function operationKey(req: Request) {
+  const key = req.body.islem_id;
+  if (typeof key !== 'string' || !UUID.test(key))
+    throw new PublicResourceError('Geçerli bir işlem kimliği gerekiyor.', 400);
+  return key.toLowerCase();
+}
+function prepareRows(rows: any, tenant: string, demo = false) {
+  if (
+    !Array.isArray(rows) ||
+    !rows.length ||
+    rows.length > 5000 ||
+    Buffer.byteLength(JSON.stringify(rows)) > 10 * 1024 * 1024
+  )
+    throw new PublicResourceError(
+      'Yedek 1–5000 sipariş içermeli ve 10 MiB sınırını aşmamalı.',
+      400
+    );
+  const ids = new Set<string>();
+  const supported = new Set([
+    ...SUPABASE_GECERLI_KOLONLAR,
+    ...SIPARIS_EK_ALANLAR,
+    'id',
+    'tenantId',
+    'olusturma_tarihi',
+    'guncellenme_tarihi',
+    'kalan_tutar',
+    'urunler',
+    'gorsel_urlleri',
+    'ozel_not',
+    'birden_fazla_urun',
+  ]);
+  return rows.map((raw: any) => {
+    if (
+      !raw ||
+      typeof raw !== 'object' ||
+      Array.isArray(raw) ||
+      typeof raw.id !== 'string' ||
+      !raw.id ||
+      raw.id.length > 200
+    )
+      throw new PublicResourceError('Her siparişin kalıcı bir kimliği olmalı.', 400);
+    if (
+      Object.keys(raw).some((key) => !supported.has(key)) ||
+      (raw.ek_veriler &&
+        (typeof raw.ek_veriler !== 'object' ||
+          Array.isArray(raw.ek_veriler) ||
+          Object.keys(raw.ek_veriler).some(
+            (key) => !(SIPARIS_EK_ALANLAR as readonly string[]).includes(key)
+          )))
+    )
+      throw new PublicResourceError(
+        'Yedekte desteklenmeyen alan var; veri kaybını önlemek için yükleme durduruldu.',
+        400
+      );
+    const claims = [
+      raw.tenant_id,
+      raw.tenantId,
+      ...(Array.isArray(raw.eksik_bilgiler)
+        ? raw.eksik_bilgiler
+            .filter((x: any) => typeof x === 'string' && x.startsWith('META:tenant_id='))
+            .map((x: string) => x.slice('META:tenant_id='.length))
+        : []),
+    ].filter((x) => x !== undefined);
+    if (!demo && (!claims.length || claims.some((x) => x !== tenant)))
+      throw new PublicResourceError('Yedek yalnızca seçili firmanın siparişlerini içermeli.', 403);
+    if (
+      raw.adet !== undefined &&
+      (typeof raw.adet !== 'number' || !Number.isSafeInteger(raw.adet) || raw.adet <= 0)
+    )
+      throw new PublicResourceError('Sipariş adedi geçersiz.', 400);
+    for (const field of ['toplam_tutar', 'alinan_tutar'])
+      if (
+        raw[field] !== undefined &&
+        (typeof raw[field] !== 'number' || !Number.isFinite(raw[field]) || raw[field] < 0)
+      )
+        throw new PublicResourceError('Sipariş tutarı geçersiz.', 400);
+    const row = formatlaSiparis(raw);
+    if (
+      typeof row.musteri_adi !== 'string' ||
+      !row.musteri_adi.trim() ||
+      typeof row.urun_aciklamasi !== 'string' ||
+      !row.urun_aciklamasi.trim() ||
+      !Number.isSafeInteger(row.adet) ||
+      row.adet <= 0 ||
+      !Number.isFinite(row.toplam_tutar) ||
+      row.toplam_tutar < 0 ||
+      !Number.isFinite(row.alinan_tutar) ||
+      row.alinan_tutar < 0
+    )
+      throw new PublicResourceError('Sipariş adı, ürün, adet veya tutar geçersiz.', 400);
+    if (dbActive(tenant) && !UUID.test(raw.id))
+      throw new PublicResourceError(
+        'Veritabanına yüklenen siparişler UUID kimliği taşımalı. Eski yerel kimlikler önce eşlenmeli.',
+        400
+      );
+    const id = UUID.test(raw.id) ? raw.id.toLowerCase() : raw.id;
+    if (ids.has(id)) throw new PublicResourceError('Yedekte tekrarlanan sipariş kimliği var.', 400);
+    ids.add(id);
+    const payload: any = {
+      ...hazirlaSupabasePayload({
+        ...row,
+        tenant_id: tenant,
+        is_demo: demo || tenant === 'demo_sandbox' || row.is_demo === true,
+      }),
+      id,
+    };
+    for (const field of ['olusturma_tarihi', 'guncellenme_tarihi'])
+      if (raw[field] !== undefined) {
+        if (typeof raw[field] !== 'string' || !Number.isFinite(Date.parse(raw[field])))
+          throw new PublicResourceError('Sipariş tarihi geçersiz.', 400);
+        payload[field] = new Date(raw[field]).toISOString();
       }
+    return payload;
+  });
+}
+async function maintain(
+  tenant: string,
+  key: string,
+  mode: 'merge' | 'replace' | 'clear',
+  rows: any[]
+) {
+  if (dbActive(tenant)) {
+    const { data, error } = await supabase.rpc('tomnap_restore_orders', {
+      p_tenant_id: tenant,
+      p_operation_id: key,
+      p_mode: mode,
+      p_orders: rows,
+    });
+    if (error) throw error;
+    if (!data || data.hedef_tenant !== tenant || typeof data.toplam !== 'number')
+      throw new Error('Invalid operation receipt');
+    return { ...data, kaynak: 'supabase' };
+  }
+  if (!firmalarVeritabani.some((f) => f.id === tenant))
+    throw new PublicResourceError('Firma bulunamadı.', 404);
+  const fingerprint = createHash('sha256')
+    .update(JSON.stringify({ tenant, mode, rows }))
+    .digest('hex');
+  const receipt = localReceipts.get(key);
+  if (receipt) {
+    if (receipt.fingerprint !== fingerprint)
+      throw new PublicResourceError('İşlem kimliği başka bir istek için kullanılmış.', 409);
+    return { ...receipt.result, tekrar: true };
+  }
+  if (localReceipts.size >= 10000)
+    throw new PublicResourceError('Yerel işlem kayıt sınırına ulaşıldı.', 503);
+  const current = localRows(tenant),
+    ids = new Set(rows.map((r) => r.id));
+  if (
+    current.some(
+      (r) =>
+        ids.has(UUID.test(r.id) ? r.id.toLowerCase() : r.id) &&
+        (mode === 'merge' || tenantOf(r) !== tenant)
+    )
+  )
+    throw new PublicResourceError('Yükleme mevcut sipariş kimliğiyle çakışıyor.', 409);
+  const normalized = rows.map((row) =>
+    formatlaSiparis({ ...row, olusturma_tarihi: row.olusturma_tarihi || new Date().toISOString() })
+  );
+  const next = [
+    ...current.filter((r) => mode === 'merge' || tenantOf(r) !== tenant),
+    ...normalized,
+  ];
+  if (tenant === 'demo_sandbox') setDemoSiparislerVeritabani(next);
+  else setSiparislerVeritabani(next);
+  const result = { toplam: rows.length, hedef_tenant: tenant, tekrar: false, kaynak: 'bellek' };
+  localReceipts.set(key, { fingerprint, result });
+  return result;
+}
+router.get('/veritabani/durum', async (req, res) => {
+  try {
+    const tenant = req.tenantId!;
+    let status: any;
+    if (dbActive(tenant)) {
+      const { data, error } = await supabase.rpc('tomnap_order_status', { p_tenant_id: tenant });
+      if (error) throw error;
+      if (!data || typeof data.toplam_siparis !== 'number') throw new Error('Invalid status');
+      status = data;
+    } else {
+      const rows = localRows(tenant).filter((r) => tenant === 'all' || tenantOf(r) === tenant);
+      status = {
+        toplam_siparis: rows.length,
+        demo_siparis_sayisi: rows.filter((r) => r.is_demo === true).length,
+        canli_siparis_sayisi: rows.filter((r) => r.is_demo !== true).length,
+        firma_dagilimi: {},
+      };
+      for (const row of rows)
+        status.firma_dagilimi[tenantOf(row)] = (status.firma_dagilimi[tenantOf(row)] || 0) + 1;
     }
-    if (!supabaseBagli) {
-      siparisler = siparislerVeritabani.map(s => formatlaSiparis(s));
-    }
-
-    toplamKayit = siparisler.length;
-    demoKayitSayisi = siparisler.filter(s => s.is_demo !== false).length;
-    canliKayitSayisi = siparisler.filter(s => s.is_demo === false).length;
-
-    const firmaDagilimi: Record<string, number> = {};
-    for (const s of siparisler) {
-      const tid = s.tenant_id || 'kanada_shopper_baku';
-      firmaDagilimi[tid] = (firmaDagilimi[tid] || 0) + 1;
-    }
-
     res.json({
       basarili: true,
-      supabase_bagli: supabaseBagli,
-      kaynak: supabaseBagli ? 'supabase' : 'bellek',
-      toplam_siparis: toplamKayit,
-      demo_siparis_sayisi: demoKayitSayisi,
-      canli_siparis_sayisi: canliKayitSayisi,
-      rejim: toplamKayit === 0 ? 'TEMIZ_CANLI' : (demoKayitSayisi > 0 ? 'DEMO_MODU' : 'CANLI_MODU'),
-      firma_dagilimi: firmaDagilimi,
-      hata,
+      ...status,
+      supabase_bagli: dbActive(tenant),
+      kaynak: dbActive(tenant) ? 'supabase' : 'bellek',
+      rejim:
+        status.toplam_siparis === 0
+          ? 'TEMIZ_CANLI'
+          : status.demo_siparis_sayisi > 0
+            ? 'DEMO_MODU'
+            : 'CANLI_MODU',
     });
-  } catch (err: any) {
-    res.status(500).json({ basarili: false, hata: err.message });
+  } catch (error) {
+    fail(res, error);
   }
 });
-
-// POST /api/veritabani/temizle — Seçili Butik / Demo Verilerini Temizle (Tenant Korumalı)
 router.post('/veritabani/temizle', async (req, res) => {
   try {
-    const { tenant_id, onay_kodu } = req.body;
-    const hedefTenant = tenant_id || 'demo_sandbox';
-
-    // Canlı bir tenant'ın temizlenmesi için güvenlik kilidi:
-    // Sadece demo_sandbox sorgusuz temizlenebilir, canlı tenantlar için açık onay_kodu veya ALLOW_GLOBAL_RESET gerekir
-    const isGlobalResetAllowed = process.env.ALLOW_GLOBAL_RESET === 'true';
-    const isDemoTarget = hedefTenant === 'demo_sandbox';
-
-    if (!isDemoTarget && !isGlobalResetAllowed && onay_kodu !== 'CANLI_TEMIZLEME_ONAY_2026') {
-      return res.status(403).json({
-        basarili: false,
-        hata: `"${hedefTenant}" canlı firma veritabanıdır. Yanlışlıkla silinmeyi önlemek için yalnızca demo hesabı ("demo_sandbox") sıfırlanabilir veya geçerli onay kodu gereklidir.`,
-      });
-    }
-
-    let silinenAdet = 0;
-    if (supabase) {
-      let deleteQuery = supabase.from('siparisler').delete();
-      if (hedefTenant !== 'all') {
-        deleteQuery = deleteQuery.eq('tenant_id', hedefTenant);
-      }
-      const { data, error } = await deleteQuery.select('id');
-      if (error) {
-        console.error('Supabase temizleme hatası:', error.message);
-        return res.status(500).json({ basarili: false, hata: 'Supabase temizlenemedi: ' + error.message });
-      }
-      silinenAdet = data?.length || 0;
-    }
-
-    if (hedefTenant === 'all') {
-      silinenAdet = Math.max(silinenAdet, siparislerVeritabani.length);
-      setSiparislerVeritabani([]);
-    } else {
-      const oncekiSayi = siparislerVeritabani.length;
-      const filtrelenmis = siparislerVeritabani.filter(s => (s.tenant_id || 'kanada_shopper_baku') !== hedefTenant);
-      silinenAdet = Math.max(silinenAdet, oncekiSayi - filtrelenmis.length);
-      setSiparislerVeritabani(filtrelenmis);
-    }
-
-    console.log(`🧹 Veritabanı temizlendi (${hedefTenant}). Toplam silinen: ${silinenAdet}`);
-    res.json({
-      basarili: true,
-      mesaj: `"${hedefTenant}" butiki üçün sifarişlər uğurla təmizləndi!`,
-      silinen_adet: silinenAdet,
-      toplam: 0,
-      hedef_tenant: hedefTenant,
-    });
-  } catch (err: any) {
-    console.error('Temizleme istisnası:', err);
-    res.status(500).json({ basarili: false, hata: 'Temizleme işlemi başarısız: ' + err.message });
+    const tenant = concreteTenant(req);
+    if (req.body.onay_kodu !== `SIL:${tenant}`)
+      throw new PublicResourceError(`Silmek için SIL:${tenant} onayı gerekiyor.`, 403);
+    const result = await maintain(tenant, operationKey(req), 'clear', []);
+    res.json({ basarili: true, ...result, mesaj: 'Seçili firmanın siparişleri temizlendi.' });
+  } catch (error) {
+    fail(res, error);
   }
 });
-
-// POST /api/veritabani/demo-yukle — Demo Verilerini Geri Yükle (Tenant İzolasyonlu)
 router.post('/veritabani/demo-yukle', async (req, res) => {
   try {
-    const hedefTenant = req.body.tenant_id || 'demo_sandbox';
-
-    if (supabase) {
-      await supabase.from('siparisler').delete().eq('tenant_id', hedefTenant);
-    }
-    const digerSiparisler = siparislerVeritabani.filter(s => (s.tenant_id || 'kanada_shopper_baku') !== hedefTenant);
-
-    const eklenecekler = BASLANGIC_SIPARISLER.map(s => ({
-      ...s,
-      tenant_id: hedefTenant,
-      is_demo: true,
-    }));
-
-    if (supabase) {
-      const chunkSize = 30;
-      for (let i = 0; i < eklenecekler.length; i += chunkSize) {
-        const chunk = eklenecekler.slice(i, i + chunkSize);
-        const sbChunk = chunk.map(item => hazirlaSupabasePayload(item));
-        const { error } = await supabase.from('siparisler').insert(sbChunk);
-        if (error) {
-          console.error(`Supabase batch ${i} yükleme hatası:`, error.message);
-        }
-      }
-    }
-
-    setSiparislerVeritabani([...digerSiparisler, ...eklenecekler]);
-
-    console.log(`✅ Demo verileri yüklendi (${hedefTenant}): ${eklenecekler.length} sipariş.`);
-    res.json({
-      basarili: true,
-      mesaj: `${eklenecekler.length} demo sifariş "${hedefTenant}" üçün bazaya uğurla bərpa edildi!`,
-      toplam: eklenecekler.length,
-      kaynak: supabase ? 'supabase' : 'bellek',
-    });
-  } catch (err: any) {
-    console.error('Demo yükleme istisnası:', err);
-    res.status(500).json({ basarili: false, hata: 'Demo yükleme başarısız: ' + err.message });
+    const tenant = concreteTenant(req);
+    if (tenant !== 'demo_sandbox')
+      throw new PublicResourceError(
+        'Demo verileri yalnızca demo_sandbox alanına yüklenebilir.',
+        403
+      );
+    const rows = prepareRows(BASLANGIC_SIPARISLER, tenant, true);
+    const result = await maintain(tenant, operationKey(req), 'replace', rows);
+    res.json({ basarili: true, ...result, mesaj: 'Demo alanı sıfırlandı.' });
+  } catch (error) {
+    fail(res, error);
   }
 });
-
-// GET /api/veritabani/yedek-al — Veritabanı Yedeğini İndir (JSON Export)
 router.get('/veritabani/yedek-al', async (req, res) => {
   try {
-    let siparisler: any[] = [];
-    if (supabase) {
-      const { data } = await supabase.from('siparisler').select('*').order('olusturma_tarihi', { ascending: false });
-      if (data) {
-        siparisler = data.map(s => formatlaSiparis(s));
-      }
-    }
-    if (siparisler.length === 0) {
-      siparisler = siparislerVeritabani.map(s => formatlaSiparis(s));
-    }
-
-    const yedekPaketi = {
-      proje: 'Kanada Shopper Baku ERP',
+    const tenant = req.tenantId!;
+    let rows: any[];
+    if (dbActive(tenant)) {
+      const { data, error } = await supabase.rpc('tomnap_export_orders', { p_tenant_id: tenant });
+      if (error) throw error;
+      if (!Array.isArray(data)) throw new Error('Invalid backup');
+      rows = data;
+    } else rows = localRows(tenant).filter((r) => tenant === 'all' || tenantOf(r) === tenant);
+    if (rows.length > 5000 || Buffer.byteLength(JSON.stringify(rows)) > 10 * 1024 * 1024)
+      throw { code: '54000' };
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=tomnap_${tenant}_${new Date().toISOString().slice(0, 10)}.json`
+    );
+    res.json({
+      proje: 'TOMNAP',
+      versiyon: '3.0-orders',
       tarih: new Date().toISOString(),
-      versiyon: '2.0-saas',
-      toplam_siparis: siparisler.length,
-      siparisler,
-    };
-
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename=knb_backup_${new Date().toISOString().slice(0, 10)}.json`);
-    res.json(yedekPaketi);
-  } catch (err: any) {
-    res.status(500).json({ basarili: false, hata: 'Yedek oluşturulamadı: ' + err.message });
+      tenant_id: tenant,
+      kaynak: dbActive(tenant) ? 'supabase' : 'bellek',
+      toplam_siparis: rows.length,
+      siparisler: rows.map(formatlaSiparis),
+    });
+  } catch (error) {
+    fail(res, error);
   }
 });
-
-// POST /api/veritabani/yedek-yukle — Veritabanı Yedeğini Geri Yükle (JSON Import)
 router.post('/veritabani/yedek-yukle', async (req, res) => {
   try {
-    const { siparisler, temizleVeYukle = true } = req.body;
-    if (!Array.isArray(siparisler) || siparisler.length === 0) {
-      return res.status(400).json({ basarili: false, hata: 'Geçerli bir sipariş listesi bulunamadı.' });
-    }
-
-    if (temizleVeYukle) {
-      if (supabase) {
-        await supabase.from('siparisler').delete().neq('adet', -999999);
+    const tenant = concreteTenant(req),
+      key = operationKey(req);
+    if (req.body.temizleVeYukle !== undefined && typeof req.body.temizleVeYukle !== 'boolean')
+      throw new PublicResourceError('Yükleme biçimi geçersiz.', 400);
+    const replace = req.body.temizleVeYukle === true;
+    if (replace && req.body.onay_kodu !== `DEGISTIR:${tenant}`)
+      throw new PublicResourceError(`Değiştirmek için DEGISTIR:${tenant} onayı gerekiyor.`, 403);
+    const rows = prepareRows(req.body.siparisler, tenant);
+    for (const row of rows) {
+      const customerId = row.ek_veriler?.musteri_id;
+      if (customerId !== undefined && customerId !== null && customerId !== '') {
+        if (typeof customerId !== 'string')
+          throw new PublicResourceError('Müşteri kimliği geçersiz.', 400);
+        if (
+          !dbActive(tenant) &&
+          !musterilerVeritabani.some((m) => m.id === customerId && tenantOf(m) === tenant)
+        )
+          throw new PublicResourceError('Yedekteki müşteri seçili firmada bulunamadı.', 404);
       }
-      setSiparislerVeritabani([]);
     }
-
-    if (supabase) {
-      const chunkSize = 25;
-      for (let i = 0; i < siparisler.length; i += chunkSize) {
-        const chunk = siparisler.slice(i, i + chunkSize);
-        const sbChunk = chunk.map(s => hazirlaSupabasePayload(s));
-        const { error } = await supabase.from('siparisler').insert(sbChunk);
-        if (error) console.error('Yedek yükleme chunk hatası:', error.message);
-      }
-    }
-
-    const formatlanmis = siparisler.map(s => formatlaSiparis(s));
-    setSiparislerVeritabani(temizleVeYukle ? [...formatlanmis] : [...formatlanmis, ...siparislerVeritabani]);
-
-    res.json({
-      basarili: true,
-      mesaj: `${siparisler.length} sifariş uğurla bazaya idxal edildi və bərpa olundu!`,
-      toplam: siparisler.length,
-    });
-  } catch (err: any) {
-    res.status(500).json({ basarili: false, hata: 'Yedek yükleme başarısız: ' + err.message });
+    await assertTenantImageReferences(req, rows);
+    const result = await maintain(tenant, key, replace ? 'replace' : 'merge', rows);
+    res.json({ basarili: true, ...result, mesaj: 'Sipariş yedeği seçili firmaya yüklendi.' });
+  } catch (error) {
+    fail(res, error);
   }
 });
-
-// Eski rotayla geriye dönük uyumluluk
-router.post('/ornek-verileri-yukle', async (req, res) => {
-  res.redirect(307, '/api/veritabani/demo-yukle');
-});
-
+router.post('/ornek-verileri-yukle', (_req, res) =>
+  res.redirect(307, '/api/veritabani/demo-yukle')
+);
 export default router;
