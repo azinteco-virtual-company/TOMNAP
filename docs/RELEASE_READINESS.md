@@ -19,8 +19,9 @@ korumasını kullanır.
 
 ## İnceleme dalının yayın koşulu
 
-`codex/release-phases-1-5` dalı için otomatik Vercel dağıtımı geçici olarak
-kapalıdır. GitHub testleri çalışmaya devam eder. Önizleme ortamının üretim
+`codex/release-phases-1-5` ve `main` dalları için otomatik Vercel dağıtımı
+geçici olarak kapalıdır. Kod ana dala birleştirilebilir; canlı dağıtım, aşağıdaki
+veri geçişi koşulları tamamlandıktan sonra ayrıca açılır. GitHub testleri çalışmaya devam eder. Önizleme ortamının üretim
 veritabanı anahtarlarını miras almaması, migration zinciri ve özel Storage
 kurulumu doğrulandıktan sonra bu dal kısıtı ayrı commit ile kaldırılır.
 Diğer dalların dağıtım davranışı bu ayardan etkilenmez.

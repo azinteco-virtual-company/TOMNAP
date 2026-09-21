@@ -5,7 +5,8 @@
   "outputDirectory": "dist",
   "git": {
     "deploymentEnabled": {
-      "codex/release-phases-1-5": false
+      "codex/release-phases-1-5": false,
+      "main": false
     }
   },
   "rewrites": [
