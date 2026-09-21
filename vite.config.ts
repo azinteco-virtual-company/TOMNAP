@@ -173,7 +173,7 @@ export default defineConfig(async ({ command }) => {
           '**/.env.*',
           '**/*.{crt,pem}',
           '**/.git/**',
-          ...['data', 'src/server', 'api', 'scripts', 'tests', 'work'].map(
+          ...['data', 'build', 'src/server', 'api', 'scripts', 'tests', 'work'].map(
             (name) => path.resolve(process.cwd(), name) + '/**'
           ),
           ...[process.env.DATA_DIR, process.env.UPLOADS_DIR]

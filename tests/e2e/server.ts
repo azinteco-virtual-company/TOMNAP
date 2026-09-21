@@ -48,11 +48,10 @@ dns.lookup = ((hostname: string, ...args: unknown[]) => {
   if (hostname !== '127.0.0.1') return blocked();
   return Reflect.apply(originalLookup, dns, [hostname, ...args]);
 }) as typeof dns.lookup;
-const { createApp } = await import('../../src/server/index');
+const { createApp, mountClientAssets } = await import('../../src/server/index');
 const { saveIdentitySnapshot, setSiparislerVeritabani, setMusterilerVeritabani } =
   await import('../../src/server/services/state');
 const { sifreHashle } = await import('../../src/server/services/crypto');
-const { default: express } = await import('express');
 const created = '2026-09-17T09:00:00.000Z';
 saveIdentitySnapshot({
   companies: [fixture.tenantA, fixture.tenantB].map((id, index) => ({
@@ -130,8 +129,7 @@ setSiparislerVeritabani(
 setMusterilerVeritabani([]);
 const app = createApp();
 const dist = fileURLToPath(new URL('../../dist/', import.meta.url));
-app.use(express.static(dist));
-app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+mountClientAssets(app, dist);
 const server = app.listen(Number(process.env.PORT), '127.0.0.1');
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => server.close(() => process.exit(0)));

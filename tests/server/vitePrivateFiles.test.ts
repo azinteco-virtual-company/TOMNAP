@@ -7,8 +7,15 @@ let vite: ViteDevServer;
 let base: string;
 const sentinel = 'PRIVATE-VITE-REGRESSION-SENTINEL';
 const filename = path.join(process.env.DATA_DIR!, 'private-fixture.json');
+let buildFixtureDirectory: string;
+let buildFixture: string;
 beforeAll(async () => {
   fs.writeFileSync(filename, JSON.stringify({ secret: sentinel }));
+  fs.mkdirSync(path.join(process.cwd(), 'build'), { recursive: true });
+  buildFixtureDirectory = fs.mkdtempSync(path.join(process.cwd(), 'build', 'boundary-test-'));
+  buildFixture = path.join(buildFixtureDirectory, 'server.cjs');
+  fs.writeFileSync(buildFixture, sentinel);
+  fs.writeFileSync(buildFixture + '.map', sentinel);
   vite = await createServer({
     root: process.cwd(),
     envDir: process.env.DATA_DIR,
@@ -20,6 +27,7 @@ beforeAll(async () => {
 }, 30000);
 afterAll(async () => {
   await vite?.close();
+  if (buildFixtureDirectory) fs.rmSync(buildFixtureDirectory, { recursive: true, force: true });
 });
 describe('development server private filesystem boundary', () => {
   it.each([
@@ -31,6 +39,9 @@ describe('development server private filesystem boundary', () => {
     () => `/@fs${process.cwd()}/data/firmalar.json`,
     () => '/src/server/services/sessions.ts?raw',
     () => '/scripts/bootstrap-admin.ts?raw',
+    () => '/' + path.relative(process.cwd(), buildFixture),
+    () => '/' + path.relative(process.cwd(), buildFixture) + '.map?raw',
+    () => `/@fs${buildFixture}?raw`,
   ])('does not serve private data or server source (%#)', async (getPath) => {
     const response = await fetch(base + getPath());
     expect(response.status).toBe(403);

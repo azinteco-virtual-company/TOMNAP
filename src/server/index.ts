@@ -13,6 +13,7 @@ import {
 import { corsMiddleware } from './middleware/security';
 import { errorHandler } from './middleware/errorHandler';
 import { logger, requestLogger } from './logger';
+import { isPrivateBuildPath } from './services/clientBuildBoundary';
 
 import sistemRouter from './routes/sistem';
 import siparislerRouter from './routes/siparisler';
@@ -108,6 +109,28 @@ export function createApp() {
   return app;
 }
 
+export function mountClientAssets(app: ReturnType<typeof createApp>, directory: string) {
+  // Also deny legacy paths if an operator accidentally retains an old server
+  // bundle in the client directory. CI/build separately reject that artifact.
+  app.use((req, res, next) => {
+    let requested: string;
+    try {
+      requested = decodeURIComponent(req.path);
+    } catch {
+      res.status(400).send('Geçersiz istek yolu.');
+      return;
+    }
+    if (isPrivateBuildPath(requested)) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(404).send('Bulunamadı.');
+      return;
+    }
+    next();
+  });
+  app.use(express.static(directory));
+  app.get('*', (_req, res) => res.sendFile(path.join(directory, 'index.html')));
+}
+
 export async function startServer() {
   const app = createApp();
 
@@ -123,10 +146,7 @@ export async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    mountClientAssets(app, distPath);
   }
 
   return new Promise((resolve) => {

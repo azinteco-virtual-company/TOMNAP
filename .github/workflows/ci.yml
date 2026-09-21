@@ -45,8 +45,9 @@ jobs:
 
       - name: Dağıtım Paketi Kontrolü
         run: |
-          test -f dist/server.cjs || exit 1
+          test -f build/server.cjs || exit 1
           test -f dist/index.html || exit 1
+          npm run check:client-artifacts
           echo "✅ Production derlemesi başarıyla doğrulandı."
 
   browser-security:

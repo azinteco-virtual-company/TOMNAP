@@ -3,6 +3,11 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "git": {
+    "deploymentEnabled": {
+      "codex/release-phases-1-5": false
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
