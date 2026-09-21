@@ -74,18 +74,9 @@ CREATE TABLE IF NOT EXISTS public.siparisler (
 
     -- AI Tarafından Tespit Edilen Eksik Bilgiler & Görseller
     eksik_bilgiler JSONB NOT NULL DEFAULT '[]'::jsonb,
-    gorsel_urlleri JSONB DEFAULT '[]'::jsonb,
-    urunler JSONB DEFAULT '[]'::jsonb,
     ai_guven_skoru NUMERIC(3, 2) DEFAULT 0.95,
     is_demo BOOLEAN DEFAULT FALSE
 );
 
-CREATE TABLE public.kuryeler(
-  id varchar(100) PRIMARY KEY,
-  tenant_id varchar(100) DEFAULT 'kanada_shopper_baku',
-  ad_soyad varchar(150) NOT NULL,
-  telefon varchar(50) NOT NULL,
-  bolge varchar(150) NOT NULL,
-  aktif boolean DEFAULT true,
-  olusturma_tarihi timestamptz NOT NULL DEFAULT now()
-);
+-- Match the deployed legacy baseline: couriers are provisioned by phase 4;
+-- product/image arrays are preserved by META entries and phase 3 ek_veriler.

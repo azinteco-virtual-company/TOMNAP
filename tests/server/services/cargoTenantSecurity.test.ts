@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { KargoMerkezi, kargoMerkezi } from '../../../src/server/services/kargo/kargoMerkezi';
 import { siparislerVeritabani, setSiparislerVeritabani } from '../../../src/server/services/state';
 import { AramexProvider } from '../../../src/server/services/kargo/providers/aramex';
@@ -30,7 +31,8 @@ describe('Carrier tenant and live-result integrity', () => {
     const settings = await kargoMerkezi.getAyarlar('cargo_a');
     settings.kimlikBilgileri = {
       kullaniciAdi: 'fixture',
-      sifre: 'fixture-only',
+      // This request is mocked above; no carrier credential is used or sent.
+      sifre: randomUUID(),
       hesapNo: 'fixture',
       testModu: false,
     };

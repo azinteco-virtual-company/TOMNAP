@@ -1,5 +1,17 @@
 -- Phase 4: private credentials, explicit courier identity, reviewed legacy images.
 BEGIN;
+-- Some deployed legacy schemas never created a courier table. Provision the
+-- empty table here without seeding couriers or changing existing identities.
+-- Existing courier rows remain in place for the explicit binding migration.
+CREATE TABLE IF NOT EXISTS public.kuryeler (
+  id varchar(100) PRIMARY KEY,
+  tenant_id varchar(100) NOT NULL REFERENCES public.firmalar(id),
+  ad_soyad varchar(150) NOT NULL,
+  telefon varchar(50) NOT NULL,
+  bolge varchar(150) NOT NULL,
+  aktif boolean NOT NULL DEFAULT true,
+  olusturma_tarihi timestamptz NOT NULL DEFAULT now()
+);
 -- Explicit tenant-owned courier identities. Legacy records remain unbound.
 ALTER TABLE public.kuryeler ADD COLUMN kullanici_id text REFERENCES public.kullanicilar(id) ON DELETE SET NULL;
 CREATE UNIQUE INDEX kuryeler_kullanici_unique ON public.kuryeler(kullanici_id) WHERE kullanici_id IS NOT NULL;

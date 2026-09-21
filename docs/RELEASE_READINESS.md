@@ -46,14 +46,39 @@ Diğer dalların dağıtım davranışı bu ayardan etkilenmez.
    değişiklikler, e-posta, Storage, yeniden başlatma ve hata koşulları denenir.
    Kabul sonuçları tamamlandıktan sonra ana dal ve canlı dağıtım güncellenir.
 
+## Mevcut şema ve veri geçişi
+
+Canlı şema karşılaştırmasında eski kurulumun `kuryeler` tablosunu içermediği
+doğrulandı. Henüz canlıya uygulanmamış Faz 4 migration'ı, tablo yoksa boş ve
+firmaya bağlı olarak oluşturur; mevcut tabloyu veya kullanıcı kimliklerini
+değiştirmek için temel demo SQL dosyalarını tekrar çalıştırmak gerekmez.
+
+Siparişlerde ayrı `gorsel_urlleri` ve `urunler` kolonlarının bulunmaması tek başına
+veri kaybı bulgusu değildir: mevcut dönüşüm META alanlarını ve Faz 3 `ek_veriler`
+verisini korur. SQL test tabanı bu eski şema biçimini de doğrular.
+
+Tekrarlanan kullanıcı e-posta/telefonları Faz 3'ün benzersizlik denetimini
+engelliyorsa migration zorlanmaz. Hesaplar korunarak gerçek çoklu firma üyeliği
+ile deneme kayıtları ayrılır; gerekirse kimlik/üyelik modeli buna göre değişir.
+Bu karar ve geri dönüş noktası doğrulanmadan zinciri kısmen uygulamak, eski
+istemcinin erişimini kesebilir. Canlı veri inceleme dosyaları depoya eklenmez.
+
+Özel Storage bucket'ı ve ortam değişkenlerinin hazırlanması, SQL zincirinin
+uygulandığı veya yeni kodun canlıya çıktığı anlamına gelmez. Önizleme için
+üretim anahtarlarının kapsamını daraltmak da eski dağıtımların kayıtlı ortam
+değerlerini geriye dönük kaldırmaz; eski önizlemeler ayrıca incelenir.
+
 ## Doğrulama — 21 Eylül 2026
 
 - 52 test dosyasında 693 test geçti.
 - Altı Chromium kabul senaryosu geçti.
 - TypeScript kontrolü, üretim derlemesi ve statik paket denetimi geçti.
 - Testler depo verisini değiştirmedi.
-- SQL değişikliği yapılmadı; önceki 9 SQL paketi ve 18 eşzamanlı bağlantı
-  senaryosu yerel doğrulamadır, canlı migration uygulanmış olduğu anlamına gelmez.
+- Kurye tablosu ve ayrı görsel/ürün kolonları bulunmayan eski şemadan başlayan
+  dört migration, 9 SQL paketi ve 18 eşzamanlı bağlantı senaryosuyla yeniden
+  doğrulandı. Bu yerel doğrulama canlı migration uygulandığı anlamına gelmez.
+- Kargo testindeki sabit örnek parola rastgele test verisine dönüştürüldü;
+  dış istek test içinde taklit edilir ve gerçek bir hizmet anahtarı kullanılmaz.
 
 Kaynaklar: [Vercel Git dal ayarları](https://vercel.com/docs/project-configuration/git-configuration),
 [Functions sınırları](https://vercel.com/docs/functions/limitations),
