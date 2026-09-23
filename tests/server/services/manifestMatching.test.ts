@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   eslesmeOnerileriOlustur,
+  foldName,
   nameSimilarity,
   normalizeAwb,
   normalizeCode,
@@ -259,5 +260,84 @@ describe('Suggestions never write and never guess', () => {
     );
     expect(report.satirlar[0]).toMatchObject({ durum: 'GECERSIZ_AWB', adaylar: [] });
     expect(report.ozet).toMatchObject({ toplamSatir: 2, GECERSIZ_AWB: 1, ONERILDI: 1, cakismaSayisi: 0 });
+  });
+});
+
+describe('ASCII folding widens weak candidates only', () => {
+  const schemes = ['PASAPORT', 'BASIT'] as const;
+
+  it('folds with the passport and simple schemes and transliterates Cyrillic', () => {
+    expect(foldName('Qəmər Əsədova', 'PASAPORT')).toBe('gamar asadova');
+    expect(foldName('Qəmər Əsədova', 'BASIT')).toBe('qemer esedova');
+    expect(foldName('Cəfər Xəlilov', 'PASAPORT')).toBe('jafar khalilov');
+    expect(foldName('Cəfər Xəlilov', 'BASIT')).toBe('cefer xelilov');
+    expect(foldName('Şəhla Çələbi-Öğüz', 'PASAPORT')).toBe('shahla chalabi oghuz');
+    expect(foldName('Şəhla Çələbi-Öğüz', 'BASIT')).toBe('sehla celebi oguz');
+    for (const scheme of schemes) {
+      expect(foldName('Лейла Иванова', scheme)).toBe('leyla ivanova');
+      expect(foldName('Йолдаш Ёлкин', scheme)).toBe('yoldash yolkin');
+    }
+  });
+
+  it('removes the combining dot that JavaScript adds when lowercasing İ', () => {
+    expect([...'İ'.toLowerCase()]).toEqual(['i', '̇']);
+    expect(foldName('İSAQ', 'PASAPORT')).toBe('isag');
+    expect(foldName('İsaq', 'BASIT')).toBe('isaq');
+    for (const scheme of schemes) expect(foldName('İsmayılova İlqar', scheme)).not.toMatch(/\p{M}/u);
+  });
+
+  it('folds empty and placeholder names to nothing, so they still match nothing', () => {
+    for (const scheme of schemes)
+      for (const value of ['', '---', 'Müştəri', 'Bilinmeyen Müşteri', null, 7]) expect(foldName(value, scheme)).toBe('');
+    expect(nameSimilarity('Müştəri', 'Mushteri')).toBe(0);
+  });
+
+  it.each([
+    ['Konul Isag', 'Könül İsaq'],
+    ['Gamar Asadova', 'Qəmər Əsədova'],
+    ['Jafar Khalilov', 'Cəfər Xəlilov'],
+  ])('offers manifest name %s as an unselected weak candidate for %s', (manifestName, orderName) => {
+    expect(nameSimilarity(manifestName, orderName)).toBeGreaterThanOrEqual(ZAYIF_ESLESME_ESIGI);
+    const report = eslesmeOnerileriOlustur([row({ aliciAdi: manifestName })], [order('customer', { musteriAdi: orderName })]);
+    expect(report.satirlar[0]).toMatchObject({ durum: 'ZAYIF_ADAY', onerilenSiparisId: null });
+    expect(report.satirlar[0].adaylar).toEqual([
+      expect.objectContaining({ siparisId: 'customer', eslesmeTipi: 'ISIM', guc: 'ZAYIF' }),
+    ]);
+  });
+
+  it('still rejects both reported false matches', () => {
+    expect(nameSimilarity('Natalia Petrova', 'Əli')).toBeLessThan(ZAYIF_ESLESME_ESIGI);
+    expect(nameSimilarity('John Smith', 'Лейла Иванова')).toBeLessThan(ZAYIF_ESLESME_ESIGI);
+    const report = eslesmeOnerileriOlustur(
+      [row({ aliciAdi: 'Natalia Petrova' }), row({ takipNo: '37349392427', aliciAdi: 'John Smith' })],
+      [order('eli', { musteriAdi: 'Əli' }), order('cyrillic', { musteriAdi: 'Лейла Иванова' })]
+    );
+    expect(report.satirlar.map((item) => [item.durum, item.adaylar.length])).toEqual([
+      ['ESLESME_YOK', 0],
+      ['ESLESME_YOK', 0],
+    ]);
+  });
+
+  it('leaves normalization and the strong phone and order-code rules unchanged', () => {
+    expect(normalizeName('Qəmər Əsədova')).toBe('qəmər əsədova');
+    const report = eslesmeOnerileriOlustur(
+      [
+        row({ takipNo: 'AWB-0001', aliciAdi: 'Gamar Asadova' }),
+        row({ takipNo: 'AWB-0002', aliciAdi: 'Somebody Else', telefon: '0552843911' }),
+        row({ takipNo: 'AWB-0003', aliciAdi: 'Somebody Else', referansNo: 'tor-ca-1234' }),
+      ],
+      [
+        order('named', { musteriAdi: 'Qəmər Əsədova' }),
+        order('phone', { musteriAdi: 'Other Person', telefon: '+994552843911' }),
+        order('code', { musteriAdi: 'Third Person', kanadaTakipKodu: 'TOR-CA-1234' }),
+      ]
+    );
+    // A perfect transliterated name is still only a weak, unselected candidate.
+    expect(report.satirlar[0]).toMatchObject({ durum: 'ZAYIF_ADAY', onerilenSiparisId: null });
+    expect(report.satirlar[0].adaylar.every((item) => item.guc === 'ZAYIF')).toBe(true);
+    expect(report.satirlar[1]).toMatchObject({ durum: 'ONERILDI', onerilenSiparisId: 'phone' });
+    expect(report.satirlar[1].adaylar[0]).toMatchObject({ eslesmeTipi: 'TELEFON', guc: 'GUCLU' });
+    expect(report.satirlar[2]).toMatchObject({ durum: 'ONERILDI', onerilenSiparisId: 'code' });
+    expect(report.satirlar[2].adaylar[0]).toMatchObject({ eslesmeTipi: 'SIPARIS_KODU', guc: 'GUCLU' });
   });
 });

@@ -275,7 +275,12 @@ değiştirilmez. Yanıt `satirlar[]`, `cakismalar[]` ve `ozet` alanlarını içe
 - **Zayıf aday:** yalnız isim benzerliği (Unicode-duyarlı; ə, ş, ç, ğ, ı, ö, ü ve
   Kiril korunur). Sørensen–Dice puanı en az 0,5 olmalı, satır başına en çok 5 aday
   gösterilir. Zayıf adaylar asla önceden seçilmez. Normalize edilince boş kalan
-  (veya "Müştəri" gibi yer tutucu) isimler hiçbir şeyle eşleşmez.
+  (veya "Müştəri" gibi yer tutucu) isimler hiçbir şeyle eşleşmez. Puan, harfleri
+  koruyan biçim ile iki ASCII katlama şemasının en yükseğidir: Pasaport (Ə→A, Q→G,
+  X→KH, C→J, Ş→SH, Ç→CH, Ğ→GH, Ö→O, Ü→U, I/ı/İ→I) ve Basit (aksanlar atılır;
+  Ə→E, ı/İ→I; Q, X, C aynı kalır). Kiril adlar Latin'e çevrilir. Katlama yalnız
+  zayıf aday listesini genişletir; normalizasyonu, güçlü eşleşmeyi ve yazmayı
+  etkilemez.
 - `onerilenSiparisId` yalnız tek bir güçlü ve engelsiz aday varsa dolar. Bir satır
   birden fazla siparişe eşleşiyorsa, aynı sipariş birden fazla satırda öneriliyorsa
   ya da AWB manifestte tekrarlanıyorsa durum `BELIRSIZ` olur ve hiçbir aday seçilmez.

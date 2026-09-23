@@ -182,16 +182,98 @@ function dice(left: Map<string, number>, right: Map<string, number>): number {
   return size === 0 ? 0 : Math.round(((2 * shared) / size) * 1000) / 1000;
 }
 
+/** Letter-folding schemes, used ONLY for weak (name) candidate scores. */
+export type KatlamaSemasi = 'PASAPORT' | 'BASIT';
+const KATLAMA_SEMALARI: readonly KatlamaSemasi[] = ['PASAPORT', 'BASIT'];
+const CEDILLA = '\u0327';
+const BREVE = '\u0306';
+const DIAERESIS = '\u0308';
+
+// Cyrillic → Latin (Russian and Azerbaijani Cyrillic). Letters that NFKD splits
+// into base + mark (й, ё, ў, ї) are handled in cyrillicToLatin.
+const KIRIL_LATIN: Readonly<Record<string, string>> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ж: 'zh', з: 'z', и: 'i', к: 'k',
+  л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+  х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu',
+  я: 'ya', ә: 'a', ғ: 'gh', ҝ: 'g', һ: 'h', ј: 'y', ө: 'o', ү: 'u', ҹ: 'j', і: 'i',
+  є: 'ye', ґ: 'g',
+};
+
+function cyrillicToLatin(letter: string, marks: string): string | null {
+  if (letter === 'и' && marks.includes(BREVE)) return 'y'; // й
+  if (letter === 'у' && marks.includes(BREVE)) return 'u'; // ў
+  if (letter === 'е' && marks.includes(DIAERESIS)) return 'yo'; // ё
+  if (letter === 'і' && marks.includes(DIAERESIS)) return 'yi'; // ї
+  return Object.hasOwn(KIRIL_LATIN, letter) ? KIRIL_LATIN[letter] : null;
+}
+
+// Passport: Ə→A, Q→G, X→KH, C→J, Ş→SH, Ç→CH, Ğ→GH, Ö→O, Ü→U, I/ı/İ→I.
+// Simple: drop accents (Ə→E, Ş→S, Ç→C, Ğ→G, Ö→O, Ü→U, ı/İ→I); Q, X, C stay.
+function foldUnit(letter: string, marks: string, scheme: KatlamaSemasi): string {
+  const cyrillic = cyrillicToLatin(letter, marks);
+  if (cyrillic !== null) return cyrillic;
+  if (letter === 'ə') return scheme === 'PASAPORT' ? 'a' : 'e';
+  if (letter === 'ı') return 'i';
+  if (scheme === 'BASIT') return letter;
+  if (letter === 's' && marks.includes(CEDILLA)) return 'sh';
+  if (letter === 'c' && marks.includes(CEDILLA)) return 'ch';
+  if (letter === 'g' && marks.includes(BREVE)) return 'gh';
+  if (letter === 'c') return 'j';
+  if (letter === 'q') return 'g';
+  if (letter === 'x') return 'kh';
+  return letter;
+}
+
 /**
- * Order-insensitive Sørensen–Dice similarity of character bigrams (0…1).
+ * ASCII folding of a name for weak-candidate scoring ONLY: never used for
+ * normalization, equality, strong matches or writes. The name is lowercased and
+ * decomposed with NFKD first; each letter's combining marks decide its folding
+ * (ş → sh or s) and are then dropped. JS lowercases "İ" to "i" + U+0307; that
+ * dot is a combining mark and disappears here. Empty or placeholder names fold
+ * to an empty string, which matches nothing.
+ */
+export function foldName(value: unknown, scheme: KatlamaSemasi): string {
+  if (typeof value !== 'string' || !normalizeName(value)) return '';
+  let folded = '';
+  for (const [, letter, marks] of value
+    .normalize('NFKC')
+    .toLowerCase()
+    .normalize('NFKD')
+    .matchAll(/(\P{M})(\p{M}*)/gu))
+    folded += foldUnit(letter, marks, scheme);
+  return folded
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+type NameGrams = Array<Map<string, number> | null>;
+
+// Compared forms: letter-preserving normalization, then each folding scheme.
+function nameGrams(value: unknown): NameGrams {
+  return [
+    sortedTokens(normalizeName(value)),
+    ...KATLAMA_SEMALARI.map((scheme) => sortedTokens(foldName(value, scheme))),
+  ].map((form) => (form ? bigrams(form) : null));
+}
+
+function bestScore(left: NameGrams, right: NameGrams): number {
+  let best = 0;
+  left.forEach((grams, index) => {
+    const other = right[index];
+    if (grams && other) best = Math.max(best, dice(grams, other));
+  });
+  return best;
+}
+
+/**
+ * Order-insensitive Sørensen–Dice similarity of character bigrams (0…1): the
+ * highest score among the letter-preserving form and the folding schemes.
  * There is no substring shortcut: a short or empty name cannot "contain" others.
  */
 export function nameSimilarity(left: unknown, right: unknown): number {
-  const a = sortedTokens(normalizeName(left));
-  const b = sortedTokens(normalizeName(right));
-  if (!a || !b) return 0;
-  if (a === b) return 1;
-  return dice(bigrams(a), bigrams(b));
+  if (!normalizeName(left) || !normalizeName(right)) return 0;
+  return bestScore(nameGrams(left), nameGrams(right));
 }
 
 function text(value: unknown): string {
@@ -250,7 +332,8 @@ function push<K, V>(map: Map<K, V[]>, key: K, value: V) {
 
 interface PreparedOrder {
   order: SiparisAdayi;
-  grams: Map<string, number> | null;
+  grams: NameGrams;
+  hasName: boolean;
   blocked: boolean;
 }
 
@@ -274,10 +357,10 @@ export function eslesmeOnerileriOlustur(
     if (order.kanadaTakipKodu && order.kanadaTakipKodu !== idCode)
       push(byCode, order.kanadaTakipKodu, order);
     if (order.awb) push(byAwb, order.awb, order);
-    const name = sortedTokens(normalizeName(order.musteriAdi));
     prepared.push({
       order,
-      grams: name ? bigrams(name) : null,
+      grams: nameGrams(order.musteriAdi),
+      hasName: normalizeName(order.musteriAdi) !== '',
       blocked: order.lojistikDurumu === TESLIM_EDILDI || order.awb !== '',
     });
   }
@@ -353,12 +436,11 @@ export function eslesmeOnerileriOlustur(
 
     // Weak evidence never surfaces delivered orders or orders that already have an AWB.
     const weak: EslesmeAdayi[] = [];
-    const rowName = sortedTokens(normalizeName(row.aliciAdi));
-    if (rowName) {
-      const rowGrams = bigrams(rowName);
-      for (const { order, grams, blocked } of prepared) {
-        if (blocked || !grams || strongTypes.has(order.id)) continue;
-        const score = dice(rowGrams, grams);
+    if (normalizeName(row.aliciAdi)) {
+      const rowGrams = nameGrams(row.aliciAdi);
+      for (const { order, grams, hasName, blocked } of prepared) {
+        if (blocked || !hasName || strongTypes.has(order.id)) continue;
+        const score = bestScore(rowGrams, grams);
         if (score >= ZAYIF_ESLESME_ESIGI) weak.push(candidate(order, 'ISIM', 'ZAYIF', score));
       }
       weak.sort((a, b) => b.skor - a.skor || a.siparisId.localeCompare(b.siparisId));

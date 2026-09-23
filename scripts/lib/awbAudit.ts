@@ -181,6 +181,8 @@ export function manifestBulgulari(
       if (rowPhone && rowPhone === orderPhone) continue;
       if (rowName && rowName === normalizeName(order.musteriAdi)) continue;
       const similarity = nameSimilarity(row.aliciAdi, order.musteriAdi);
+      // Identical under a transliteration scheme (e.g. "Gamar Asadova" / "Qəmər Əsədova").
+      if (similarity === 1) continue;
       const phoneNote =
         rowPhone && orderPhone ? ' Telefonlar da farklı.' : ' Telefonla doğrulanamadı.';
       const base = finding(

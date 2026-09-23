@@ -46,14 +46,27 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
 
 ## Eşleştirme kuralları
 
-4. **Transliterasyon.** İsimler harfleri koruyarak normalize ediliyor (ə, ş, ç, ğ,
+4. ✅ **Karar verildi (23 Eylül 2026):** Kargo manifestleri çoğu zaman pasaport
+   yazımıyla geldiği için yalnız zayıf aday puanına ASCII katlama eklendi. İki sabit
+   şema var: Pasaport (Ə→A, Q→G, X→KH, C→J, Ş→SH, Ç→CH, Ğ→GH, Ö→O, Ü→U, I/ı/İ→I) ve
+   Basit (aksanlar atılır). Kiril adlar ayrıca Latin'e çevrilir. Puan, bu
+   biçimlerin en yükseği; önce NFKD ve birleşik işaret temizliği yapılır (JS'in
+   `İ` → `i̇` davranışı testli). Sonuç: `Konul Isag`, `Gamar Asadova` ve
+   `Jafar Khalilov` artık aday (puan 1,0). Y-6'daki iki hatalı eşleşme hâlâ
+   eşleşmiyor (0,20 / 0,00). `normalizeName`, güçlü kurallar ve yazma
+   değişmedi. Denetim scripti de katlanmış biçimde birebir aynı adları tutarlı
+   sayar.
+
+   **Transliterasyon.** İsimler harfleri koruyarak normalize ediliyor (ə, ş, ç, ğ,
    ı, ö, ü, Kiril). Bu yüzden ASCII yazılmış bir manifest adı düşük puan alıyor:
    `Konul Isag` ~ `Könül İsaq` = 0,455, eşiğin (0,5) altında, yani aday
    gösterilmiyor. Güçlü eşleşme (telefon/kod) bundan etkilenmiyor.
    *Soru:* Manifestlerde adlar ASCII mi geliyor? Öyleyse, normalizasyonu
    değiştirmeden yalnız zayıf aday puanı için ayrı bir transliterasyon
    karşılaştırması eklensin mi?
-5. **Zayıf aday eşiği 0,5 ve satır başına 5 aday.** Aynı ad farklı soyadı
+5. ✅ **Karar verildi (23 Eylül 2026):** Eşik 0,5 olarak kalıyor.
+
+   **Zayıf aday eşiği 0,5 ve satır başına 5 aday.** Aynı ad farklı soyadı
    (`Aynur Mammadova` ~ `Aynur Həsənova` = 0,58) zayıf aday olarak görünür ama
    asla önceden seçilmez.
    *Soru:* Eşik uygun mu?

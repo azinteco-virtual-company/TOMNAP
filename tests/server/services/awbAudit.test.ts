@@ -93,6 +93,7 @@ describe('Manifest comparison', () => {
         order('o-phone', 'Aytən Məmmədova', '3001', { telefon: '055 284 39 11' }),
         order('o-name', 'Kəmalə Bədirbəyli', '3002'),
         order('o-similar', 'Aytən Məmmədli', '3003'),
+        order('o-passport', 'Qəmər Əsədova', '3004'),
       ],
       [
         { takipNo: '37349392426', aliciAdi: 'Natalia Petrova', telefon: '+1 416 555 0101' },
@@ -101,10 +102,12 @@ describe('Manifest comparison', () => {
         { takipNo: '3002', aliciAdi: 'KƏMALƏ BƏDİRBƏYLİ' },
         { takipNo: '3003', aliciAdi: 'Aytən Məmmədova' },
         { takipNo: '9999', aliciAdi: 'Not in database' },
+        { takipNo: '3004', aliciAdi: 'GAMAR ASADOVA' },
       ],
       'dispatch.xlsx'
     );
-    expect(result).toMatchObject({ satirSayisi: 6, veritabanindaOlmayanAwb: 1, kontrolEdilenAwb: 5 });
+    // The passport spelling of the customer's name is consistent, not a finding.
+    expect(result).toMatchObject({ satirSayisi: 7, veritabanindaOlmayanAwb: 1, kontrolEdilenAwb: 6 });
     expect(result.bulgular.map((item) => [item.siparisId, item.tip, item.onem])).toEqual([
       ['o-eli', 'MANIFEST_ALICI_UYUSMUYOR', 'YUKSEK'],
       ['o-cyrillic', 'MANIFEST_ALICI_UYUSMUYOR', 'YUKSEK'],
