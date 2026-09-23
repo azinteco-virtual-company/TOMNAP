@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AramexProvider } from '../src/server/services/kargo/providers/aramex';
 import {
+  adasBulgulari,
   manifestBulgulari,
   siralaBulgular,
   toAuditOrder,
@@ -19,12 +20,24 @@ Eski otomatik manifest eşleştirmesinin isim benzerliğiyle yanlış siparişe
 yazmış olabileceği AWB kodlarını listeler. Çıktı manuel inceleme içindir.
 
   tsx scripts/audit-awb-matches.ts --tenant <firma-id> [--manifest <dosya>]... [--out <rapor.json>]
+      [--namesake-window-days <gün>]
   tsx scripts/audit-awb-matches.ts --all-tenants [--manifest <dosya>]... [--out <rapor.json>]
+      [--namesake-window-days <gün>]
 
 Yalnız veritabanı sinyalleri (her zaman):
   AYNI_AWB_BIRDEN_FAZLA_SIPARISTE  aynı AWB aynı butikte birden fazla siparişte
   ESKI_ESLESTIRME_BOS_ISIM         eski normalizasyon müşteri adını boşaltıyordu
   ESKI_ESLESTIRME_KISA_ISIM        eski normalizasyon adı 1-3 karaktere indiriyordu
+  BELIRSIZ_ADAS                    AWB'nin yazıldığı siparişle aynı butikte katlanmış
+                                   adı aynı (harf koruyan, pasaport ya da basit
+                                   yazım; kelime sırası önemsiz) başka sipariş var.
+                                   Eski eşleştirme butiğin TÜM siparişlerinde ilk
+                                   eşleşeni seçiyordu; AWB adaşa ait olabilir.
+                                   Adaş listesi AWB'siz siparişleri de kapsar.
+  --namesake-window-days <gün>     adaşları oluşturma tarihi ±<gün> içindekilerle
+                                   sınırlar (1-3650). Varsayılan: sınırsız, çünkü
+                                   eski eşleştirmenin aday havuzu da sınırsızdı.
+                                   Tarihi bilinmeyen sipariş her zaman listelenir.
 Orijinal manifest dosyası verilirse (--manifest, tekrarlanabilir):
   MANIFEST_ALICI_UYUSMUYOR / MANIFEST_ALICI_BENZER  manifest alıcısı ile AWB'nin
   yazıldığı siparişin müşterisi (Unicode-duyarlı ad + tam telefon) uyuşmuyor.
@@ -41,19 +54,28 @@ bir dosyanın üzerine yazılmaz. Rapor kişisel veri içerir; özel tutun.
 
 const PAGE_SIZE = 1000;
 const MAX_ORDERS = 200_000;
+// Orders without an AWB are read too: they are the namesake candidates.
 const AUDIT_COLUMNS =
-  'id,tenant_id,musteri_adi,telefon_numarasi,lojistik_durumu,uluslararasi_kargo_kodu';
+  'id,tenant_id,musteri_adi,telefon_numarasi,lojistik_durumu,uluslararasi_kargo_kodu,olusturma_tarihi';
+const MAX_WINDOW_DAYS = 3650;
 const WRITE_FLAGS = new Set(['--apply', '--write', '--fix', '--no-dry-run']);
 
 export interface AuditArguments {
   tenantId: string | null;
   manifests: string[];
   out: string | null;
+  adasPenceresiGun: number | null;
   help: boolean;
 }
 
 export function parseAuditArguments(argv: readonly string[]): AuditArguments {
-  const result: AuditArguments = { tenantId: null, manifests: [], out: null, help: false };
+  const result: AuditArguments = {
+    tenantId: null,
+    manifests: [],
+    out: null,
+    adasPenceresiGun: null,
+    help: false,
+  };
   let allTenants = false;
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index];
@@ -62,7 +84,15 @@ export function parseAuditArguments(argv: readonly string[]): AuditArguments {
     if (flag === '--help' || flag === '-h') result.help = true;
     else if (flag === '--dry-run') continue;
     else if (flag === '--all-tenants') allTenants = true;
-    else if (flag === '--tenant' || flag === '--manifest' || flag === '--out') {
+    else if (flag === '--namesake-window-days') {
+      const value = argv[++index] ?? '';
+      const days = /^\d{1,4}$/.test(value) ? Number(value) : 0;
+      if (result.adasPenceresiGun !== null || days < 1 || days > MAX_WINDOW_DAYS)
+        throw new Error(
+          `--namesake-window-days 1-${MAX_WINDOW_DAYS} arası tam gün olmalı ve bir kez verilmeli.`
+        );
+      result.adasPenceresiGun = days;
+    } else if (flag === '--tenant' || flag === '--manifest' || flag === '--out') {
       const value = argv[++index];
       if (!value || value.startsWith('--')) throw new Error(`${flag} için değer eksik.`);
       if (flag === '--tenant') {
@@ -92,7 +122,6 @@ export function supabaseOrderPageReader(client: SupabaseClient): OrderPageReader
     let query = client
       .from('siparisler')
       .select(AUDIT_COLUMNS)
-      .not('uluslararasi_kargo_kodu', 'is', null)
       .order('id', { ascending: true })
       .limit(limit);
     if (tenantId) query = query.eq('tenant_id', tenantId);
@@ -154,6 +183,7 @@ export async function auditMain(argv: readonly string[], deps: AuditDependencies
   if (!deps.readPage)
     throw new Error('SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY gerekli; script yalnız okuma yapar.');
   const orders = await readAuditOrders(deps.readPage, args.tenantId);
+  const awbCount = orders.filter((order) => order.awb).length;
   const manifests: ManifestDenetimi[] = [];
   const parser = new AramexProvider();
   for (const file of args.manifests) {
@@ -163,13 +193,16 @@ export async function auditMain(argv: readonly string[], deps: AuditDependencies
   }
   const findings: Bulgu[] = siralaBulgular([
     ...veritabaniBulgulari(orders),
+    ...adasBulgulari(orders, args.adasPenceresiGun),
     ...manifests.flatMap((manifest) => manifest.bulgular),
   ]);
   const report = {
     olusturmaTarihi: new Date().toISOString(),
     mod: 'SALT_OKUNUR',
     kapsam: args.tenantId ? { tenantId: args.tenantId } : { tumButikler: true },
-    awbliSiparisSayisi: orders.length,
+    tarananSiparisSayisi: orders.length,
+    awbliSiparisSayisi: awbCount,
+    adasPenceresiGun: args.adasPenceresiGun,
     manifestler: manifests.map(({ bulgular, ...summary }) => ({ ...summary, bulguSayisi: bulgular.length })),
     ozet: {
       YUKSEK: findings.filter((item) => item.onem === 'YUKSEK').length,
@@ -181,7 +214,8 @@ export async function auditMain(argv: readonly string[], deps: AuditDependencies
   if (args.out) deps.createReport(args.out, json);
   else deps.stdout(json);
   deps.stderr(
-    `Salt okunur denetim: ${orders.length} AWB'li sipariş, ${report.ozet.YUKSEK} yüksek, ` +
+    `Salt okunur denetim: ${orders.length} sipariş tarandı (${awbCount} AWB'li), ` +
+      `${report.ozet.YUKSEK} yüksek, ` +
       `${report.ozet.ORTA} orta önemde bulgu. Hiçbir kayıt değiştirilmedi.\n`
   );
   return 0;

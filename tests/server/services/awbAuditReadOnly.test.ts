@@ -17,13 +17,15 @@ const seen: SeenRequest[] = [];
 let server: http.Server;
 let baseUrl = '';
 
+// Row 1001 has no AWB: a namesake of row 0 that the audit must still read.
 const row = (index: number) => ({
   id: `id-${String(index).padStart(5, '0')}`,
   tenant_id: 'tenant-a',
-  musteri_adi: index === 0 ? 'Əli' : `Customer ${index}`,
+  musteri_adi: index === 0 ? 'Əli' : index === 1001 ? 'ƏLİ' : `Customer ${index}`,
   telefon_numarasi: '',
-  lojistik_durumu: 'ULUSLARARASI_KARGO',
-  uluslararasi_kargo_kodu: `AWB-${index}`,
+  lojistik_durumu: index === 1001 ? 'KANADA_DEPO' : 'ULUSLARARASI_KARGO',
+  uluslararasi_kargo_kodu: index === 1001 ? null : `AWB-${index}`,
+  olusturma_tarihi: '2026-09-01T10:00:00+00:00',
 });
 
 beforeAll(async () => {
@@ -76,17 +78,24 @@ describe('AWB audit script is read-only at the HTTP level', () => {
     ]);
     expect(seen.every((request) => request.body === '')).toBe(true);
     expect(seen[0].query).toEqual({
-      select: 'id,tenant_id,musteri_adi,telefon_numarasi,lojistik_durumu,uluslararasi_kargo_kodu',
-      uluslararasi_kargo_kodu: 'not.is.null',
+      select:
+        'id,tenant_id,musteri_adi,telefon_numarasi,lojistik_durumu,uluslararasi_kargo_kodu,olusturma_tarihi',
       order: 'id.asc',
       limit: '1000',
       tenant_id: 'eq.tenant-a',
     });
     expect(seen[1].query).toMatchObject({ tenant_id: 'eq.tenant-a', id: 'gt.id-00999' });
     const report = JSON.parse(out.join(''));
-    expect(report.awbliSiparisSayisi).toBe(1002);
+    expect(report).toMatchObject({ tarananSiparisSayisi: 1002, awbliSiparisSayisi: 1001 });
     expect(report.bulgular).toContainEqual(
       expect.objectContaining({ siparisId: 'id-00000', tip: 'MANIFEST_ALICI_UYUSMUYOR' })
+    );
+    expect(report.bulgular).toContainEqual(
+      expect.objectContaining({
+        siparisId: 'id-00000',
+        tip: 'BELIRSIZ_ADAS',
+        adaslar: [expect.objectContaining({ siparisId: 'id-01001', awb: '' })],
+      })
     );
   });
 });

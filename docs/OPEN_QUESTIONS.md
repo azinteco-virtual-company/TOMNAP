@@ -165,3 +165,29 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     *Soru:* Manifestlerde butiğin ya da aracının ortak telefonu yazıyorsa her
     satır YÜKSEK çıkar. İlk çalıştırmada aynı telefonun çok sayıda farklı alıcıda
     tekrar edip etmediğine bakılmalı. Böyle bir durum var mı?
+
+16. **Adaş (`BELIRSIZ_ADAS`) kuralı ve "aynı dönem".** Varsayımlar:
+    - **Adaş tanımı:** Aynı butikte başka bir siparişin müşteri adı, harf koruyan,
+      pasaport ya da basit yazımlardan en az birinde aynı olmalı. Kelime sırası
+      önemsiz. Karışık yazım adaş sayılmaz ("Ayten Mammadova" ile "Aytən
+      Məmmədova" hiçbir katlamada aynı olmaz); bu fark manifest
+      karşılaştırmasında benzerlik puanıyla görünür. Yer tutucu adlar
+      ("Müştəri") adaş oluşturmaz.
+    - **Aday havuzu:** AWB'siz ve teslim edilmiş siparişler dahil butiğin bütün
+      siparişleri. Gerekçe: eski kod
+      (`c4eb4c9^:src/server/routes/kargoEntegrasyon.ts`, satır 225–256) butiğin
+      bütün siparişlerini `select('*')` ile çekip `find` ile ilk eşleşeni
+      seçiyordu. Durum, AWB ya da tarih filtresi yoktu.
+    - **Pencere:** Bu yüzden "aynı dönem" varsayılanı **sınırsız**.
+      `--namesake-window-days <gün>` ile oluşturma tarihine göre ±gün penceresine
+      daraltılabilir. Tarihi bilinmeyen sipariş her zaman listelenir.
+    - **Rapor alanları:** Her adaş için `gunFarki` ve `ayniTelefon` verilir.
+      - Aynı telefon büyük olasılıkla aynı müşterinin başka siparişi demektir;
+        AWB yine yanlış siparişte olabilir.
+      - Farklı telefon gerçek bir adaş demektir.
+    - **Önem ve liste sınırı:** Önem ORTA; bu bir belirsizlik, kanıt değil. Bulgu
+      başına en çok 20 adaş listelenir; `adasSayisi` hepsini sayar.
+
+    *Soru:* Varsayılan pencere sınırsız mı kalsın, yoksa bir gün sayısı mı
+    olsun (ör. 60)? Aynı telefonlu adaşlar, yani tekrar eden müşteriler, ayrı
+    bir türe ya da daha düşük öneme ayrılsın mı?

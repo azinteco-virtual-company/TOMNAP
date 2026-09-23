@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  adasBulgulari,
   eskiAlgoritmaIsmi,
   manifestBulgulari,
   toAuditOrder,
@@ -32,6 +33,7 @@ function order(id: string, musteriAdi: string, awb: string, extra: Partial<Audit
     lojistikDurumu: 'ULUSLARARASI_KARGO',
     awb,
     awbHam: awb,
+    olusturmaTarihi: '',
     ...extra,
   };
 }
@@ -54,13 +56,21 @@ describe('Legacy matcher reproduction', () => {
     expect(eskiAlgoritmaIsmi(undefined)).toBe('');
   });
 
-  it('audits only orders that carry an AWB', () => {
-    expect(toAuditOrder({ id: 'a', tenant_id: 't', uluslararasi_kargo_kodu: '' })).toBeNull();
-    expect(toAuditOrder({ id: 'a', uluslararasi_kargo_kodu: 'AWB-1' })).toBeNull();
-    expect(toAuditOrder({ id: 'a', tenant_id: 't', uluslararasi_kargo_kodu: ' awb-1 ' })).toMatchObject({
-      awb: 'AWB-1',
-      awbHam: 'awb-1',
+  it('keeps orders without an AWB, but only as namesake candidates', () => {
+    expect(toAuditOrder({ id: 'a', tenant_id: 't', uluslararasi_kargo_kodu: null })).toMatchObject({
+      awb: '',
+      awbHam: '',
+      olusturmaTarihi: '',
     });
+    expect(toAuditOrder({ id: 'a', uluslararasi_kargo_kodu: 'AWB-1' })).toBeNull();
+    expect(
+      toAuditOrder({
+        id: 'a',
+        tenant_id: 't',
+        uluslararasi_kargo_kodu: ' awb-1 ',
+        olusturma_tarihi: '2026-09-01T10:00:00+00:00',
+      })
+    ).toMatchObject({ awb: 'AWB-1', awbHam: 'awb-1', olusturmaTarihi: '2026-09-01T10:00:00+00:00' });
     expect(toAuditOrder('row')).toBeNull();
   });
 });
@@ -74,6 +84,9 @@ describe('Database-only signals', () => {
       order('cyrillic', 'Лейла Иванова', 'AWB-2'),
       order('short', 'Əli', 'AWB-3'),
       order('normal', 'Samir Valiyev', 'AWB-4'),
+      // Without an AWB the old matcher's write cannot be on this order.
+      order('no-awb-cyrillic', 'Лейла Иванова', ''),
+      order('no-awb-short', 'Əli', ''),
     ]);
     expect(findings.map((item) => [item.siparisId, item.tip, item.onem])).toEqual([
       ['dup-1', 'AYNI_AWB_BIRDEN_FAZLA_SIPARISTE', 'YUKSEK'],
@@ -94,6 +107,7 @@ describe('Manifest comparison', () => {
         order('o-name', 'Kəmalə Bədirbəyli', '3002'),
         order('o-similar', 'Aytən Məmmədli', '3003'),
         order('o-passport', 'Qəmər Əsədova', '3004'),
+        order('o-no-awb', 'Nobody', ''),
       ],
       [
         { takipNo: '37349392426', aliciAdi: 'Natalia Petrova', telefon: '+1 416 555 0101' },
@@ -103,11 +117,12 @@ describe('Manifest comparison', () => {
         { takipNo: '3003', aliciAdi: 'Aytən Məmmədova' },
         { takipNo: '9999', aliciAdi: 'Not in database' },
         { takipNo: '3004', aliciAdi: 'GAMAR ASADOVA' },
+        { takipNo: '', aliciAdi: 'Nobody' },
       ],
       'dispatch.xlsx'
     );
     // The passport spelling of the customer's name is consistent, not a finding.
-    expect(result).toMatchObject({ satirSayisi: 7, veritabanindaOlmayanAwb: 1, kontrolEdilenAwb: 6 });
+    expect(result).toMatchObject({ satirSayisi: 8, veritabanindaOlmayanAwb: 2, kontrolEdilenAwb: 6 });
     expect(result.bulgular.map((item) => [item.siparisId, item.tip, item.onem])).toEqual([
       ['o-eli', 'MANIFEST_ALICI_UYUSMUYOR', 'YUKSEK'],
       ['o-cyrillic', 'MANIFEST_ALICI_UYUSMUYOR', 'YUKSEK'],
@@ -156,6 +171,69 @@ describe('Manifest comparison', () => {
   });
 });
 
+describe('Namesake ambiguity', () => {
+  const at = (day: string) => `${day}T10:00:00+00:00`;
+  const namesakes = () => [
+    order('h1', 'Aytən Məmmədova', 'AWB-1', { olusturmaTarihi: at('2026-09-01'), telefon: '0501112233' }),
+    order('n1', 'AYTƏN MƏMMƏDOVA', '', { olusturmaTarihi: at('2026-09-10'), telefon: '0559998877' }),
+    order('n2', 'Aytan Mammadova', 'AWB-2', { olusturmaTarihi: at('2026-06-03'), telefon: '050 111 22 33' }),
+    // Mixes the two spellings; no fold produces it, so it is not a namesake.
+    order('mixed', 'Ayten Mammadova', 'AWB-8', { olusturmaTarihi: at('2026-09-01') }),
+    order('n3', 'Məmmədova Aytən', ''),
+    order('other-tenant', 'Aytən Məmmədova', 'AWB-9', { tenantId: 'tenant-b' }),
+    order('different', 'Aytən Məmmədli', 'AWB-3', { olusturmaTarihi: at('2026-09-02') }),
+    order('placeholder-1', 'Müştəri', 'AWB-4'),
+    order('placeholder-2', 'Müştəri', 'AWB-5'),
+    order('unique', 'Samir Vəliyev', 'AWB-6'),
+    order('far-holder', 'Nigar Əliyeva', 'AWB-7', { olusturmaTarihi: at('2026-01-01') }),
+    order('far-namesake', 'Nigar Aliyeva', '', { olusturmaTarihi: at('2026-09-01') }),
+  ];
+
+  it('marks an AWB whose folded customer name is shared inside the tenant', () => {
+    const findings = adasBulgulari(namesakes(), null);
+    expect(findings.map((item) => [item.siparisId, item.tip, item.onem])).toEqual([
+      ['h1', 'BELIRSIZ_ADAS', 'ORTA'],
+      ['n2', 'BELIRSIZ_ADAS', 'ORTA'],
+      ['far-holder', 'BELIRSIZ_ADAS', 'ORTA'],
+    ]);
+    const [h1, n2] = findings;
+    expect(h1).toMatchObject({ olusturmaTarihi: at('2026-09-01'), adasSayisi: 3 });
+    expect(h1.aciklama).toMatch(/^Belirsiz: adaş\./);
+    expect(h1.aciklama).toContain("AWB'siz: 2");
+    // Nearest in time first; a namesake with an unknown date is listed last.
+    expect(h1.adaslar?.map((item) => [item.siparisId, item.gunFarki, item.ayniTelefon, item.awb])).toEqual([
+      ['n1', 9, false, ''],
+      ['n2', -90, true, 'AWB-2'],
+      ['n3', null, null, ''],
+    ]);
+    expect(n2.adaslar?.map((item) => [item.siparisId, item.gunFarki])).toEqual([
+      ['h1', 90],
+      ['n1', 99],
+      ['n3', null],
+    ]);
+  });
+
+  it('narrows namesakes to a window but keeps those with an unknown date', () => {
+    const findings = adasBulgulari(namesakes(), 30);
+    expect(findings.map((item) => [item.siparisId, item.adaslar?.map((entry) => entry.siparisId)])).toEqual([
+      ['h1', ['n1', 'n3']],
+      ['n2', ['n3']],
+    ]);
+    expect(findings[0].aciklama).toContain('±30 gün');
+  });
+
+  it('lists at most twenty namesakes but counts all of them', () => {
+    const orders = [
+      order('holder', 'Leyla Həsənova', 'AWB-1'),
+      ...Array.from({ length: 25 }, (_, index) => order(`same-${index}`, 'Leyla Hasanova', '')),
+    ];
+    const [finding, ...rest] = adasBulgulari(orders, null);
+    expect(rest).toEqual([]);
+    expect(finding.adasSayisi).toBe(25);
+    expect(finding.adaslar).toHaveLength(20);
+  });
+});
+
 describe('Read-only command line', () => {
   it('refuses every write mode and validates scope', () => {
     for (const flag of ['--apply', '--write', '--fix', '--no-dry-run'])
@@ -169,9 +247,19 @@ describe('Read-only command line', () => {
       tenantId: 'a',
       manifests: ['x', 'y'],
       out: null,
+      adasPenceresiGun: null,
       help: false,
     });
     expect(parseAuditArguments(['--help']).help).toBe(true);
+  });
+
+  it('accepts an optional namesake window in whole days', () => {
+    expect(parseAuditArguments(['--tenant', 'a', '--namesake-window-days', '30']).adasPenceresiGun).toBe(30);
+    for (const value of ['0', '-1', '1.5', 'abc', '3651'])
+      expect(() => parseAuditArguments(['--tenant', 'a', '--namesake-window-days', value])).toThrow();
+    expect(() =>
+      parseAuditArguments(['--tenant', 'a', '--namesake-window-days', '5', '--namesake-window-days', '6'])
+    ).toThrow();
   });
 
   it('pages through orders by id and ignores rows of another tenant', async () => {
@@ -217,8 +305,7 @@ describe('Read-only command line', () => {
     await readPage({ tenantId: 'tenant-a', afterId: 'id-1', limit: 1000 });
     expect(chain).toEqual([
       'from:siparisler',
-      'select:id,tenant_id,musteri_adi,telefon_numarasi,lojistik_durumu,uluslararasi_kargo_kodu',
-      'not:uluslararasi_kargo_kodu',
+      'select:id,tenant_id,musteri_adi,telefon_numarasi,lojistik_durumu,uluslararasi_kargo_kodu,olusturma_tarihi',
       'order:id',
       'limit:1000',
       'eq:tenant_id=tenant-a',
@@ -232,6 +319,7 @@ describe('Read-only command line', () => {
     const deps = {
       readPage: async () => [
         { id: 'o-eli', tenant_id: 'tenant-a', musteri_adi: 'Əli', uluslararasi_kargo_kodu: '37349392426' },
+        { id: 'o-eli-2', tenant_id: 'tenant-a', musteri_adi: 'ƏLİ', uluslararasi_kargo_kodu: null },
       ],
       readFile: () => manifestBuffer([['37349392426', 'Natalia Petrova', '+1 416 555 0101']]),
       createReport: createPrivateReport,
@@ -240,8 +328,15 @@ describe('Read-only command line', () => {
     };
     expect(await auditMain(['--tenant', 'tenant-a', '--manifest', '/x/dispatch.xlsx'], deps)).toBe(0);
     const report = JSON.parse(out.join(''));
-    expect(report).toMatchObject({ mod: 'SALT_OKUNUR', awbliSiparisSayisi: 1, ozet: { YUKSEK: 1, ORTA: 1 } });
+    expect(report).toMatchObject({
+      mod: 'SALT_OKUNUR',
+      tarananSiparisSayisi: 2,
+      awbliSiparisSayisi: 1,
+      adasPenceresiGun: null,
+      ozet: { YUKSEK: 1, ORTA: 2 },
+    });
     expect(report.bulgular.map((item: { tip: string }) => item.tip).sort()).toEqual([
+      'BELIRSIZ_ADAS',
       'ESKI_ESLESTIRME_KISA_ISIM',
       'MANIFEST_ALICI_UYUSMUYOR',
     ]);

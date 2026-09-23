@@ -1,4 +1,5 @@
 import {
+  foldName,
   nameSimilarity,
   normalizeAwb,
   normalizeName,
@@ -18,7 +19,8 @@ export type BulguTipi =
   | 'ESKI_ESLESTIRME_KISA_ISIM'
   | 'MANIFEST_ALICI_UYUSMUYOR'
   | 'MANIFEST_ALICI_BENZER'
-  | 'MANIFEST_TELEFON_UYUSMUYOR';
+  | 'MANIFEST_TELEFON_UYUSMUYOR'
+  | 'BELIRSIZ_ADAS';
 export type Onem = 'YUKSEK' | 'ORTA';
 
 export interface AuditOrder {
@@ -27,10 +29,25 @@ export interface AuditOrder {
   musteriAdi: string;
   telefon: string;
   lojistikDurumu: string;
-  /** Normalized AWB; orders without an AWB are not audited. */
+  /** Normalized AWB; '' when the order has none (then it is only a namesake candidate). */
   awb: string;
   /** AWB exactly as stored. */
   awbHam: string;
+  /** olusturma_tarihi as stored; '' when missing. */
+  olusturmaTarihi: string;
+}
+
+export interface AdasSiparis {
+  siparisId: string;
+  musteriAdi: string;
+  telefon: string;
+  lojistikDurumu: string;
+  awb: string;
+  olusturmaTarihi: string;
+  /** Whole days from the AWB holder's creation (negative: older); null if a date is unknown. */
+  gunFarki: number | null;
+  /** null when either phone is missing or unreadable. */
+  ayniTelefon: boolean | null;
 }
 
 export interface Bulgu {
@@ -42,8 +59,11 @@ export interface Bulgu {
   telefon: string;
   lojistikDurumu: string;
   awb: string;
+  olusturmaTarihi: string;
   aciklama: string;
   benzerlik?: number;
+  adasSayisi?: number;
+  adaslar?: AdasSiparis[];
   manifest?: { dosya: string; satirNo: number; aliciAdi: string; telefon: string };
 }
 
@@ -69,16 +89,16 @@ export function toAuditOrder(row: unknown): AuditOrder | null {
   const record = row as Record<string, unknown>;
   const id = text(record.id);
   const tenantId = text(record.tenant_id);
-  const awb = normalizeAwb(record.uluslararasi_kargo_kodu);
-  if (!id || !tenantId || !awb) return null;
+  if (!id || !tenantId) return null;
   return {
     id,
     tenantId,
     musteriAdi: text(record.musteri_adi),
     telefon: text(record.telefon_numarasi),
     lojistikDurumu: text(record.lojistik_durumu),
-    awb,
+    awb: normalizeAwb(record.uluslararasi_kargo_kodu),
     awbHam: text(record.uluslararasi_kargo_kodu),
+    olusturmaTarihi: text(record.olusturma_tarihi),
   };
 }
 
@@ -92,6 +112,7 @@ function finding(order: AuditOrder, tip: BulguTipi, onem: Onem, aciklama: string
     telefon: order.telefon,
     lojistikDurumu: order.lojistikDurumu,
     awb: order.awbHam,
+    olusturmaTarihi: order.olusturmaTarihi,
     aciklama,
   };
 }
@@ -110,8 +131,9 @@ export function siralaBulgular(findings: Bulgu[]): Bulgu[] {
 /** Signals that need no manifest file: duplicates and the old matcher's risk profile. */
 export function veritabaniBulgulari(orders: readonly AuditOrder[]): Bulgu[] {
   const findings: Bulgu[] = [];
+  const holders = orders.filter((order) => order.awb);
   const byAwb = new Map<string, AuditOrder[]>();
-  for (const order of orders) {
+  for (const order of holders) {
     const key = `${order.tenantId}\u0000${order.awb}`;
     const list = byAwb.get(key);
     if (list) list.push(order);
@@ -128,7 +150,7 @@ export function veritabaniBulgulari(orders: readonly AuditOrder[]): Bulgu[] {
             `Aynı AWB bu butikte ${group.length} siparişte kayıtlı; en az biri yanlış olabilir.`
           )
         );
-  for (const order of orders) {
+  for (const order of holders) {
     const legacy = eskiAlgoritmaIsmi(order.musteriAdi);
     if (!legacy)
       findings.push(
@@ -160,6 +182,7 @@ export function manifestBulgulari(
 ): ManifestDenetimi {
   const byAwb = new Map<string, AuditOrder[]>();
   for (const order of orders) {
+    if (!order.awb) continue;
     const list = byAwb.get(order.awb);
     if (list) list.push(order);
     else byAwb.set(order.awb, [order]);
@@ -230,4 +253,92 @@ export function manifestBulgulari(
     kontrolEdilenAwb: checked,
     bulgular: siralaBulgular(findings),
   };
+}
+
+const DAY_MS = 86_400_000;
+/** Longest namesake list per finding; adasSayisi still counts all of them. */
+export const ADAS_LISTE_SINIRI = 20;
+
+/** Word-order-insensitive keys: letter-preserving, passport and plain folds. */
+function adasAnahtarlari(name: string): string[] {
+  const forms: Array<[string, string]> = [
+    ['H', normalizeName(name)],
+    ['P', foldName(name, 'PASAPORT')],
+    ['B', foldName(name, 'BASIT')],
+  ];
+  // A placeholder or empty name folds to '' and has no namesakes.
+  return forms
+    .filter(([, form]) => form)
+    .map(([scheme, form]) => `${scheme}:${form.split(' ').sort().join(' ')}`);
+}
+
+function tarihMs(value: string): number | null {
+  const ms = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * The removed matcher searched every order of the tenant and kept the first
+ * name match, so an AWB may sit on a namesake's order while the name still
+ * looks right. Flags each AWB holder whose folded name is shared by another
+ * order of the same tenant, within `pencereGun` days of creation when given.
+ * An order with an unknown date is always kept as a namesake.
+ */
+export function adasBulgulari(orders: readonly AuditOrder[], pencereGun: number | null): Bulgu[] {
+  const byKey = new Map<string, AuditOrder[]>();
+  for (const order of orders)
+    for (const key of adasAnahtarlari(order.musteriAdi)) {
+      const scoped = `${order.tenantId}\u0000${key}`;
+      const list = byKey.get(scoped);
+      if (list) list.push(order);
+      else byKey.set(scoped, [order]);
+    }
+  const findings: Bulgu[] = [];
+  for (const holder of orders) {
+    if (!holder.awb) continue;
+    const holderMs = tarihMs(holder.olusturmaTarihi);
+    const holderPhone = normalizePhone(holder.telefon);
+    const namesakes = new Map<string, AdasSiparis>();
+    for (const key of adasAnahtarlari(holder.musteriAdi))
+      for (const other of byKey.get(`${holder.tenantId}\u0000${key}`) ?? []) {
+        if (other.id === holder.id || namesakes.has(other.id)) continue;
+        const otherMs = tarihMs(other.olusturmaTarihi);
+        const delta = holderMs === null || otherMs === null ? null : otherMs - holderMs;
+        if (pencereGun !== null && delta !== null && Math.abs(delta) > pencereGun * DAY_MS)
+          continue;
+        const otherPhone = normalizePhone(other.telefon);
+        namesakes.set(other.id, {
+          siparisId: other.id,
+          musteriAdi: other.musteriAdi,
+          telefon: other.telefon,
+          lojistikDurumu: other.lojistikDurumu,
+          awb: other.awbHam,
+          olusturmaTarihi: other.olusturmaTarihi,
+          gunFarki: delta === null ? null : Math.round(delta / DAY_MS),
+          ayniTelefon: holderPhone && otherPhone ? holderPhone === otherPhone : null,
+        });
+      }
+    if (namesakes.size === 0) continue;
+    const list = [...namesakes.values()].sort(
+      (a, b) =>
+        Math.abs(a.gunFarki ?? Number.POSITIVE_INFINITY) -
+          Math.abs(b.gunFarki ?? Number.POSITIVE_INFINITY) || a.siparisId.localeCompare(b.siparisId)
+    );
+    const withoutAwb = list.filter((item) => !item.awb).length;
+    const otherPhone = list.filter((item) => item.ayniTelefon === false).length;
+    const window = pencereGun === null ? '' : ` (±${pencereGun} gün)`;
+    findings.push({
+      ...finding(
+        holder,
+        'BELIRSIZ_ADAS',
+        'ORTA',
+        `Belirsiz: adaş. Bu butikte katlanmış adı aynı ${list.length} sipariş daha var${window}; ` +
+          `eski eşleştirme ilk bulduğu siparişi seçtiği için AWB bunlardan birine ait olabilir. ` +
+          `AWB'siz: ${withoutAwb}, telefonu farklı: ${otherPhone}.`
+      ),
+      adasSayisi: list.length,
+      adaslar: list.slice(0, ADAS_LISTE_SINIRI),
+    });
+  }
+  return siralaBulgular(findings);
 }
