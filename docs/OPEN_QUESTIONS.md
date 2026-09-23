@@ -153,7 +153,8 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     verilmeli.
     *Soru:* Geçmiş manifest dosyaları elinizde mi?
 
-15. ✅ **Karar verildi (23 Eylül 2026):** Denetimde telefon isimden önce gelir.
+15. **İlk gerçek butik manifest özelliğini kullanmadan önce cevaplanacak.**
+    ✅ **Karar verildi (23 Eylül 2026):** Denetimde telefon isimden önce gelir.
     Manifest satırında ve siparişte okunabilir telefon varsa ikisi de normalize
     edilip karşılaştırılır. Numaralar farklıysa, ad aynı ya da katlanmış yazımı
     aynı olsa bile `MANIFEST_TELEFON_UYUSMUYOR` (YÜKSEK) bulgusu çıkar. Eski
@@ -166,7 +167,10 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     satır YÜKSEK çıkar. İlk çalıştırmada aynı telefonun çok sayıda farklı alıcıda
     tekrar edip etmediğine bakılmalı. Böyle bir durum var mı?
 
-16. **Adaş (`BELIRSIZ_ADAS`) kuralı ve "aynı dönem".** Varsayımlar:
+16. **Karar: ertelendi (23 Eylül 2026).** Veritabanında yalnız demo veri var; tekrar eden
+    müşteri ayrımı gerçek veri gelirse yeniden değerlendirilecek.
+
+    **Adaş (`BELIRSIZ_ADAS`) kuralı ve "aynı dönem".** Varsayımlar:
     - **Adaş tanımı:** Aynı butikte başka bir siparişin müşteri adı, harf koruyan,
       pasaport ya da basit yazımlardan en az birinde aynı olmalı. Kelime sırası
       önemsiz. Karışık yazım adaş sayılmaz ("Ayten Mammadova" ile "Aytən
