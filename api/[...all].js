@@ -9711,12 +9711,99 @@ function dice(left, right) {
   const size = total(left) + total(right);
   return size === 0 ? 0 : Math.round(2 * shared / size * 1e3) / 1e3;
 }
+var KATLAMA_SEMALARI = ["PASAPORT", "BASIT"];
+var CEDILLA = "\u0327";
+var BREVE = "\u0306";
+var DIAERESIS = "\u0308";
+var KIRIL_LATIN = {
+  \u0430: "a",
+  \u0431: "b",
+  \u0432: "v",
+  \u0433: "g",
+  \u0434: "d",
+  \u0435: "e",
+  \u0436: "zh",
+  \u0437: "z",
+  \u0438: "i",
+  \u043A: "k",
+  \u043B: "l",
+  \u043C: "m",
+  \u043D: "n",
+  \u043E: "o",
+  \u043F: "p",
+  \u0440: "r",
+  \u0441: "s",
+  \u0442: "t",
+  \u0443: "u",
+  \u0444: "f",
+  \u0445: "kh",
+  \u0446: "ts",
+  \u0447: "ch",
+  \u0448: "sh",
+  \u0449: "shch",
+  \u044A: "",
+  \u044B: "y",
+  \u044C: "",
+  \u044D: "e",
+  \u044E: "yu",
+  \u044F: "ya",
+  \u04D9: "a",
+  \u0493: "gh",
+  \u049D: "g",
+  \u04BB: "h",
+  \u0458: "y",
+  \u04E9: "o",
+  \u04AF: "u",
+  \u04B9: "j",
+  \u0456: "i",
+  \u0454: "ye",
+  \u0491: "g"
+};
+function cyrillicToLatin(letter, marks) {
+  if (letter === "\u0438" && marks.includes(BREVE)) return "y";
+  if (letter === "\u0443" && marks.includes(BREVE)) return "u";
+  if (letter === "\u0435" && marks.includes(DIAERESIS)) return "yo";
+  if (letter === "\u0456" && marks.includes(DIAERESIS)) return "yi";
+  return Object.hasOwn(KIRIL_LATIN, letter) ? KIRIL_LATIN[letter] : null;
+}
+function foldUnit(letter, marks, scheme) {
+  const cyrillic = cyrillicToLatin(letter, marks);
+  if (cyrillic !== null) return cyrillic;
+  if (letter === "\u0259") return scheme === "PASAPORT" ? "a" : "e";
+  if (letter === "\u0131") return "i";
+  if (scheme === "BASIT") return letter;
+  if (letter === "s" && marks.includes(CEDILLA)) return "sh";
+  if (letter === "c" && marks.includes(CEDILLA)) return "ch";
+  if (letter === "g" && marks.includes(BREVE)) return "gh";
+  if (letter === "c") return "j";
+  if (letter === "q") return "g";
+  if (letter === "x") return "kh";
+  return letter;
+}
+function foldName(value, scheme) {
+  if (typeof value !== "string" || !normalizeName(value)) return "";
+  let folded = "";
+  for (const [, letter, marks] of value.normalize("NFKC").toLowerCase().normalize("NFKD").matchAll(/(\P{M})(\p{M}*)/gu))
+    folded += foldUnit(letter, marks, scheme);
+  return folded.replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/\s+/g, " ");
+}
+function nameGrams(value) {
+  return [
+    sortedTokens(normalizeName(value)),
+    ...KATLAMA_SEMALARI.map((scheme) => sortedTokens(foldName(value, scheme)))
+  ].map((form) => form ? bigrams(form) : null);
+}
+function bestScore(left, right) {
+  let best = 0;
+  left.forEach((grams, index) => {
+    const other = right[index];
+    if (grams && other) best = Math.max(best, dice(grams, other));
+  });
+  return best;
+}
 function nameSimilarity(left, right) {
-  const a = sortedTokens(normalizeName(left));
-  const b = sortedTokens(normalizeName(right));
-  if (!a || !b) return 0;
-  if (a === b) return 1;
-  return dice(bigrams(a), bigrams(b));
+  if (!normalizeName(left) || !normalizeName(right)) return 0;
+  return bestScore(nameGrams(left), nameGrams(right));
 }
 function text2(value) {
   if (typeof value === "string") return value.trim();
@@ -9770,10 +9857,10 @@ function eslesmeOnerileriOlustur(rows, orders) {
     if (order.kanadaTakipKodu && order.kanadaTakipKodu !== idCode)
       push(byCode, order.kanadaTakipKodu, order);
     if (order.awb) push(byAwb, order.awb, order);
-    const name = sortedTokens(normalizeName(order.musteriAdi));
     prepared.push({
       order,
-      grams: name ? bigrams(name) : null,
+      grams: nameGrams(order.musteriAdi),
+      hasName: normalizeName(order.musteriAdi) !== "",
       blocked: order.lojistikDurumu === TESLIM_EDILDI || order.awb !== ""
     });
   }
@@ -9841,12 +9928,11 @@ function eslesmeOnerileriOlustur(rows, orders) {
       } else strong.push(candidate(order, type, "GUCLU", 1));
     }
     const weak = [];
-    const rowName = sortedTokens(normalizeName(row.aliciAdi));
-    if (rowName) {
-      const rowGrams = bigrams(rowName);
-      for (const { order, grams, blocked } of prepared) {
-        if (blocked || !grams || strongTypes.has(order.id)) continue;
-        const score = dice(rowGrams, grams);
+    if (normalizeName(row.aliciAdi)) {
+      const rowGrams = nameGrams(row.aliciAdi);
+      for (const { order, grams, hasName, blocked } of prepared) {
+        if (blocked || !hasName || strongTypes.has(order.id)) continue;
+        const score = bestScore(rowGrams, grams);
         if (score >= ZAYIF_ESLESME_ESIGI) weak.push(candidate(order, "ISIM", "ZAYIF", score));
       }
       weak.sort((a, b) => b.skor - a.skor || a.siparisId.localeCompare(b.siparisId));
