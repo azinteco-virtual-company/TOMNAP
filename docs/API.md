@@ -243,3 +243,66 @@ _SSRF koruması ve private IP engellemesi mevcuttur._
 - Token veya davet kaydı kalıcı depoda okunamaz/yazılamazsa 503; eşzamanlı tüketim nedeniyle sıfır satır güncellenirse 409 döner.
 - Kök `/upload-gorsel` benzeri işlem rotaları kaldırıldı; `/api/` yolları kullanılmalıdır. `/uploads/:dosyaAdi` yalnız istenen dosyayı sunar; bulunamadığında 404 verir.
 - Görsel yükleme PNG/JPEG/WebP imzası ve 10 MiB çözülmüş gövde sınırı uygular. Uzak indirmeler her yönlendirmede genel IP doğrulaması ve DNS sabitlemesi yapar.
+
+## 23 Eylül 2026 — insan onaylı AWB eşleştirmesi (`FF_V2_FLOW`)
+
+Eski otomatik manifest eşleştirmesi, isim benzerliğiyle yanlış siparişlere AWB
+yazıyordu (ör. "Natalia Petrova" → "Əli", "John Smith" → Kiril isimli sipariş).
+Artık hiçbir manifest yüklemesi AWB yazmaz. Eşleştirme yalnız öneri üretir,
+yazma işlemi ayrı ve açık bir onayla yapılır.
+
+Roller: `SUPER_ADMIN` (somut bir butik seçiliyken), `PATRON`, `KANADA_SATINALMA`.
+Bunlar bir siparişin AWB'sini düzenleyebilen rollerin aynısıdır.
+
+### `POST /api/kargo/manifesto-yukle` (davranış değişti)
+
+Manifesti yalnızca ayrıştırır. `otomatik_esle` uyumluluk için kabul edilir ama
+hiçbir şey yazmaz. Yanıt: `ayristirma`, `eslesenSayisi: 0`, `eslesmeler: []`,
+`eslesmeOnayiGerekli: true`.
+
+### `POST /api/kargo/manifesto-eslestirme/oneriler` (yalnız `FF_V2_FLOW=true`)
+
+Gövde: `{ dosya_base64, dosya_adi }` (en fazla 10 MB ve 2000 satır). Hiçbir kayıt
+değiştirilmez. Yanıt `satirlar[]`, `cakismalar[]` ve `ozet` alanlarını içerir.
+
+- **Güçlü eşleşme:** normalize telefonun tam eşleşmesi (`+994 55…`, `055…` ve `55…`
+  aynı sayılır, kısmi numara eşleşmez) ya da manifestteki referansın sipariş
+  kimliği veya `kanada_takip_kodu` ile tam eşleşmesi.
+- **Zayıf aday:** yalnız isim benzerliği (Unicode-duyarlı; ə, ş, ç, ğ, ı, ö, ü ve
+  Kiril korunur). Sørensen–Dice puanı en az 0,5 olmalı, satır başına en çok 5 aday
+  gösterilir. Zayıf adaylar asla önceden seçilmez. Normalize edilince boş kalan
+  (veya "Müştəri" gibi yer tutucu) isimler hiçbir şeyle eşleşmez.
+- `onerilenSiparisId` yalnız tek bir güçlü ve engelsiz aday varsa dolar. Bir satır
+  birden fazla siparişe eşleşiyorsa, aynı sipariş birden fazla satırda öneriliyorsa
+  ya da AWB manifestte tekrarlanıyorsa durum `BELIRSIZ` olur ve hiçbir aday seçilmez.
+- Satır durumları: `ONERILDI`, `BELIRSIZ`, `ZAYIF_ADAY`, `ZATEN_BAGLI`, `CAKISMA`,
+  `ESLESME_YOK`, `GECERSIZ_AWB`.
+- `cakismalar`: güçlü eşleşen ama teslim edilmiş (`TESLIM_EDILDI`) ya da zaten
+  AWB'si olan (`MEVCUT_AWB`) siparişler ile AWB'si başka siparişte duranlar
+  (`AWB_BASKA_SIPARISTE`). Bu siparişlere yazılmaz.
+
+### `POST /api/kargo/manifesto-eslestirme/onayla` (yalnız `FF_V2_FLOW=true`)
+
+Gövde: `{ eslesmeler: [{ siparisId, takipNo, agirlikKg? }] }` (1–500 öğe). Aynı
+sipariş ya da aynı AWB iki kez seçilirse istek 400 ile reddedilir. Yazma işlemi
+tek bir transactional RPC ile yapılır (`tomnap_confirm_awb_matches`, tenant başına
+kilitli). Kurallar:
+
+- teslim edilmiş siparişe yazılmaz,
+- var olan bir AWB'nin üzerine yazılmaz,
+- tenant içinde başka bir siparişte duran AWB yazılmaz,
+- tek bir ret varsa **hiçbir** sipariş değişmez; yanıt `basarili: false` ve
+  `reddedilenler[].sebep` (`SIPARIS_BULUNAMADI`, `TESLIM_EDILDI`, `MEVCUT_AWB`,
+  `AWB_BASKA_SIPARISTE`) olur,
+- aynı çiftin yeniden gönderilmesi idempotenttir (`tekrar: true`).
+
+Onaylanan siparişe AWB, varsa ağırlık (`ek_veriler.kargo_agirligi_kg`) yazılır.
+`KANADA_SATINALIM_BEKLIYOR`/`KANADA_DEPO` durumundaki sipariş `ULUSLARARASI_KARGO`
+durumuna geçer; diğer durumlar değişmez.
+
+Migration: `supabase/migrations/20260923023659_awb_match_confirmation.sql`. `DROP`
+kullanmayan geri alma dosyası:
+`supabase/rollbacks/20260923023659_awb_match_confirmation.down.sql`. Geçmişte
+yanlış yazılmış olabilecek AWB'ler için salt okunur denetim:
+`npx tsx scripts/audit-awb-matches.ts --help`. Açık sorular:
+[OPEN_QUESTIONS.md](OPEN_QUESTIONS.md).

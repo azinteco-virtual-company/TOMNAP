@@ -1,9 +1,18 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
+import { isV2FlowEnabled } from '../config';
 import { kargoMerkezi } from '../services/kargo/kargoMerkezi';
-import { KargoSaglayiciTipi, CikisUlkesi } from '../services/kargo/types';
-import { siparislerVeritabani } from '../services/state';
-import { updateCargoOrder } from '../services/kargo/orderUpdates';
-import { supabase } from '../services/supabase';
+import type {
+  AyrismisManifestoSonuc,
+  KargoSaglayiciTipi,
+  CikisUlkesi,
+} from '../services/kargo/types';
+import { eslesmeOnerileriOlustur } from '../services/kargo/manifestMatching';
+import {
+  awbEslesmeleriniOnayla,
+  eslesmeHavuzunuYukle,
+  onayIstegiDogrula,
+} from '../services/kargo/awbMatchStore';
+import { PublicResourceError } from '../services/publicFetch';
 
 import { mergeSettings, CargoSettingsError } from '../services/kargo/settings';
 
@@ -184,114 +193,119 @@ router.post('/kargo/senkronize-et', async (req, res) => {
   }
 });
 
+// Manifest uploads are parsed with the tenant's carrier parser. Parsing never
+// writes: AWB codes reach an order only through an explicit confirmation.
+const MAX_MANIFEST_SATIRI = 2000;
+
+class ManifestYuklemeHatasi extends Error {
+  constructor(
+    public readonly status: number,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
+function requestTenant(req: Request): string {
+  const tenant = req.tenantId;
+  if (typeof tenant !== 'string' || !tenant || tenant === 'all')
+    throw new PublicResourceError('Butik seçilməlidir.', 400);
+  return tenant;
+}
+
+async function manifestiAyristir(body: unknown, tenantId: string): Promise<AyrismisManifestoSonuc> {
+  const record: Record<string, unknown> =
+    body && typeof body === 'object' && !Array.isArray(body) ? { ...body } : {};
+  const dosyaBase64 = record.dosya_base64;
+  if (!dosyaBase64)
+    throw new ManifestYuklemeHatasi(400, 'Excel və ya CSV fayl məzmunu (base64) tələb olunur.');
+  if (typeof dosyaBase64 !== 'string' || dosyaBase64.length > 14 * 1024 * 1024)
+    throw new ManifestYuklemeHatasi(413, 'Manifesto en fazla 10 MB olabilir.');
+  const dosyaAdi =
+    typeof record.dosya_adi === 'string' && record.dosya_adi ? record.dosya_adi : 'manifest.xlsx';
+  const buffer = Buffer.from(dosyaBase64.replace(/^data:.*?;base64,/, ''), 'base64');
+  const ayarlar = await kargoMerkezi.getAyarlar(tenantId);
+  return kargoMerkezi.getProvider(ayarlar.saglayici).manifestoAyristir(buffer, dosyaAdi);
+}
+
+function sendError(res: Response, error: unknown) {
+  if (
+    error instanceof ManifestYuklemeHatasi ||
+    error instanceof PublicResourceError ||
+    error instanceof CargoSettingsError
+  ) {
+    const code = [400, 404, 409, 413, 503].includes(error.status) ? error.status : 500;
+    return res.status(code).json({ basarili: false, hata: error.message });
+  }
+  return res.status(500).json({ basarili: false, hata: 'Kargo əməliyyatı tamamlanmadı.' });
+}
+
+function v2FlowDisabled(res: Response): boolean {
+  if (isV2FlowEnabled()) return false;
+  res.status(404).json({ basarili: false, hata: 'Bu funksiya aktiv deyil.' });
+  return true;
+}
+
 // 6. POST /api/kargo/manifesto-yukle — Aramex Daily Dispatch / Excel İçe Aktarma
+// Only parses. The former automatic name/phone matching wrote AWB codes to wrong
+// orders; `otomatik_esle` is accepted for compatibility but never writes.
 router.post('/kargo/manifesto-yukle', async (req, res) => {
   try {
-    const {
-      dosya_base64,
-      dosya_adi = 'manifest.xlsx',
-      tenantId = 'kanada_shopper_baku',
-      otomatik_esle = true,
-    } = req.body;
-
-    if (!dosya_base64) {
-      return res
-        .status(400)
-        .json({ basarili: false, hata: 'Excel və ya CSV fayl məzmunu (base64) tələb olunur.' });
-    }
-
-    if (typeof dosya_base64 !== 'string' || dosya_base64.length > 14 * 1024 * 1024)
-      return res.status(413).json({ basarili: false, hata: 'Manifesto en fazla 10 MB olabilir.' });
-
-    // Base64'ten Buffer oluştur
-    const base64Data = dosya_base64.replace(/^data:.*?;base64,/, '');
-    const buffer = Buffer.from(base64Data, 'base64');
-
-    const ayarlar = await kargoMerkezi.getAyarlar(tenantId);
-    const provider = kargoMerkezi.getProvider(ayarlar.saglayici);
-    const sonuc = await provider.manifestoAyristir(buffer, dosya_adi);
-
-    if (!sonuc.basarili) {
-      return res.status(400).json(sonuc);
-    }
-
-    let eslesenSayisi = 0;
-    const eslesmeler: any[] = [];
-
-    // Eğer otomatik eşleme aktifse, mevcut siparişleri müşteri adı ve telefon ile eşleştirip AWB kodlarını ata
-    if (otomatik_esle && sonuc.satirlar.length > 0) {
-      const simdiIso = new Date().toISOString();
-
-      let adaylar = siparislerVeritabani;
-      if (supabase) {
-        const { data, error } = await supabase
-          .from('siparisler')
-          .select('*')
-          .eq('tenant_id', tenantId);
-        if (error) return res.status(503).json({ basarili: false, hata: 'Siparişler okunamadı.' });
-        adaylar = data || [];
-      }
-      for (const satir of sonuc.satirlar) {
-        const aliciTemiz = satir.aliciAdi.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const telTemiz = (satir.telefon || '').replace(/[^\d]/g, '').slice(-7);
-
-        const bulunan = adaylar.find((s) => {
-          if (s.tenant_id !== tenantId) {
-            return false;
-          }
-          // Telefon son 7 hane eşleşmesi
-          if (telTemiz && (s.telefon_numarasi || '').replace(/[^\d]/g, '').includes(telTemiz)) {
-            return true;
-          }
-          // İsim benzerliği eşleşmesi
-          const sMusteriTemiz = (s.musteri_adi || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (
-            aliciTemiz.length >= 4 &&
-            (sMusteriTemiz.includes(aliciTemiz) || aliciTemiz.includes(sMusteriTemiz))
-          ) {
-            return true;
-          }
-          return false;
-        });
-
-        if (bulunan) {
-          const changes: Record<string, unknown> = { uluslararasi_kargo_kodu: satir.takipNo };
-          if (satir.agirlikKg) changes.kargo_agirligi_kg = satir.agirlikKg;
-          if (['KANADA_SATINALIM_BEKLIYOR', 'KANADA_DEPO'].includes(bulunan.lojistik_durumu))
-            changes.lojistik_durumu = 'ULUSLARARASI_KARGO';
-          await updateCargoOrder(bulunan, changes);
-          bulunan.uluslararasi_kargo_kodu = satir.takipNo;
-          if (satir.agirlikKg) {
-            bulunan.kargo_agirligi_kg = satir.agirlikKg;
-          }
-          if (
-            bulunan.lojistik_durumu === 'KANADA_SATINALIM_BEKLIYOR' ||
-            bulunan.lojistik_durumu === 'KANADA_DEPO'
-          ) {
-            bulunan.lojistik_durumu = 'ULUSLARARASI_KARGO';
-          }
-          bulunan.guncellenme_tarihi = simdiIso;
-
-          eslesenSayisi++;
-          eslesmeler.push({
-            siparisId: bulunan.id,
-            musteriAdi: bulunan.musteri_adi,
-            awbNo: satir.takipNo,
-            agirlikKg: satir.agirlikKg,
-          });
-        }
-      }
-    }
-
+    const sonuc = await manifestiAyristir(req.body, requestTenant(req));
+    if (!sonuc.basarili) return res.status(400).json(sonuc);
     res.json({
       basarili: true,
-      mesaj: `Excel uğurla oxundu: ${sonuc.toplamSatir} sətir tapıldı, ${eslesenSayisi} sifarişlə AWB barkodu bağlandı!`,
+      mesaj: `Excel uğurla oxundu: ${sonuc.toplamSatir} sətir tapıldı. AWB kodları sifarişlərə avtomatik yazılmır; bağlamaq üçün eşləşdirmə təkliflərini təsdiqləyin.`,
       ayristirma: sonuc,
-      eslesenSayisi,
-      eslesmeler,
+      eslesenSayisi: 0,
+      eslesmeler: [],
+      eslesmeOnayiGerekli: true,
     });
-  } catch (err: any) {
-    res.status(status(err)).json({ basarili: false, hata: err.message });
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
+// 7. POST /api/kargo/manifesto-eslestirme/oneriler — suggestions only; nothing is written.
+router.post('/kargo/manifesto-eslestirme/oneriler', async (req, res) => {
+  if (v2FlowDisabled(res)) return;
+  try {
+    const tenantId = requestTenant(req);
+    const sonuc = await manifestiAyristir(req.body, tenantId);
+    if (!sonuc.basarili)
+      return res.status(400).json({
+        basarili: false,
+        hata: sonuc.hatalar?.[0] || 'Manifest oxuna bilmədi.',
+        hatalar: sonuc.hatalar ?? [],
+      });
+    if (sonuc.satirlar.length > MAX_MANIFEST_SATIRI)
+      throw new ManifestYuklemeHatasi(
+        413,
+        `Bir manifestdə ən çox ${MAX_MANIFEST_SATIRI} sətir işlənə bilər.`
+      );
+    const rapor = eslesmeOnerileriOlustur(sonuc.satirlar, await eslesmeHavuzunuYukle(tenantId));
+    res.json({ basarili: true, saglayici: sonuc.saglayici, ...rapor });
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
+// 8. POST /api/kargo/manifesto-eslestirme/onayla — writes only explicitly confirmed pairs.
+// Delivered orders and orders that already carry an AWB are rejected; any rejection
+// leaves every selected order unchanged.
+router.post('/kargo/manifesto-eslestirme/onayla', async (req, res) => {
+  if (v2FlowDisabled(res)) return;
+  try {
+    const sonuc = await awbEslesmeleriniOnayla(requestTenant(req), onayIstegiDogrula(req.body));
+    const yazilan = sonuc.uygulananlar.filter((item) => !item.tekrar).length;
+    res.json({
+      ...sonuc,
+      mesaj: sonuc.basarili
+        ? `${yazilan} AWB kodu təsdiqlənərək sifarişlərə yazıldı.`
+        : 'Seçilən eşləşdirmələrin bəziləri tətbiq edilə bilmədi; heç bir sifariş dəyişdirilmədi.',
+    });
+  } catch (error) {
+    sendError(res, error);
   }
 });
 

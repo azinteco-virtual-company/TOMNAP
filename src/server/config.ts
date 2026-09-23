@@ -20,6 +20,11 @@ export const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(DATA_DIR, 'uploa
 export const FIRMALAR_DOSYA_YOLU = path.join(DATA_DIR, 'firmalar.json');
 export const KULLANICILAR_DOSYA_YOLU = path.join(DATA_DIR, 'kullanicilar.json');
 
+/** v2 flows (human-confirmed AWB matching). Read per call; unset means disabled. */
+export function isV2FlowEnabled(): boolean {
+  return process.env.FF_V2_FLOW === 'true';
+}
+
 export const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 export const EMAIL_FROM = process.env.EMAIL_FROM || 'TOMNAP Platform <onboarding@resend.dev>';
 export const APP_URL =
