@@ -132,7 +132,18 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
 
 ## Denetim scripti
 
-14. **Veritabanı eski manifestlerdeki alıcı adını saklamıyor.** Bu yüzden
+14. ✅ **Karar verildi (23 Eylül 2026):** Script production veritabanına karşı salt
+    okunur çalıştırılacak; orijinal manifest dosyaları `--manifest` ile verilecek.
+    Salt okunurluk iki yoldan kanıtlandı:
+    - Statik: scriptin yüklediği modüllerin hiçbirinde insert/update/upsert/delete/rpc
+      ya da storage çağrısı yok.
+    - Çalışma zamanı: `tests/server/services/awbAuditReadOnly.test.ts`, gerçek
+      supabase-js istemcisinin yalnız `GET /rest/v1/siparisler` gönderdiğini doğruluyor.
+
+    Not: servis anahtarı veritabanında yazma yetkisine sahiptir; script bu yetkiyi
+    kullanmaz, ama anahtar yine de gizli tutulmalı.
+
+    **Veritabanı eski manifestlerdeki alıcı adını saklamıyor.** Bu yüzden
     `scripts/audit-awb-matches.ts` iki katmanlı çalışıyor:
     - veritabanından kesin sinyal: aynı AWB'nin birden fazla siparişte olması,
     - sezgisel sinyal: eski normalizasyonda boş ya da 1–3 karaktere inen müşteri
