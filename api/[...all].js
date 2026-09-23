@@ -8845,6 +8845,7 @@ router8.post(
 var veritabani_default = router8;
 
 // src/server/routes/kargoEntegrasyon.ts
+import { createHash as createHash6 } from "node:crypto";
 import { Router as Router9 } from "express";
 
 // src/server/services/kargo/providers/aramex.ts
@@ -9710,6 +9711,13 @@ function dice(left, right) {
   const size = total(left) + total(right);
   return size === 0 ? 0 : Math.round(2 * shared / size * 1e3) / 1e3;
 }
+function nameSimilarity(left, right) {
+  const a = sortedTokens(normalizeName(left));
+  const b = sortedTokens(normalizeName(right));
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  return dice(bigrams(a), bigrams(b));
+}
 function text2(value) {
   if (typeof value === "string") return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
@@ -9881,11 +9889,13 @@ function eslesmeOnerileriOlustur(rows, orders) {
 }
 
 // src/server/services/kargo/awbMatchStore.ts
+import { randomUUID as randomUUID7 } from "node:crypto";
 var MAX_ONAY = 500;
 var PAGE_SIZE = 1e3;
 var MATCH_COLUMNS = "id,tenant_id,musteri_adi,telefon_numarasi,lojistik_durumu,uluslararasi_kargo_kodu,kanada_takip_kodu";
 var PRE_FLIGHT_STATUSES = /* @__PURE__ */ new Set(["KANADA_SATINALIM_BEKLIYOR", "KANADA_DEPO"]);
 var ORDER_ID = /^[A-Za-z0-9_-]{1,100}$/;
+var memoryApprovals = [];
 function isRecord(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -9928,57 +9938,78 @@ async function eslesmeHavuzunuYukle(tenant2) {
     if (!lastId) throw new PublicResourceError("Sipari\u015Fler okunamad\u0131.", 503);
   }
 }
-function onayIstegiDogrula(body2) {
-  const items = isRecord(body2) ? body2.eslesmeler : void 0;
+function secimIstegiDogrula(body2) {
+  const items = isRecord(body2) ? body2.secimler : void 0;
   if (!Array.isArray(items) || items.length === 0 || items.length > MAX_ONAY)
-    throw new PublicResourceError(`1-${MAX_ONAY} aras\u0131 e\u015Fle\u015Ftirme onay\u0131 g\xF6nderilmelidir.`, 400);
-  const result2 = [];
-  const orderIds = /* @__PURE__ */ new Set();
-  const awbs = /* @__PURE__ */ new Set();
-  for (const item of items) {
+    throw new PublicResourceError(`1-${MAX_ONAY} aras\u0131 e\u015Fle\u015Ftirme se\xE7imi g\xF6nderilmelidir.`, 400);
+  const rows = /* @__PURE__ */ new Set();
+  const orders = /* @__PURE__ */ new Set();
+  return items.map((item) => {
     if (!isRecord(item) || typeof item.siparisId !== "string" || !ORDER_ID.test(item.siparisId))
       throw new PublicResourceError("Ge\xE7ersiz sipari\u015F kimli\u011Fi.", 400);
-    const takipNo = normalizeAwb(item.takipNo);
-    if (typeof item.takipNo !== "string" || !AWB_DESENI.test(takipNo))
-      throw new PublicResourceError("Ge\xE7ersiz AWB takip numaras\u0131.", 400);
-    const weight = item.agirlikKg;
-    if (weight !== void 0 && weight !== null && (typeof weight !== "number" || !Number.isFinite(weight) || weight <= 0 || weight > 1e3))
-      throw new PublicResourceError("Ge\xE7ersiz kargo a\u011F\u0131rl\u0131\u011F\u0131.", 400);
-    if (orderIds.has(item.siparisId) || awbs.has(takipNo))
+    const satirNo = item.satirNo;
+    if (typeof satirNo !== "number" || !Number.isInteger(satirNo) || satirNo < 1 || satirNo > 1e5)
+      throw new PublicResourceError("Ge\xE7ersiz manifest sat\u0131r\u0131.", 400);
+    if (rows.has(satirNo) || orders.has(item.siparisId))
       throw new PublicResourceError(
-        "Ayn\u0131 sipari\u015F veya AWB birden fazla kez se\xE7ildi; belirsiz e\u015Fle\u015Ftirme onaylanamaz.",
+        "Ayn\u0131 sat\u0131r veya sipari\u015F birden fazla kez se\xE7ildi; belirsiz e\u015Fle\u015Ftirme onaylanamaz.",
         400
       );
-    orderIds.add(item.siparisId);
-    awbs.add(takipNo);
-    result2.push({ siparisId: item.siparisId, takipNo, agirlikKg: typeof weight === "number" ? weight : null });
+    rows.add(satirNo);
+    orders.add(item.siparisId);
+    return { satirNo, siparisId: item.siparisId };
+  });
+}
+function onayKalemleriniHazirla(rapor, secimler) {
+  const result2 = { kalemler: [], tekrarlar: [], reddedilenler: [] };
+  const awbs = /* @__PURE__ */ new Set();
+  for (const secim of secimler) {
+    const row = rapor.satirlar.find((candidate3) => candidate3.satirNo === secim.satirNo);
+    if (row?.durum === "ZATEN_BAGLI" && row.bagliSiparisId === secim.siparisId) {
+      result2.tekrarlar.push({ ...secim, takipNo: row.takipNo, tekrar: true });
+      continue;
+    }
+    const candidate2 = row?.adaylar.find((item) => item.siparisId === secim.siparisId);
+    if (!row || !candidate2) {
+      result2.reddedilenler.push({ ...secim, takipNo: row?.takipNo ?? "", sebep: "ONERI_GECERSIZ" });
+      continue;
+    }
+    if (awbs.has(row.takipNo))
+      throw new PublicResourceError(
+        "Ayn\u0131 AWB birden fazla sat\u0131rda se\xE7ildi; belirsiz e\u015Fle\u015Ftirme onaylanamaz.",
+        400
+      );
+    awbs.add(row.takipNo);
+    result2.kalemler.push({
+      satirNo: row.satirNo,
+      siparisId: candidate2.siparisId,
+      takipNo: row.takipNo,
+      agirlikKg: row.agirlikKg,
+      eslesmeTuru: candidate2.eslesmeTipi,
+      isimPuani: nameSimilarity(row.aliciAdi, candidate2.musteriAdi)
+    });
   }
   return result2;
 }
-function confirmInMemory(rows, items) {
+function confirmInMemory(tenantId, userId, manifest, rows, items) {
   const rejected = [];
   const plan = [];
   for (const item of items) {
+    const base = { satirNo: item.satirNo, siparisId: item.siparisId, takipNo: item.takipNo };
     const row = rows.find((candidate2) => candidate2.id === item.siparisId);
     if (!row) {
-      rejected.push({ siparisId: item.siparisId, takipNo: item.takipNo, sebep: "SIPARIS_BULUNAMADI" });
+      rejected.push({ ...base, sebep: "SIPARIS_BULUNAMADI" });
       continue;
     }
     const current = normalizeAwb(row.uluslararasi_kargo_kodu);
     if (current === item.takipNo) plan.push({ row, item, tekrar: true });
-    else if (row.lojistik_durumu === TESLIM_EDILDI)
-      rejected.push({ siparisId: item.siparisId, takipNo: item.takipNo, sebep: "TESLIM_EDILDI" });
+    else if (row.lojistik_durumu === TESLIM_EDILDI) rejected.push({ ...base, sebep: "TESLIM_EDILDI" });
     else if (current)
-      rejected.push({
-        siparisId: item.siparisId,
-        takipNo: item.takipNo,
-        sebep: "MEVCUT_AWB",
-        mevcutAwb: String(row.uluslararasi_kargo_kodu)
-      });
+      rejected.push({ ...base, sebep: "MEVCUT_AWB", mevcutAwb: String(row.uluslararasi_kargo_kodu) });
     else if (rows.some(
       (other) => other.id !== item.siparisId && normalizeAwb(other.uluslararasi_kargo_kodu) === item.takipNo
     ))
-      rejected.push({ siparisId: item.siparisId, takipNo: item.takipNo, sebep: "AWB_BASKA_SIPARISTE" });
+      rejected.push({ ...base, sebep: "AWB_BASKA_SIPARISTE" });
     else plan.push({ row, item, tekrar: false });
   }
   if (rejected.length > 0) return { basarili: false, uygulananlar: [], reddedilenler: rejected };
@@ -9990,10 +10021,24 @@ function confirmInMemory(rows, items) {
     if (typeof row.lojistik_durumu === "string" && PRE_FLIGHT_STATUSES.has(row.lojistik_durumu))
       row.lojistik_durumu = "ULUSLARARASI_KARGO";
     row.guncellenme_tarihi = now;
+    memoryApprovals.push({
+      id: randomUUID7(),
+      tenantId,
+      siparisId: item.siparisId,
+      awb: item.takipNo,
+      manifestDosyaAdi: manifest.dosyaAdi,
+      manifestSha256: manifest.sha256,
+      manifestSatirNo: item.satirNo,
+      eslesmeTuru: item.eslesmeTuru,
+      isimPuani: Math.round(item.isimPuani * 1e3) / 1e3,
+      onaylayanKullaniciId: userId,
+      onayZamani: now
+    });
   }
   return {
     basarili: true,
     uygulananlar: plan.map(({ item, tekrar }) => ({
+      satirNo: item.satirNo,
       siparisId: item.siparisId,
       takipNo: item.takipNo,
       tekrar
@@ -10007,42 +10052,50 @@ var REJECTION_REASONS = /* @__PURE__ */ new Set([
   "MEVCUT_AWB",
   "AWB_BASKA_SIPARISTE"
 ]);
+function invalidResult() {
+  throw new PublicResourceError("AWB e\u015Fle\u015Ftirmeleri kaydedilemedi.", 503);
+}
 function parseRpcResult(data) {
   if (!isRecord(data) || typeof data.basarili !== "boolean" || !Array.isArray(data.uygulananlar) || !Array.isArray(data.reddedilenler))
-    throw new PublicResourceError("AWB e\u015Fle\u015Ftirmeleri kaydedilemedi.", 503);
+    invalidResult();
   const applied = data.uygulananlar;
   const rejected = data.reddedilenler;
+  const base = (item) => {
+    if (!isRecord(item) || typeof item.satirNo !== "number" || typeof item.siparisId !== "string" || typeof item.takipNo !== "string")
+      invalidResult();
+    return { satirNo: item.satirNo, siparisId: item.siparisId, takipNo: item.takipNo };
+  };
   return {
     basarili: data.basarili,
-    uygulananlar: applied.map((item) => {
-      if (!isRecord(item) || typeof item.siparisId !== "string" || typeof item.takipNo !== "string")
-        throw new PublicResourceError("AWB e\u015Fle\u015Ftirmeleri kaydedilemedi.", 503);
-      return { siparisId: item.siparisId, takipNo: item.takipNo, tekrar: item.tekrar === true };
-    }),
+    uygulananlar: applied.map((item) => ({ ...base(item), tekrar: isRecord(item) && item.tekrar === true })),
     reddedilenler: rejected.map((item) => {
-      if (!isRecord(item) || typeof item.siparisId !== "string" || typeof item.takipNo !== "string" || typeof item.sebep !== "string" || !REJECTION_REASONS.has(item.sebep))
-        throw new PublicResourceError("AWB e\u015Fle\u015Ftirmeleri kaydedilemedi.", 503);
+      const fields = base(item);
+      if (!isRecord(item) || typeof item.sebep !== "string" || !REJECTION_REASONS.has(item.sebep))
+        invalidResult();
       return {
-        siparisId: item.siparisId,
-        takipNo: item.takipNo,
+        ...fields,
         sebep: item.sebep,
         ...typeof item.mevcutAwb === "string" ? { mevcutAwb: item.mevcutAwb } : {}
       };
     })
   };
 }
-async function awbEslesmeleriniOnayla(tenant2, items) {
+async function awbEslesmeleriniOnayla(tenant2, userId, manifest, items) {
   const tenantId = requireTenant(tenant2);
+  if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
   const local = memoryRows(tenantId);
-  if (local) return confirmInMemory(local, items);
+  if (local) return confirmInMemory(tenantId, userId, manifest, local, items);
   const client2 = supabase;
-  if (!client2) throw new PublicResourceError("AWB e\u015Fle\u015Ftirmeleri kaydedilemedi.", 503);
-  const { data, error: error2 } = await client2.rpc("tomnap_confirm_awb_matches", {
+  if (!client2) invalidResult();
+  const { data, error: error2 } = await client2.rpc("tomnap_approve_awb_matches", {
     p_tenant_id: tenantId,
+    p_user_id: userId,
+    p_manifest: manifest,
     p_matches: items
   });
   if (error2?.code === "22023") throw new PublicResourceError("Ge\xE7ersiz e\u015Fle\u015Ftirme onay\u0131.", 400);
-  if (error2) throw new PublicResourceError("AWB e\u015Fle\u015Ftirmeleri kaydedilemedi.", 503);
+  if (error2?.code === "PT403") throw new PublicResourceError("Bu i\u015Flem i\xE7in yetkiniz yok.", 403);
+  if (error2) invalidResult();
   return parseRpcResult(data);
 }
 
@@ -10205,6 +10258,11 @@ function requestTenant(req) {
     throw new PublicResourceError("Butik se\xE7ilm\u0259lidir.", 400);
   return tenant2;
 }
+function requestUser(req) {
+  const userId = req.auth?.userId;
+  if (typeof userId !== "string" || !userId) throw new PublicResourceError("Oturum gerekli.", 401);
+  return userId;
+}
 async function manifestiAyristir(body2, tenantId) {
   const record = body2 && typeof body2 === "object" && !Array.isArray(body2) ? { ...body2 } : {};
   const dosyaBase64 = record.dosya_base64;
@@ -10212,14 +10270,27 @@ async function manifestiAyristir(body2, tenantId) {
     throw new ManifestYuklemeHatasi(400, "Excel v\u0259 ya CSV fayl m\u0259zmunu (base64) t\u0259l\u0259b olunur.");
   if (typeof dosyaBase64 !== "string" || dosyaBase64.length > 14 * 1024 * 1024)
     throw new ManifestYuklemeHatasi(413, "Manifesto en fazla 10 MB olabilir.");
-  const dosyaAdi = typeof record.dosya_adi === "string" && record.dosya_adi ? record.dosya_adi : "manifest.xlsx";
+  const dosyaAdi = (typeof record.dosya_adi === "string" ? record.dosya_adi : "").replace(/[\p{Cc}\p{Cf}]/gu, "").trim().slice(0, 255) || "manifest.xlsx";
   const buffer = Buffer.from(dosyaBase64.replace(/^data:.*?;base64,/, ""), "base64");
   const ayarlar = await kargoMerkezi.getAyarlar(tenantId);
-  return kargoMerkezi.getProvider(ayarlar.saglayici).manifestoAyristir(buffer, dosyaAdi);
+  const sonuc = await kargoMerkezi.getProvider(ayarlar.saglayici).manifestoAyristir(buffer, dosyaAdi);
+  return { sonuc, dosyaAdi, sha256: createHash6("sha256").update(buffer).digest("hex") };
+}
+async function manifestOnerileri(body2, tenantId) {
+  const manifest = await manifestiAyristir(body2, tenantId);
+  if (!manifest.sonuc.basarili)
+    throw new ManifestYuklemeHatasi(400, manifest.sonuc.hatalar?.[0] || "Manifest oxuna bilm\u0259di.");
+  if (manifest.sonuc.satirlar.length > MAX_MANIFEST_SATIRI)
+    throw new ManifestYuklemeHatasi(
+      413,
+      `Bir manifestd\u0259 \u0259n \xE7ox ${MAX_MANIFEST_SATIRI} s\u0259tir i\u015Fl\u0259n\u0259 bil\u0259r.`
+    );
+  const rapor = eslesmeOnerileriOlustur(manifest.sonuc.satirlar, await eslesmeHavuzunuYukle(tenantId));
+  return { manifest, rapor };
 }
 function sendError(res, error2) {
   if (error2 instanceof ManifestYuklemeHatasi || error2 instanceof PublicResourceError || error2 instanceof CargoSettingsError) {
-    const code = [400, 404, 409, 413, 503].includes(error2.status) ? error2.status : 500;
+    const code = [400, 401, 403, 404, 409, 413, 503].includes(error2.status) ? error2.status : 500;
     return res.status(code).json({ basarili: false, hata: error2.message });
   }
   return res.status(500).json({ basarili: false, hata: "Kargo \u0259m\u0259liyyat\u0131 tamamlanmad\u0131." });
@@ -10231,7 +10302,7 @@ function awbReviewDisabled(res) {
 }
 router9.post("/kargo/manifesto-yukle", async (req, res) => {
   try {
-    const sonuc = await manifestiAyristir(req.body, requestTenant(req));
+    const { sonuc } = await manifestiAyristir(req.body, requestTenant(req));
     if (!sonuc.basarili) return res.status(400).json(sonuc);
     res.json({
       basarili: true,
@@ -10248,21 +10319,8 @@ router9.post("/kargo/manifesto-yukle", async (req, res) => {
 router9.post("/kargo/manifesto-eslestirme/oneriler", async (req, res) => {
   if (awbReviewDisabled(res)) return;
   try {
-    const tenantId = requestTenant(req);
-    const sonuc = await manifestiAyristir(req.body, tenantId);
-    if (!sonuc.basarili)
-      return res.status(400).json({
-        basarili: false,
-        hata: sonuc.hatalar?.[0] || "Manifest oxuna bilm\u0259di.",
-        hatalar: sonuc.hatalar ?? []
-      });
-    if (sonuc.satirlar.length > MAX_MANIFEST_SATIRI)
-      throw new ManifestYuklemeHatasi(
-        413,
-        `Bir manifestd\u0259 \u0259n \xE7ox ${MAX_MANIFEST_SATIRI} s\u0259tir i\u015Fl\u0259n\u0259 bil\u0259r.`
-      );
-    const rapor = eslesmeOnerileriOlustur(sonuc.satirlar, await eslesmeHavuzunuYukle(tenantId));
-    res.json({ basarili: true, saglayici: sonuc.saglayici, ...rapor });
+    const { manifest, rapor } = await manifestOnerileri(req.body, requestTenant(req));
+    res.json({ basarili: true, saglayici: manifest.sonuc.saglayici, ...rapor });
   } catch (error2) {
     sendError(res, error2);
   }
@@ -10270,11 +10328,29 @@ router9.post("/kargo/manifesto-eslestirme/oneriler", async (req, res) => {
 router9.post("/kargo/manifesto-eslestirme/onayla", async (req, res) => {
   if (awbReviewDisabled(res)) return;
   try {
-    const sonuc = await awbEslesmeleriniOnayla(requestTenant(req), onayIstegiDogrula(req.body));
-    const yazilan = sonuc.uygulananlar.filter((item) => !item.tekrar).length;
+    const tenantId = requestTenant(req);
+    const userId = requestUser(req);
+    const secimler = secimIstegiDogrula(req.body);
+    const { manifest, rapor } = await manifestOnerileri(req.body, tenantId);
+    const hazirlik = onayKalemleriniHazirla(rapor, secimler);
+    let sonuc;
+    if (hazirlik.reddedilenler.length > 0)
+      sonuc = { basarili: false, uygulananlar: [], reddedilenler: hazirlik.reddedilenler };
+    else if (hazirlik.kalemler.length === 0)
+      sonuc = { basarili: true, uygulananlar: hazirlik.tekrarlar, reddedilenler: [] };
+    else {
+      const yazilan = await awbEslesmeleriniOnayla(
+        tenantId,
+        userId,
+        { dosyaAdi: manifest.dosyaAdi, sha256: manifest.sha256 },
+        hazirlik.kalemler
+      );
+      sonuc = yazilan.basarili ? { ...yazilan, uygulananlar: [...hazirlik.tekrarlar, ...yazilan.uygulananlar] } : yazilan;
+    }
+    const yeni = sonuc.uygulananlar.filter((item) => !item.tekrar).length;
     res.json({
       ...sonuc,
-      mesaj: sonuc.basarili ? `${yazilan} AWB kodu t\u0259sdiql\u0259n\u0259r\u0259k sifari\u015Fl\u0259r\u0259 yaz\u0131ld\u0131.` : "Se\xE7il\u0259n e\u015Fl\u0259\u015Fdirm\u0259l\u0259rin b\u0259zil\u0259ri t\u0259tbiq edil\u0259 bilm\u0259di; he\xE7 bir sifari\u015F d\u0259yi\u015Fdirilm\u0259di."
+      mesaj: sonuc.basarili ? `${yeni} AWB kodu t\u0259sdiql\u0259n\u0259r\u0259k sifari\u015Fl\u0259r\u0259 yaz\u0131ld\u0131.` : "Se\xE7il\u0259n e\u015Fl\u0259\u015Fdirm\u0259l\u0259rin b\u0259zil\u0259ri t\u0259tbiq edil\u0259 bilm\u0259di; he\xE7 bir sifari\u015F d\u0259yi\u015Fdirilm\u0259di."
     });
   } catch (error2) {
     sendError(res, error2);
@@ -10284,7 +10360,7 @@ var kargoEntegrasyon_default = router9;
 
 // src/server/routes/auth.ts
 import { Router as Router10 } from "express";
-import { randomUUID as randomUUID7 } from "node:crypto";
+import { randomUUID as randomUUID8 } from "node:crypto";
 var router10 = Router10();
 function isUnexpired(value) {
   return typeof value === "string" && Date.parse(value) > Date.now();
@@ -10457,10 +10533,10 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
       return res.status(400).json({ basarili: false, hata: "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil." });
     }
     const newUser = {
-      id: "usr_" + randomUUID7(),
+      id: "usr_" + randomUUID8(),
       tenant_id: invite.tenantId,
       ad_soyad: typeof adSoyad === "string" && adSoyad.trim() ? adSoyad.trim() : invite.kullananKisi || "Komanda \xDCzv\xFC",
-      email: userEmail || `invite-${randomUUID7()}@tomnap.internal`,
+      email: userEmail || `invite-${randomUUID8()}@tomnap.internal`,
       telefon: userPhone,
       rol: invite.rol,
       sifre_hash: sifreHashle(sifre),
