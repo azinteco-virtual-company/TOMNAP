@@ -120,6 +120,40 @@ describe('Manifest comparison', () => {
       telefon: '+1 416 555 0101',
     });
   });
+
+  it('reports a different phone as high severity even when the name agrees', () => {
+    const result = manifestBulgulari(
+      [
+        order('same-name', 'Aytən Məmmədova', '4001', { telefon: '050 123 45 67' }),
+        order('folded-name', 'Qəmər Əsədova', '4002', { telefon: '+994 55 284 39 11' }),
+        order('similar-name', 'Aytən Məmmədli', '4003', { telefon: '0701112233' }),
+        order('other-name', 'Samir Vəliyev', '4004', { telefon: '0709998877' }),
+        order('same-phone', 'Nigar Əliyeva', '4005', { telefon: '0552843911' }),
+        order('no-order-phone', 'Kəmalə Bədirbəyli', '4006'),
+        order('text-phone', 'Leyla Həsənova', '4007', { telefon: 'yoxdur' }),
+      ],
+      [
+        // Same last seven digits as the order: the removed matcher accepted this row.
+        { takipNo: '4001', aliciAdi: 'AYTƏN MƏMMƏDOVA', telefon: '+994 55 123 45 67' },
+        { takipNo: '4002', aliciAdi: 'GAMAR ASADOVA', telefon: '0507654321' },
+        { takipNo: '4003', aliciAdi: 'Aytən Məmmədova', telefon: '0551112233' },
+        { takipNo: '4004', aliciAdi: 'John Smith', telefon: '0501234567' },
+        { takipNo: '4005', aliciAdi: 'Nigar Aliyeva', telefon: '+994 (55) 284-39-11' },
+        { takipNo: '4006', aliciAdi: 'Kəmalə Bədirbəyli', telefon: '0551234567' },
+        { takipNo: '4007', aliciAdi: 'Leyla Hasanova', telefon: '0551234567' },
+      ],
+      'dispatch.xlsx'
+    );
+    expect(result.bulgular.map((item) => [item.siparisId, item.tip, item.onem])).toEqual([
+      ['same-name', 'MANIFEST_TELEFON_UYUSMUYOR', 'YUKSEK'],
+      ['folded-name', 'MANIFEST_TELEFON_UYUSMUYOR', 'YUKSEK'],
+      ['similar-name', 'MANIFEST_TELEFON_UYUSMUYOR', 'YUKSEK'],
+      ['other-name', 'MANIFEST_ALICI_UYUSMUYOR', 'YUKSEK'],
+    ]);
+    expect(result.bulgular[0]).toMatchObject({ benzerlik: 1, telefon: '050 123 45 67' });
+    expect(result.bulgular[0].manifest?.telefon).toBe('+994 55 123 45 67');
+    expect(result.bulgular[0].aciklama).toMatch(/telefon/i);
+  });
 });
 
 describe('Read-only command line', () => {

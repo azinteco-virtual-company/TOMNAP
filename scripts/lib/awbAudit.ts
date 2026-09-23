@@ -17,7 +17,8 @@ export type BulguTipi =
   | 'ESKI_ESLESTIRME_BOS_ISIM'
   | 'ESKI_ESLESTIRME_KISA_ISIM'
   | 'MANIFEST_ALICI_UYUSMUYOR'
-  | 'MANIFEST_ALICI_BENZER';
+  | 'MANIFEST_ALICI_BENZER'
+  | 'MANIFEST_TELEFON_UYUSMUYOR';
 export type Onem = 'YUKSEK' | 'ORTA';
 
 export interface AuditOrder {
@@ -179,20 +180,37 @@ export function manifestBulgulari(
     for (const order of holders) {
       const orderPhone = normalizePhone(order.telefon);
       if (rowPhone && rowPhone === orderPhone) continue;
-      if (rowName && rowName === normalizeName(order.musteriAdi)) continue;
-      const similarity = nameSimilarity(row.aliciAdi, order.musteriAdi);
+      // Both phones parsed and differ: a namesake or the old last-7-digit match.
+      const phonesDiffer = rowPhone !== '' && orderPhone !== '';
+      const similarity =
+        rowName && rowName === normalizeName(order.musteriAdi)
+          ? 1
+          : nameSimilarity(row.aliciAdi, order.musteriAdi);
       // Identical under a transliteration scheme (e.g. "Gamar Asadova" / "Qəmər Əsədova").
-      if (similarity === 1) continue;
-      const phoneNote =
-        rowPhone && orderPhone ? ' Telefonlar da farklı.' : ' Telefonla doğrulanamadı.';
-      const base = finding(
-        order,
-        similarity >= ZAYIF_ESLESME_ESIGI ? 'MANIFEST_ALICI_BENZER' : 'MANIFEST_ALICI_UYUSMUYOR',
-        similarity >= ZAYIF_ESLESME_ESIGI ? 'ORTA' : 'YUKSEK',
-        similarity >= ZAYIF_ESLESME_ESIGI
-          ? `Manifest alıcısı sipariş müşterisine benziyor ama aynı değil (benzerlik ${similarity}).${phoneNote}`
-          : `Manifest alıcısı sipariş müşterisiyle uyuşmuyor (benzerlik ${similarity}).${phoneNote}`
-      );
+      if (similarity === 1 && !phonesDiffer) continue;
+      const nameAgrees = similarity >= ZAYIF_ESLESME_ESIGI;
+      const phoneNote = phonesDiffer ? ' Telefonlar da farklı.' : ' Telefonla doğrulanamadı.';
+      const base =
+        phonesDiffer && nameAgrees
+          ? finding(
+              order,
+              'MANIFEST_TELEFON_UYUSMUYOR',
+              'YUKSEK',
+              `Manifest alıcısının adı siparişle ${similarity === 1 ? 'aynı' : 'benzer'} (benzerlik ${similarity}) ama telefonu farklı; AWB aynı ya da benzer adlı başka birine ait olabilir.`
+            )
+          : nameAgrees
+            ? finding(
+                order,
+                'MANIFEST_ALICI_BENZER',
+                'ORTA',
+                `Manifest alıcısı sipariş müşterisine benziyor ama aynı değil (benzerlik ${similarity}).${phoneNote}`
+              )
+            : finding(
+                order,
+                'MANIFEST_ALICI_UYUSMUYOR',
+                'YUKSEK',
+                `Manifest alıcısı sipariş müşterisiyle uyuşmuyor (benzerlik ${similarity}).${phoneNote}`
+              );
       findings.push({
         ...base,
         benzerlik: similarity,

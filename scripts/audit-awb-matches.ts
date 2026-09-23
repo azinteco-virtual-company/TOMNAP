@@ -28,6 +28,8 @@ Yalnız veritabanı sinyalleri (her zaman):
 Orijinal manifest dosyası verilirse (--manifest, tekrarlanabilir):
   MANIFEST_ALICI_UYUSMUYOR / MANIFEST_ALICI_BENZER  manifest alıcısı ile AWB'nin
   yazıldığı siparişin müşterisi (Unicode-duyarlı ad + tam telefon) uyuşmuyor.
+  MANIFEST_TELEFON_UYUSMUYOR  ad tutsa (katlanmış yazımı dahil) bile iki tarafta
+  da okunabilen telefonlar normalize edildikten sonra farklı (YÜKSEK).
 Veritabanı eski manifestlerdeki alıcı adını saklamaz; kesin karşılaştırma için
 orijinal manifest dosyaları gerekir.
 

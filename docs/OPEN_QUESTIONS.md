@@ -152,3 +152,16 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     Kesin karşılaştırma için orijinal manifest dosyaları `--manifest` ile
     verilmeli.
     *Soru:* Geçmiş manifest dosyaları elinizde mi?
+
+15. ✅ **Karar verildi (23 Eylül 2026):** Denetimde telefon isimden önce gelir.
+    Manifest satırında ve siparişte okunabilir telefon varsa ikisi de normalize
+    edilip karşılaştırılır. Numaralar farklıysa, ad aynı ya da katlanmış yazımı
+    aynı olsa bile `MANIFEST_TELEFON_UYUSMUYOR` (YÜKSEK) bulgusu çıkar. Eski
+    eşleştirmenin "son 7 hane içeriyor" kuralı farklı operatör koduyla aynı
+    7 haneyi kabul ediyordu; bu hatalar da bu bulguyla görünür olur. Bir tarafta
+    telefon yoksa ya da telefon metin içeriyorsa ("yoxdur") karşılaştırma yapılmaz.
+    Yabancı numaralar ülke koduyla olduğu gibi karşılaştırılır (bkz. 6).
+    *Varsayım:* Aramex manifestindeki telefon alıcının kendi telefonudur.
+    *Soru:* Manifestlerde butiğin ya da aracının ortak telefonu yazıyorsa her
+    satır YÜKSEK çıkar. İlk çalıştırmada aynı telefonun çok sayıda farklı alıcıda
+    tekrar edip etmediğine bakılmalı. Böyle bir durum var mı?
