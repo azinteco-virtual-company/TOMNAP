@@ -326,7 +326,10 @@ ve AWB düzenleme yetkili olduğunu ayrıca doğrular (`PT403` → 403).
 Migration'lar: `supabase/migrations/20260923023659_awb_match_confirmation.sql` ve
 `supabase/migrations/20260923164650_awb_match_approvals.sql` (ilk RPC'nin yetkisini
 geri alır; kayıtsız yazma yolu kalmaz). Geri alma dosyaları `supabase/rollbacks/`
-altında, yeniden eskiye doğru uygulanır. Geçmişte
+altında; yalnız kendi migration'larının oluşturduğu nesneleri `DROP ... IF EXISTS`
+ile düşürür ve yeniden eskiye doğru, her biri tek transaction olarak uygulanır
+(`psql -1 -v ON_ERROR_STOP=1 -f <dosya>`). Up → down → up döngüsü
+`tests/sql/awb-migration-roundtrip.sql` ile CI'da sınanır. Geçmişte
 yanlış yazılmış olabilecek AWB'ler için salt okunur denetim:
 `npx tsx scripts/audit-awb-matches.ts --help`. Açık sorular:
 [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md).

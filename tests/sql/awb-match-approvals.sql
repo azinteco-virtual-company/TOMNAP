@@ -252,8 +252,8 @@ DO $$ BEGIN
 END $$;
 \ir ../../supabase/rollbacks/20260923023659_awb_match_confirmation.down.sql
 DO $$ BEGIN
-  IF has_function_privilege('service_role', 'public.tomnap_confirm_awb_matches(text,jsonb)', 'EXECUTE') THEN
-    RAISE EXCEPTION 'Confirmation rollback left service role access';
+  IF to_regprocedure('public.tomnap_confirm_awb_matches(text,jsonb)') IS NOT NULL THEN
+    RAISE EXCEPTION 'Confirmation rollback left its function behind';
   END IF;
 END $$;
 ROLLBACK;

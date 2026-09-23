@@ -127,3 +127,7 @@ jobs:
           node tests/sql/courier-concurrency.mjs
           node tests/sql/list-pagination-concurrency.mjs
           node tests/sql/awb-confirmation-concurrency.mjs
+          # AWB migrations: up -> down -> up, then the AWB tests again on the rebuilt schema.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/awb-migration-roundtrip.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/awb-match-approvals.sql
+          node tests/sql/awb-confirmation-concurrency.mjs

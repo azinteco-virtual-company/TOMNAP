@@ -6,7 +6,14 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
 
 ## Veritabanı
 
-1. **Geri alma dosyası DROP kullanmıyor.** Guardrail `DROP` yasakladığı için
+1. ✅ **Karar verildi (23 Eylül 2026):** Guardrail güncellendi: down dosyalarında
+   yalnız aynı migration'ın oluşturduğu nesneler için `DROP ... IF EXISTS` serbest.
+   00-A'nın down dosyası artık `tomnap_confirm_awb_matches`'i düşürüyor. Up → down
+   → up döngüsü temiz PG17'de ve CI'da `tests/sql/awb-migration-roundtrip.sql` ile
+   sınanıyor. Down'lar iki kez çalıştırılabiliyor, sipariş verisi ve önceden var
+   olan nesneler korunuyor.
+
+   **Geri alma dosyası DROP kullanmıyor.** Guardrail `DROP` yasakladığı için
    `supabase/rollbacks/20260923023659_awb_match_confirmation.down.sql` yalnızca
    fonksiyonun EXECUTE yetkisini tüm API rollerinden (`service_role` dahil) geri
    alır. Fonksiyon katalogda kalır ve onaylar kapalı hale gelir. Yeniden
