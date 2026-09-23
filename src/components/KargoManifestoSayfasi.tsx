@@ -33,10 +33,10 @@ import { cleanPdfText, safePrintHtml } from '../utils/pdfHelpers';
 import { useAppStore } from '../store/appStore';
 import { fetchWithRetry } from '../lib/apiClient';
 import { KargoEntegrasyonModal } from './KargoEntegrasyonModal';
-import { V2_FLOW_ENABLED } from '../lib/featureFlags';
+import { AWB_REVIEW_ENABLED } from '../lib/featureFlags';
 
-// v2 review screen: a separate chunk, loaded only when VITE_FF_V2_FLOW is on.
-const ManifestEslestirmePaneli = lazy(() => import('./kargo-v2/ManifestEslestirmePaneli'));
+// Manifest AWB review: a separate chunk, loaded only when VITE_FF_AWB_REVIEW is on.
+const ManifestEslestirmePaneli = lazy(() => import('./awb-eslestirme/ManifestEslestirmePaneli'));
 
 interface KargoManifestoSayfasiProps {
   siparisler: Siparis[];
@@ -80,7 +80,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
 
   // Kargo & Aramex Entegrasyon Durumları
   const { seciliFirmaId, siparisleriYukle } = useAppStore();
-  const [v2Manifest, setV2Manifest] = useState<{ base64: string; ad: string } | null>(null);
+  const [awbManifest, setAwbManifest] = useState<{ base64: string; ad: string } | null>(null);
   const [kargoModalAcik, setKargoModalAcik] = useState(false);
   const [kargoSenkronizeEdiliyor, setKargoSenkronizeEdiliyor] = useState(false);
   const [dispatchYukleniyor, setDispatchYukleniyor] = useState(false);
@@ -130,9 +130,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
     reader.onload = async () => {
       try {
         const base64 = (reader.result as string) || '';
-        if (V2_FLOW_ENABLED) {
-          // v2: nothing is written on upload; the user reviews and confirms suggestions.
-          setV2Manifest({ base64, ad: file.name });
+        if (AWB_REVIEW_ENABLED) {
+          // Nothing is written on upload; the user reviews and confirms suggestions.
+          setAwbManifest({ base64, ad: file.name });
           return;
         }
         const res = await fetchWithRetry('/api/kargo/manifesto-yukle', {
@@ -996,12 +996,12 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         </div>
       )}
 
-      {V2_FLOW_ENABLED && v2Manifest && (
+      {AWB_REVIEW_ENABLED && awbManifest && (
         <Suspense fallback={<div className="text-xs text-slate-500">Yüklənir...</div>}>
           <ManifestEslestirmePaneli
-            dosyaBase64={v2Manifest.base64}
-            dosyaAdi={v2Manifest.ad}
-            onKapat={() => setV2Manifest(null)}
+            dosyaBase64={awbManifest.base64}
+            dosyaAdi={awbManifest.ad}
+            onKapat={() => setAwbManifest(null)}
             onOnaylandi={() => siparisleriYukle()}
           />
         </Suspense>

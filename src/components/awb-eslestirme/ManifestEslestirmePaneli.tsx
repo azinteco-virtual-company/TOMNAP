@@ -12,7 +12,7 @@ import {
 import EslestirmeSatirlari from './EslestirmeSatirlari';
 import CakismaListesi from './CakismaListesi';
 
-// v2 (VITE_FF_V2_FLOW): manifest rows are only SUGGESTED. Nothing is written until
+// VITE_FF_AWB_REVIEW: manifest rows are only SUGGESTED. Nothing is written until
 // the user explicitly confirms selected pairs; weak/ambiguous rows are never pre-selected.
 
 const RED_SEBEBI: Record<string, string> = {

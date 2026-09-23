@@ -59,7 +59,7 @@ describe('AWB matching routes stay inside the requesting tenant', () => {
     ownerB = (await loginFixture(app, 'PATRON', TENANT_B)).agent;
   });
   beforeEach(() => {
-    vi.stubEnv('FF_V2_FLOW', 'true');
+    vi.stubEnv('FF_AWB_REVIEW', 'true');
     setSiparislerVeritabani([
       order('a-order', TENANT_A),
       order('b-order', TENANT_B),

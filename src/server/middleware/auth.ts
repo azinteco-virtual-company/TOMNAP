@@ -58,7 +58,7 @@ const rules: Rule[] = [
   ['GET', /^\/api\/kargo\/ayarlar$/, SHIPPING],
   ['POST', /^\/api\/kargo\/ayarlar$/, OWNERS],
   ['POST', /^\/api\/kargo\/(test|takip|senkronize-et|manifesto-yukle)$/, SHIPPING],
-  // Human-confirmed AWB matching (FF_V2_FLOW): same roles that may edit an order's AWB.
+  // Human-confirmed AWB matching (FF_AWB_REVIEW): same roles that may edit an order's AWB.
   ['POST', /^\/api\/kargo\/manifesto-eslestirme\/(oneriler|onayla)$/, SHIPPING],
   ['GET', /^\/api\/proxy-gorsel$/, STAFF],
   ['GET', /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],

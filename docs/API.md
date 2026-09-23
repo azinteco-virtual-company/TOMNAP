@@ -244,12 +244,16 @@ _SSRF koruması ve private IP engellemesi mevcuttur._
 - Kök `/upload-gorsel` benzeri işlem rotaları kaldırıldı; `/api/` yolları kullanılmalıdır. `/uploads/:dosyaAdi` yalnız istenen dosyayı sunar; bulunamadığında 404 verir.
 - Görsel yükleme PNG/JPEG/WebP imzası ve 10 MiB çözülmüş gövde sınırı uygular. Uzak indirmeler her yönlendirmede genel IP doğrulaması ve DNS sabitlemesi yapar.
 
-## 23 Eylül 2026 — insan onaylı AWB eşleştirmesi (`FF_V2_FLOW`)
+## 23 Eylül 2026 — insan onaylı AWB eşleştirmesi (`FF_AWB_REVIEW`)
 
 Eski otomatik manifest eşleştirmesi, isim benzerliğiyle yanlış siparişlere AWB
 yazıyordu (ör. "Natalia Petrova" → "Əli", "John Smith" → Kiril isimli sipariş).
 Artık hiçbir manifest yüklemesi AWB yazmaz. Eşleştirme yalnız öneri üretir,
 yazma işlemi ayrı ve açık bir onayla yapılır.
+
+Bayrak: sunucuda `FF_AWB_REVIEW=true`, istemci derlemesinde `VITE_FF_AWB_REVIEW=true`
+(`FF_V2_FLOW`'dan bağımsız; production'da açık). Kapalıyken iki uç nokta 404 döner
+ve manifestten AWB atanamaz; `manifesto-yukle` yalnız ayrıştırır.
 
 Roller: `SUPER_ADMIN` (somut bir butik seçiliyken), `PATRON`, `KANADA_SATINALMA`.
 Bunlar bir siparişin AWB'sini düzenleyebilen rollerin aynısıdır.
@@ -260,7 +264,7 @@ Manifesti yalnızca ayrıştırır. `otomatik_esle` uyumluluk için kabul edilir
 hiçbir şey yazmaz. Yanıt: `ayristirma`, `eslesenSayisi: 0`, `eslesmeler: []`,
 `eslesmeOnayiGerekli: true`.
 
-### `POST /api/kargo/manifesto-eslestirme/oneriler` (yalnız `FF_V2_FLOW=true`)
+### `POST /api/kargo/manifesto-eslestirme/oneriler` (yalnız `FF_AWB_REVIEW=true`)
 
 Gövde: `{ dosya_base64, dosya_adi }` (en fazla 10 MB ve 2000 satır). Hiçbir kayıt
 değiştirilmez. Yanıt `satirlar[]`, `cakismalar[]` ve `ozet` alanlarını içerir.
@@ -281,7 +285,7 @@ değiştirilmez. Yanıt `satirlar[]`, `cakismalar[]` ve `ozet` alanlarını içe
   AWB'si olan (`MEVCUT_AWB`) siparişler ile AWB'si başka siparişte duranlar
   (`AWB_BASKA_SIPARISTE`). Bu siparişlere yazılmaz.
 
-### `POST /api/kargo/manifesto-eslestirme/onayla` (yalnız `FF_V2_FLOW=true`)
+### `POST /api/kargo/manifesto-eslestirme/onayla` (yalnız `FF_AWB_REVIEW=true`)
 
 Gövde: `{ eslesmeler: [{ siparisId, takipNo, agirlikKg? }] }` (1–500 öğe). Aynı
 sipariş ya da aynı AWB iki kez seçilirse istek 400 ile reddedilir. Yazma işlemi

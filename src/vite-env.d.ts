@@ -2,6 +2,6 @@
 /// <reference types="vite-plugin-pwa/client" />
 
 interface ImportMetaEnv {
-  /** 'true' enables the v2 human-confirmed AWB matching screens; unset means disabled. */
-  readonly VITE_FF_V2_FLOW?: string;
+  /** 'true' enables the manifest AWB review screen; unset means disabled. */
+  readonly VITE_FF_AWB_REVIEW?: string;
 }

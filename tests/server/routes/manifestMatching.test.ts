@@ -75,21 +75,22 @@ function phoneManifest(rows: Array<[string, string, string, string]>): string {
   return manifestBase64(rows);
 }
 
-describe('Human-confirmed AWB matching endpoints (FF_V2_FLOW)', () => {
+describe('Human-confirmed AWB matching endpoints (FF_AWB_REVIEW)', () => {
   const app = createApp();
   let owner: Agent;
   beforeAll(async () => {
     owner = (await loginFixture(app, 'PATRON', TENANT)).agent;
   });
   beforeEach(() => {
-    vi.stubEnv('FF_V2_FLOW', 'true');
+    vi.stubEnv('FF_AWB_REVIEW', 'true');
   });
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  it('is unavailable while the feature flag is off', async () => {
-    vi.stubEnv('FF_V2_FLOW', '');
+  it('is unavailable while its own flag is off, even with FF_V2_FLOW on', async () => {
+    vi.stubEnv('FF_AWB_REVIEW', '');
+    vi.stubEnv('FF_V2_FLOW', 'true');
     const suggestions = await owner
       .post('/api/kargo/manifesto-eslestirme/oneriler')
       .send({ dosya_base64: phoneManifest([['AWB-0001', 'A', '', '']]) });

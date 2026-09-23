@@ -58,7 +58,12 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
 
 ## Yayın ve arayüz
 
-10. **Flag kapalıyken** manifest yükleme yalnız ayrıştırır. Manifestten AWB
+10. ✅ **Karar verildi (23 Eylül 2026):** İnceleme/onay `FF_V2_FLOW`'dan ayrıldı ve kendi
+    bayrağını aldı: sunucuda `FF_AWB_REVIEW`, istemcide `VITE_FF_AWB_REVIEW`. Bu yeni bir v2
+    ekranı değil, mevcut manifest özelliğinin düzeltilmiş hâli. Production'da açık olacak;
+    kapalıyken 404 davranışı korunur.
+
+    **Flag kapalıyken** manifest yükleme yalnız ayrıştırır. Manifestten AWB
     bağlamak flag açılana kadar mümkün değil; tek tek sipariş düzenleme hâlâ
     çalışıyor.
     *Soru:* Deploy sonrası `FF_V2_FLOW` ve `VITE_FF_V2_FLOW` hemen açılacak mı?

@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { isV2FlowEnabled } from '../config';
+import { isAwbReviewEnabled } from '../config';
 import { kargoMerkezi } from '../services/kargo/kargoMerkezi';
 import type {
   AyrismisManifestoSonuc,
@@ -240,8 +240,8 @@ function sendError(res: Response, error: unknown) {
   return res.status(500).json({ basarili: false, hata: 'Kargo əməliyyatı tamamlanmadı.' });
 }
 
-function v2FlowDisabled(res: Response): boolean {
-  if (isV2FlowEnabled()) return false;
+function awbReviewDisabled(res: Response): boolean {
+  if (isAwbReviewEnabled()) return false;
   res.status(404).json({ basarili: false, hata: 'Bu funksiya aktiv deyil.' });
   return true;
 }
@@ -268,7 +268,7 @@ router.post('/kargo/manifesto-yukle', async (req, res) => {
 
 // 7. POST /api/kargo/manifesto-eslestirme/oneriler — suggestions only; nothing is written.
 router.post('/kargo/manifesto-eslestirme/oneriler', async (req, res) => {
-  if (v2FlowDisabled(res)) return;
+  if (awbReviewDisabled(res)) return;
   try {
     const tenantId = requestTenant(req);
     const sonuc = await manifestiAyristir(req.body, tenantId);
@@ -294,7 +294,7 @@ router.post('/kargo/manifesto-eslestirme/oneriler', async (req, res) => {
 // Delivered orders and orders that already carry an AWB are rejected; any rejection
 // leaves every selected order unchanged.
 router.post('/kargo/manifesto-eslestirme/onayla', async (req, res) => {
-  if (v2FlowDisabled(res)) return;
+  if (awbReviewDisabled(res)) return;
   try {
     const sonuc = await awbEslesmeleriniOnayla(requestTenant(req), onayIstegiDogrula(req.body));
     const yazilan = sonuc.uygulananlar.filter((item) => !item.tekrar).length;
