@@ -18,8 +18,8 @@ var DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 var UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(DATA_DIR, "uploads");
 var FIRMALAR_DOSYA_YOLU = path.join(DATA_DIR, "firmalar.json");
 var KULLANICILAR_DOSYA_YOLU = path.join(DATA_DIR, "kullanicilar.json");
-function isV2FlowEnabled() {
-  return process.env.FF_V2_FLOW === "true";
+function isAwbReviewEnabled() {
+  return process.env.FF_AWB_REVIEW === "true";
 }
 var RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 var EMAIL_FROM = process.env.EMAIL_FROM || "TOMNAP Platform <onboarding@resend.dev>";
@@ -4183,7 +4183,7 @@ var rules = [
   ["GET", /^\/api\/kargo\/ayarlar$/, SHIPPING],
   ["POST", /^\/api\/kargo\/ayarlar$/, OWNERS],
   ["POST", /^\/api\/kargo\/(test|takip|senkronize-et|manifesto-yukle)$/, SHIPPING],
-  // Human-confirmed AWB matching (FF_V2_FLOW): same roles that may edit an order's AWB.
+  // Human-confirmed AWB matching (FF_AWB_REVIEW): same roles that may edit an order's AWB.
   ["POST", /^\/api\/kargo\/manifesto-eslestirme\/(oneriler|onayla)$/, SHIPPING],
   ["GET", /^\/api\/proxy-gorsel$/, STAFF],
   ["GET", /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
@@ -10224,8 +10224,8 @@ function sendError(res, error2) {
   }
   return res.status(500).json({ basarili: false, hata: "Kargo \u0259m\u0259liyyat\u0131 tamamlanmad\u0131." });
 }
-function v2FlowDisabled(res) {
-  if (isV2FlowEnabled()) return false;
+function awbReviewDisabled(res) {
+  if (isAwbReviewEnabled()) return false;
   res.status(404).json({ basarili: false, hata: "Bu funksiya aktiv deyil." });
   return true;
 }
@@ -10246,7 +10246,7 @@ router9.post("/kargo/manifesto-yukle", async (req, res) => {
   }
 });
 router9.post("/kargo/manifesto-eslestirme/oneriler", async (req, res) => {
-  if (v2FlowDisabled(res)) return;
+  if (awbReviewDisabled(res)) return;
   try {
     const tenantId = requestTenant(req);
     const sonuc = await manifestiAyristir(req.body, tenantId);
@@ -10268,7 +10268,7 @@ router9.post("/kargo/manifesto-eslestirme/oneriler", async (req, res) => {
   }
 });
 router9.post("/kargo/manifesto-eslestirme/onayla", async (req, res) => {
-  if (v2FlowDisabled(res)) return;
+  if (awbReviewDisabled(res)) return;
   try {
     const sonuc = await awbEslesmeleriniOnayla(requestTenant(req), onayIstegiDogrula(req.body));
     const yazilan = sonuc.uygulananlar.filter((item) => !item.tekrar).length;
