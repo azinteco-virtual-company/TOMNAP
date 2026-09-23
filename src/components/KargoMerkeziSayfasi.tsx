@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import { Siparis } from '../types';
 import {
   Plane,
@@ -30,6 +30,10 @@ import {
 import { useDil } from '../context/DilKonteksti';
 import { fetchWithRetry } from '../lib/apiClient';
 import { useAppStore } from '../store/appStore';
+import { V2_FLOW_ENABLED } from '../lib/featureFlags';
+
+// v2 review screen: a separate chunk, loaded only when VITE_FF_V2_FLOW is on.
+const ManifestEslestirmePaneli = lazy(() => import('./kargo-v2/ManifestEslestirmePaneli'));
 
 interface KargoMerkeziSayfasiProps {
   siparisler: Siparis[];
@@ -44,6 +48,7 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
 }) => {
   const { t } = useDil();
   const { seciliFirmaId, siparisleriYukle } = useAppStore();
+  const [v2Manifest, setV2Manifest] = useState<{ base64: string; ad: string } | null>(null);
 
   const [aktifTab, setAktifTab] = useState<TabTipi>('izleme');
   const [aramaMetni, setAramaMetni] = useState('');
@@ -205,6 +210,11 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
     reader.onload = async () => {
       try {
         const base64 = (reader.result as string) || '';
+        if (V2_FLOW_ENABLED) {
+          // v2: nothing is written on upload; the user reviews and confirms suggestions.
+          setV2Manifest({ base64, ad: file.name });
+          return;
+        }
         const res = await fetchWithRetry('/api/kargo/manifesto-yukle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -752,6 +762,17 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
               </p>
             </div>
           </div>
+
+          {V2_FLOW_ENABLED && v2Manifest && (
+            <Suspense fallback={<div className="text-xs text-slate-500">Yüklənir...</div>}>
+              <ManifestEslestirmePaneli
+                dosyaBase64={v2Manifest.base64}
+                dosyaAdi={v2Manifest.ad}
+                onKapat={() => setV2Manifest(null)}
+                onOnaylandi={() => siparisleriYukle()}
+              />
+            </Suspense>
+          )}
 
           {/* İçe Aktarma Sonucu */}
           {dispatchSonuc && (
