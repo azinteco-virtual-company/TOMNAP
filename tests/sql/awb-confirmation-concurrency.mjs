@@ -1,6 +1,7 @@
 // Disposable PostgreSQL only. Run after canonical schema and all migrations.
-// Proves the per-tenant lock in tomnap_confirm_awb_matches: concurrent
-// confirmations can neither put one AWB on two orders nor overwrite an AWB.
+// Proves the per-tenant lock in tomnap_approve_awb_matches: concurrent
+// approvals can neither put one AWB on two orders nor overwrite an AWB, and
+// exactly one append-only approval row survives each race.
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
@@ -57,8 +58,10 @@ const state = (name, condition) =>
 
 const suffix = randomUUID().slice(0, 12);
 const tenant = 'awb-race-' + suffix;
+const user = tenant + '-owner';
+const manifest = `{"dosyaAdi":"race.xlsx","sha256":"${'ab'.repeat(32)}"}`;
 const confirm = (order, awb) =>
-  `SELECT public.tomnap_confirm_awb_matches('${tenant}','[{"siparisId":"${order}","takipNo":"${awb}"}]'::jsonb);`;
+  `SELECT public.tomnap_approve_awb_matches('${tenant}','${user}','${manifest}'::jsonb,'[{"satirNo":1,"siparisId":"${order}","takipNo":"${awb}","eslesmeTuru":"TELEFON","isimPuani":1}]'::jsonb);`;
 
 async function race(label, firstOrder, firstAwb, secondOrder, secondAwb) {
   const nameA = `awb-race-a-${label}-${suffix}`;
@@ -85,6 +88,7 @@ try {
   const [one, two, three] = [randomUUID(), randomUUID(), randomUUID()];
   await query(`SET ROLE service_role;
     INSERT INTO public.firmalar(id,ad,onay_durumu) VALUES('${tenant}','AWB race','AKTIF');
+    INSERT INTO public.kullanicilar(id,tenant_id,ad_soyad,email,rol,durum) VALUES('${user}','${tenant}','Race owner','${user}@race.fixture','PATRON','AKTIF');
     INSERT INTO public.siparisler(id,tenant_id,ham_mesaj,musteri_adi,urun_aciklamasi,lojistik_durumu) VALUES
       ('${one}','${tenant}','Synthetic','First','Parcel','KANADA_DEPO'),
       ('${two}','${tenant}','Synthetic','Second','Parcel','KANADA_DEPO'),
@@ -99,6 +103,10 @@ try {
     await query(`SELECT count(*) FROM public.siparisler WHERE tenant_id='${tenant}' AND uluslararasi_kargo_kodu='${shared}';`),
     '1'
   );
+  assert.equal(
+    await query(`SELECT count(*) FROM public.awb_match_approvals WHERE tenant_id='${tenant}' AND awb='${shared}';`),
+    '1'
+  );
 
   const firstAwb = `AWB-FIRST-${suffix}`.toUpperCase();
   const secondAwb = `AWB-SECOND-${suffix}`.toUpperCase();
@@ -110,7 +118,11 @@ try {
     await query(`SELECT uluslararasi_kargo_kodu FROM public.siparisler WHERE id='${three}';`),
     firstAwb
   );
-  console.log('2/2 real PostgreSQL AWB confirmation races passed (no duplicate AWB, no overwrite).');
+  assert.equal(
+    await query(`SELECT string_agg(awb, ',') FROM public.awb_match_approvals WHERE siparis_id='${three}';`),
+    firstAwb
+  );
+  console.log('2/2 real PostgreSQL AWB approval races passed (no duplicate AWB, no overwrite, one log row each).');
 } finally {
   for (const child of processes) child.kill('SIGTERM');
 }

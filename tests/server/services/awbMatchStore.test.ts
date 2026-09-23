@@ -21,8 +21,15 @@ vi.mock('../../../src/server/services/supabase', () => ({
 
 import {
   awbEslesmeleriniOnayla,
+  awbOnayKayitlari,
   eslesmeHavuzunuYukle,
+  onayKalemleriniHazirla,
+  secimIstegiDogrula,
 } from '../../../src/server/services/kargo/awbMatchStore';
+import {
+  eslesmeOnerileriOlustur,
+  type EslesmeRaporu,
+} from '../../../src/server/services/kargo/manifestMatching';
 import { setDemoSiparislerVeritabani } from '../../../src/server/services/state';
 
 // Read-only fake: every write method throws, so a write attempt fails the test.
@@ -150,59 +157,143 @@ describe('Database candidate loading is complete, read-only and tenant-scoped', 
   });
 });
 
-describe('Database confirmation goes through the transactional RPC only', () => {
-  const items = [{ siparisId: '50000000-0000-4000-8000-000000000001', takipNo: 'AWB-1001', agirlikKg: 1.5 }];
+describe('Database confirmation goes through the approval RPC only', () => {
+  const manifest = { dosyaAdi: 'dispatch.xlsx', sha256: 'a'.repeat(64) };
+  const items = [
+    {
+      satirNo: 3,
+      siparisId: '50000000-0000-4000-8000-000000000001',
+      takipNo: 'AWB-1001',
+      agirlikKg: 1.5,
+      eslesmeTuru: 'TELEFON' as const,
+      isimPuani: 0.8,
+    },
+  ];
+  const rejection = { satirNo: 3, siparisId: items[0].siparisId, takipNo: 'AWB-1001' };
 
-  it('passes the server-resolved tenant and parses the result', async () => {
+  it('passes the tenant, the session user and the manifest, and parses the result', async () => {
     environment.db = fakeDb([]);
     environment.db.rpc.mockResolvedValue({
       data: {
         basarili: false,
         uygulananlar: [],
-        reddedilenler: [
-          { siparisId: items[0].siparisId, takipNo: 'AWB-1001', sebep: 'MEVCUT_AWB', mevcutAwb: 'OLD' },
-        ],
+        reddedilenler: [{ ...rejection, sebep: 'MEVCUT_AWB', mevcutAwb: 'OLD' }],
+        kayitSayisi: 0,
       },
       error: null,
     });
-    const result = await awbEslesmeleriniOnayla('tenant-a', items);
-    expect(environment.db.rpc).toHaveBeenCalledWith('tomnap_confirm_awb_matches', {
+    const result = await awbEslesmeleriniOnayla('tenant-a', 'user-a', manifest, items);
+    expect(environment.db.rpc).toHaveBeenCalledWith('tomnap_approve_awb_matches', {
       p_tenant_id: 'tenant-a',
+      p_user_id: 'user-a',
+      p_manifest: manifest,
       p_matches: items,
     });
     expect(result).toEqual({
       basarili: false,
       uygulananlar: [],
-      reddedilenler: [
-        { siparisId: items[0].siparisId, takipNo: 'AWB-1001', sebep: 'MEVCUT_AWB', mevcutAwb: 'OLD' },
-      ],
+      reddedilenler: [{ ...rejection, sebep: 'MEVCUT_AWB', mevcutAwb: 'OLD' }],
     });
     expect(environment.db.calls).toHaveLength(0);
 
     environment.db.rpc.mockResolvedValue({
-      data: { basarili: true, uygulananlar: [{ siparisId: 'x', takipNo: 'AWB-1001', tekrar: true }], reddedilenler: [] },
+      data: { basarili: true, uygulananlar: [{ ...rejection, tekrar: true }], reddedilenler: [] },
       error: null,
     });
-    expect((await awbEslesmeleriniOnayla('tenant-a', items)).uygulananlar).toEqual([
-      { siparisId: 'x', takipNo: 'AWB-1001', tekrar: true },
+    expect((await awbEslesmeleriniOnayla('tenant-a', 'user-a', manifest, items)).uygulananlar).toEqual([
+      { ...rejection, tekrar: true },
     ]);
   });
 
-  it('maps validation errors, outages and malformed results to safe statuses', async () => {
+  it('maps validation, authorization, outages and malformed results to safe statuses', async () => {
     environment.db = fakeDb([]);
-    environment.db.rpc.mockResolvedValue({ data: null, error: { code: '22023' } });
-    await expect(awbEslesmeleriniOnayla('tenant-a', items)).rejects.toMatchObject({ status: 400 });
-    environment.db.rpc.mockResolvedValue({ data: null, error: { code: '40P01' } });
-    await expect(awbEslesmeleriniOnayla('tenant-a', items)).rejects.toMatchObject({ status: 503 });
+    for (const [code, status] of [
+      ['22023', 400],
+      ['PT403', 403],
+      ['40P01', 503],
+    ] as const) {
+      environment.db.rpc.mockResolvedValue({ data: null, error: { code } });
+      await expect(awbEslesmeleriniOnayla('tenant-a', 'user-a', manifest, items)).rejects.toMatchObject({
+        status,
+      });
+    }
     for (const data of [
       null,
       { basarili: true },
-      { basarili: true, uygulananlar: [{ siparisId: 1 }], reddedilenler: [] },
-      { basarili: false, uygulananlar: [], reddedilenler: [{ siparisId: 'x', takipNo: 'y', sebep: 'OTHER' }] },
+      { basarili: true, uygulananlar: [{ siparisId: 'x', takipNo: 'y' }], reddedilenler: [] },
+      { basarili: false, uygulananlar: [], reddedilenler: [{ ...rejection, sebep: 'OTHER' }] },
     ]) {
       environment.db.rpc.mockResolvedValue({ data, error: null });
-      await expect(awbEslesmeleriniOnayla('tenant-a', items)).rejects.toMatchObject({ status: 503 });
+      await expect(awbEslesmeleriniOnayla('tenant-a', 'user-a', manifest, items)).rejects.toMatchObject({
+        status: 503,
+      });
     }
-    await expect(awbEslesmeleriniOnayla('all', items)).rejects.toMatchObject({ status: 400 });
+    await expect(awbEslesmeleriniOnayla('all', 'user-a', manifest, items)).rejects.toMatchObject({ status: 400 });
+    await expect(awbEslesmeleriniOnayla('tenant-a', '', manifest, items)).rejects.toMatchObject({ status: 401 });
+  });
+});
+
+describe('Selections are resolved against server-computed suggestions only', () => {
+  const report: EslesmeRaporu = eslesmeOnerileriOlustur(
+    [
+      { takipNo: 'AWB-0001', aliciAdi: 'MƏMMƏDOVA AYTƏN', telefon: '+994552843911', agirlikKg: 2 },
+      { takipNo: 'AWB-0002', aliciAdi: 'Ayten Mammadova' },
+      { takipNo: 'AWB-0003', aliciAdi: 'Holder' },
+    ],
+    [
+      { id: 'phone', musteriAdi: 'Aytən Məmmədova', telefon: '0552843911', lojistikDurumu: 'KANADA_DEPO', awb: '', awbGosterim: '', kanadaTakipKodu: '' },
+      { id: 'name', musteriAdi: 'Aytən Məmmədova', telefon: '', lojistikDurumu: 'KANADA_DEPO', awb: '', awbGosterim: '', kanadaTakipKodu: '' },
+      { id: 'holder', musteriAdi: 'Holder', telefon: '', lojistikDurumu: 'ULUSLARARASI_KARGO', awb: 'AWB-0003', awbGosterim: 'AWB-0003', kanadaTakipKodu: '' },
+    ]
+  );
+
+  it('takes match type, name score, AWB and weight from the server report', () => {
+    const result = onayKalemleriniHazirla(report, [
+      { satirNo: 1, siparisId: 'phone' },
+      { satirNo: 2, siparisId: 'name' },
+    ]);
+    expect(result.reddedilenler).toEqual([]);
+    expect(result.kalemler).toEqual([
+      { satirNo: 1, siparisId: 'phone', takipNo: 'AWB-0001', agirlikKg: 2, eslesmeTuru: 'TELEFON', isimPuani: 1 },
+      expect.objectContaining({ satirNo: 2, siparisId: 'name', takipNo: 'AWB-0002', agirlikKg: null, eslesmeTuru: 'ISIM' }),
+    ]);
+    expect(result.kalemler[1].isimPuani).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it('turns an already attached pair into an idempotent retry and rejects anything else', () => {
+    const result = onayKalemleriniHazirla(report, [
+      { satirNo: 3, siparisId: 'holder' },
+      // 'holder' already carries an AWB, so it is never a candidate for row 1.
+      { satirNo: 1, siparisId: 'holder' },
+      { satirNo: 7, siparisId: 'phone' },
+    ]);
+    expect(result.tekrarlar).toEqual([{ satirNo: 3, siparisId: 'holder', takipNo: 'AWB-0003', tekrar: true }]);
+    expect(result.kalemler).toEqual([]);
+    expect(result.reddedilenler).toEqual([
+      { satirNo: 1, siparisId: 'holder', takipNo: 'AWB-0001', sebep: 'ONERI_GECERSIZ' },
+      { satirNo: 7, siparisId: 'phone', takipNo: '', sebep: 'ONERI_GECERSIZ' },
+    ]);
+  });
+
+  it('validates the selection list before any work is done', () => {
+    expect(secimIstegiDogrula({ secimler: [{ satirNo: 2, siparisId: 'a-1' }] })).toEqual([
+      { satirNo: 2, siparisId: 'a-1' },
+    ]);
+    for (const body of [
+      null,
+      {},
+      { secimler: [] },
+      { secimler: Array.from({ length: 501 }, (_, index) => ({ satirNo: index + 1, siparisId: `o${index}` })) },
+      { secimler: [{ satirNo: 100001, siparisId: 'a' }] },
+      { secimler: [{ satirNo: 1 }] },
+    ])
+      expect(() => secimIstegiDogrula(body)).toThrow();
+  });
+
+  it('never exposes the stored approval records for mutation', () => {
+    expect(() => awbOnayKayitlari('all')).toThrow();
+    const copy = awbOnayKayitlari('tenant-a');
+    copy.push({} as never);
+    expect(awbOnayKayitlari('tenant-a')).not.toContain(copy[copy.length - 1]);
   });
 });

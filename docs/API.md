@@ -287,26 +287,41 @@ değiştirilmez. Yanıt `satirlar[]`, `cakismalar[]` ve `ozet` alanlarını içe
 
 ### `POST /api/kargo/manifesto-eslestirme/onayla` (yalnız `FF_AWB_REVIEW=true`)
 
-Gövde: `{ eslesmeler: [{ siparisId, takipNo, agirlikKg? }] }` (1–500 öğe). Aynı
-sipariş ya da aynı AWB iki kez seçilirse istek 400 ile reddedilir. Yazma işlemi
-tek bir transactional RPC ile yapılır (`tomnap_confirm_awb_matches`, tenant başına
+Gövde: `{ dosya_base64, dosya_adi, secimler: [{ satirNo, siparisId }] }` (1–500
+seçim). Öneri ekranında kullanılan manifest dosyası tekrar gönderilir; sunucu
+önerileri yeniden hesaplar ve yalnız o satırın **güncel adaylarından** biri
+onaylanabilir. Aday olmayan seçim `ONERI_GECERSIZ` ile reddedilir. AWB, ağırlık,
+eşleşme türü ve isim puanı istemciden alınmaz; sunucu üretir. Aynı satır, aynı
+sipariş ya da aynı AWB iki kez seçilirse istek 400 döner. Yazma işlemi tek bir
+transactional RPC ile yapılır (`tomnap_approve_awb_matches`, tenant başına
 kilitli). Kurallar:
 
 - teslim edilmiş siparişe yazılmaz,
 - var olan bir AWB'nin üzerine yazılmaz,
 - tenant içinde başka bir siparişte duran AWB yazılmaz,
 - tek bir ret varsa **hiçbir** sipariş değişmez; yanıt `basarili: false` ve
-  `reddedilenler[].sebep` (`SIPARIS_BULUNAMADI`, `TESLIM_EDILDI`, `MEVCUT_AWB`,
-  `AWB_BASKA_SIPARISTE`) olur,
-- aynı çiftin yeniden gönderilmesi idempotenttir (`tekrar: true`).
+  `reddedilenler[].sebep` (`ONERI_GECERSIZ`, `SIPARIS_BULUNAMADI`, `TESLIM_EDILDI`,
+  `MEVCUT_AWB`, `AWB_BASKA_SIPARISTE`) olur,
+- aynı çiftin yeniden gönderilmesi idempotenttir (`tekrar: true`) ve yeni kayıt üretmez.
 
 Onaylanan siparişe AWB, varsa ağırlık (`ek_veriler.kargo_agirligi_kg`) yazılır.
 `KANADA_SATINALIM_BEKLIYOR`/`KANADA_DEPO` durumundaki sipariş `ULUSLARARASI_KARGO`
 durumuna geçer; diğer durumlar değişmez.
 
-Migration: `supabase/migrations/20260923023659_awb_match_confirmation.sql`. `DROP`
-kullanmayan geri alma dosyası:
-`supabase/rollbacks/20260923023659_awb_match_confirmation.down.sql`. Geçmişte
+**Onay kaydı:** yazılan her AWB için, siparişi güncelleyen RPC ile **aynı
+transaction'da** `awb_match_approvals` tablosuna bir satır eklenir: `tenant_id`,
+`siparis_id`, `awb`, `manifest_dosya_adi`, `manifest_sha256` (yüklenen dosyanın
+özeti), `manifest_satir_no`, `eslesme_turu` (`TELEFON`/`SIPARIS_KODU`/`ISIM`),
+`isim_puani`, `onaylayan_kullanici_id` (oturumdan) ve `onay_zamani`. RPC başarısız
+olursa satır da oluşmaz. Tablo yalnız eklemeye açıktır: UPDATE/DELETE/TRUNCATE
+`service_role` dahil tüm API rollerinden geri alınmıştır ve tablo sahibini de
+durduran tetikleyicilerle engellenir. RPC, onaylayan kullanıcının o butikte aktif
+ve AWB düzenleme yetkili olduğunu ayrıca doğrular (`PT403` → 403).
+
+Migration'lar: `supabase/migrations/20260923023659_awb_match_confirmation.sql` ve
+`supabase/migrations/20260923164650_awb_match_approvals.sql` (ilk RPC'nin yetkisini
+geri alır; kayıtsız yazma yolu kalmaz). Geri alma dosyaları `supabase/rollbacks/`
+altında, yeniden eskiye doğru uygulanır. Geçmişte
 yanlış yazılmış olabilecek AWB'ler için salt okunur denetim:
 `npx tsx scripts/audit-awb-matches.ts --help`. Açık sorular:
 [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md).

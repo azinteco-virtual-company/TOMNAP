@@ -14,7 +14,27 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
    + `GRANT`).
    *Soru:* Sadece bu işte oluşturulan yeni nesneler için `DROP FUNCTION`'a izin
    var mı, yoksa REVOKE tabanlı geri alma yeterli mi?
-2. **Köken kaydı yok. Kod yok.** Kimin hangi manifest satırını hangi siparişe
+2. ✅ **Karar verildi (23 Eylül 2026):** Yalnız eklemeye açık `awb_match_approvals`
+   tablosu eklendi (`20260923164650_awb_match_approvals.sql`). Kayıt, AWB'yi yazan
+   `tomnap_approve_awb_matches` ile aynı transaction'da oluşur. Uygulama notları:
+   - UPDATE/DELETE için **ikisi birden** seçildi: REVOKE (`service_role` dahil; yalnız
+     SELECT/INSERT verildi) ve hata fırlatan BEFORE UPDATE/DELETE ile BEFORE
+     TRUNCATE tetikleyicileri. REVOKE `service_role`'ü durdurur. Tetikleyici tablo
+     sahibini ve ileride yanlışlıkla verilebilecek bir GRANT'i de durdurur.
+   - Eşleşme türü, isim puanı ve manifest referansı istemciden alınmaz: `/onayla`
+     manifesti yeniden alır, önerileri sunucuda yeniden hesaplar ve yalnız güncel
+     bir aday onaylanabilir (`ONERI_GECERSIZ`). Manifest, dosya adı + SHA-256 +
+     satır numarası ile referanslanır; kullanıcı kimliği oturumdan gelir ve RPC'de
+     yeniden doğrulanır.
+   - Kayıt yalnız gerçekten yazılan AWB için oluşur; idempotent tekrar yeni satır
+     üretmez. `service_role` doğrudan INSERT edebilir (uygulama zaten bu rolle
+     çalışır); bu anahtara sahip olan her şeyi yazabileceği için ek bir güven
+     sınırı değildir.
+   - Eski `tomnap_confirm_awb_matches` fonksiyonunun `service_role` yetkisi geri
+     alındı; kayıtsız bir yazma yolu kalmadı. Geliştirme/demo bellek modu aynı
+     kaydı süreç içinde tutar.
+
+   **Köken kaydı yok. Kod yok.** Kimin hangi manifest satırını hangi siparişe
    onayladığı ayrıca saklanmıyor; yalnız siparişin AWB'si ve `ek_veriler`
    güncelleniyor.
    *Soru:* Yeni bir `awb_eslestirme_kayitlari` tablosu (RLS FORCE, yalnız

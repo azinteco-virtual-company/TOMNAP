@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { isAwbReviewEnabled } from '../config';
 import { kargoMerkezi } from '../services/kargo/kargoMerkezi';
@@ -10,7 +11,9 @@ import { eslesmeOnerileriOlustur } from '../services/kargo/manifestMatching';
 import {
   awbEslesmeleriniOnayla,
   eslesmeHavuzunuYukle,
-  onayIstegiDogrula,
+  onayKalemleriniHazirla,
+  secimIstegiDogrula,
+  type AwbOnaySonucu,
 } from '../services/kargo/awbMatchStore';
 import { PublicResourceError } from '../services/publicFetch';
 
@@ -206,6 +209,14 @@ class ManifestYuklemeHatasi extends Error {
   }
 }
 
+interface AyrismisManifest {
+  sonuc: AyrismisManifestoSonuc;
+  /** Cleaned client file name, kept only as a human-readable reference. */
+  dosyaAdi: string;
+  /** SHA-256 of the decoded upload: the exact file an approval refers to. */
+  sha256: string;
+}
+
 function requestTenant(req: Request): string {
   const tenant = req.tenantId;
   if (typeof tenant !== 'string' || !tenant || tenant === 'all')
@@ -213,7 +224,13 @@ function requestTenant(req: Request): string {
   return tenant;
 }
 
-async function manifestiAyristir(body: unknown, tenantId: string): Promise<AyrismisManifestoSonuc> {
+function requestUser(req: Request): string {
+  const userId = req.auth?.userId;
+  if (typeof userId !== 'string' || !userId) throw new PublicResourceError('Oturum gerekli.', 401);
+  return userId;
+}
+
+async function manifestiAyristir(body: unknown, tenantId: string): Promise<AyrismisManifest> {
   const record: Record<string, unknown> =
     body && typeof body === 'object' && !Array.isArray(body) ? { ...body } : {};
   const dosyaBase64 = record.dosya_base64;
@@ -222,10 +239,28 @@ async function manifestiAyristir(body: unknown, tenantId: string): Promise<Ayris
   if (typeof dosyaBase64 !== 'string' || dosyaBase64.length > 14 * 1024 * 1024)
     throw new ManifestYuklemeHatasi(413, 'Manifesto en fazla 10 MB olabilir.');
   const dosyaAdi =
-    typeof record.dosya_adi === 'string' && record.dosya_adi ? record.dosya_adi : 'manifest.xlsx';
+    (typeof record.dosya_adi === 'string' ? record.dosya_adi : '')
+      .replace(/[\p{Cc}\p{Cf}]/gu, '')
+      .trim()
+      .slice(0, 255) || 'manifest.xlsx';
   const buffer = Buffer.from(dosyaBase64.replace(/^data:.*?;base64,/, ''), 'base64');
   const ayarlar = await kargoMerkezi.getAyarlar(tenantId);
-  return kargoMerkezi.getProvider(ayarlar.saglayici).manifestoAyristir(buffer, dosyaAdi);
+  const sonuc = await kargoMerkezi.getProvider(ayarlar.saglayici).manifestoAyristir(buffer, dosyaAdi);
+  return { sonuc, dosyaAdi, sha256: createHash('sha256').update(buffer).digest('hex') };
+}
+
+/** Parses the manifest and rebuilds the tenant's suggestions on the server. */
+async function manifestOnerileri(body: unknown, tenantId: string) {
+  const manifest = await manifestiAyristir(body, tenantId);
+  if (!manifest.sonuc.basarili)
+    throw new ManifestYuklemeHatasi(400, manifest.sonuc.hatalar?.[0] || 'Manifest oxuna bilmədi.');
+  if (manifest.sonuc.satirlar.length > MAX_MANIFEST_SATIRI)
+    throw new ManifestYuklemeHatasi(
+      413,
+      `Bir manifestdə ən çox ${MAX_MANIFEST_SATIRI} sətir işlənə bilər.`
+    );
+  const rapor = eslesmeOnerileriOlustur(manifest.sonuc.satirlar, await eslesmeHavuzunuYukle(tenantId));
+  return { manifest, rapor };
 }
 
 function sendError(res: Response, error: unknown) {
@@ -234,7 +269,7 @@ function sendError(res: Response, error: unknown) {
     error instanceof PublicResourceError ||
     error instanceof CargoSettingsError
   ) {
-    const code = [400, 404, 409, 413, 503].includes(error.status) ? error.status : 500;
+    const code = [400, 401, 403, 404, 409, 413, 503].includes(error.status) ? error.status : 500;
     return res.status(code).json({ basarili: false, hata: error.message });
   }
   return res.status(500).json({ basarili: false, hata: 'Kargo əməliyyatı tamamlanmadı.' });
@@ -251,7 +286,7 @@ function awbReviewDisabled(res: Response): boolean {
 // orders; `otomatik_esle` is accepted for compatibility but never writes.
 router.post('/kargo/manifesto-yukle', async (req, res) => {
   try {
-    const sonuc = await manifestiAyristir(req.body, requestTenant(req));
+    const { sonuc } = await manifestiAyristir(req.body, requestTenant(req));
     if (!sonuc.basarili) return res.status(400).json(sonuc);
     res.json({
       basarili: true,
@@ -270,38 +305,46 @@ router.post('/kargo/manifesto-yukle', async (req, res) => {
 router.post('/kargo/manifesto-eslestirme/oneriler', async (req, res) => {
   if (awbReviewDisabled(res)) return;
   try {
-    const tenantId = requestTenant(req);
-    const sonuc = await manifestiAyristir(req.body, tenantId);
-    if (!sonuc.basarili)
-      return res.status(400).json({
-        basarili: false,
-        hata: sonuc.hatalar?.[0] || 'Manifest oxuna bilmədi.',
-        hatalar: sonuc.hatalar ?? [],
-      });
-    if (sonuc.satirlar.length > MAX_MANIFEST_SATIRI)
-      throw new ManifestYuklemeHatasi(
-        413,
-        `Bir manifestdə ən çox ${MAX_MANIFEST_SATIRI} sətir işlənə bilər.`
-      );
-    const rapor = eslesmeOnerileriOlustur(sonuc.satirlar, await eslesmeHavuzunuYukle(tenantId));
-    res.json({ basarili: true, saglayici: sonuc.saglayici, ...rapor });
+    const { manifest, rapor } = await manifestOnerileri(req.body, requestTenant(req));
+    res.json({ basarili: true, saglayici: manifest.sonuc.saglayici, ...rapor });
   } catch (error) {
     sendError(res, error);
   }
 });
 
-// 8. POST /api/kargo/manifesto-eslestirme/onayla — writes only explicitly confirmed pairs.
-// Delivered orders and orders that already carry an AWB are rejected; any rejection
-// leaves every selected order unchanged.
+// 8. POST /api/kargo/manifesto-eslestirme/onayla — writes only pairs the server itself
+// suggests for the uploaded manifest. Body: { dosya_base64, dosya_adi, secimler:
+// [{ satirNo, siparisId }] }. Match type and name score are recomputed here and
+// logged with the approving user; any rejection leaves every order unchanged.
 router.post('/kargo/manifesto-eslestirme/onayla', async (req, res) => {
   if (awbReviewDisabled(res)) return;
   try {
-    const sonuc = await awbEslesmeleriniOnayla(requestTenant(req), onayIstegiDogrula(req.body));
-    const yazilan = sonuc.uygulananlar.filter((item) => !item.tekrar).length;
+    const tenantId = requestTenant(req);
+    const userId = requestUser(req);
+    const secimler = secimIstegiDogrula(req.body);
+    const { manifest, rapor } = await manifestOnerileri(req.body, tenantId);
+    const hazirlik = onayKalemleriniHazirla(rapor, secimler);
+    let sonuc: AwbOnaySonucu;
+    if (hazirlik.reddedilenler.length > 0)
+      sonuc = { basarili: false, uygulananlar: [], reddedilenler: hazirlik.reddedilenler };
+    else if (hazirlik.kalemler.length === 0)
+      sonuc = { basarili: true, uygulananlar: hazirlik.tekrarlar, reddedilenler: [] };
+    else {
+      const yazilan = await awbEslesmeleriniOnayla(
+        tenantId,
+        userId,
+        { dosyaAdi: manifest.dosyaAdi, sha256: manifest.sha256 },
+        hazirlik.kalemler
+      );
+      sonuc = yazilan.basarili
+        ? { ...yazilan, uygulananlar: [...hazirlik.tekrarlar, ...yazilan.uygulananlar] }
+        : yazilan;
+    }
+    const yeni = sonuc.uygulananlar.filter((item) => !item.tekrar).length;
     res.json({
       ...sonuc,
       mesaj: sonuc.basarili
-        ? `${yazilan} AWB kodu təsdiqlənərək sifarişlərə yazıldı.`
+        ? `${yeni} AWB kodu təsdiqlənərək sifarişlərə yazıldı.`
         : 'Seçilən eşləşdirmələrin bəziləri tətbiq edilə bilmədi; heç bir sifariş dəyişdirilmədi.',
     });
   } catch (error) {

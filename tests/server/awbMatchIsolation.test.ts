@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import * as XLSX from 'xlsx';
 import { createApp } from '../../src/server';
 import { setSiparislerVeritabani, siparislerVeritabani } from '../../src/server/services/state';
+import { awbOnayKayitlari } from '../../src/server/services/kargo/awbMatchStore';
 import { supabase } from '../../src/server/services/supabase';
 import { loginFixture } from './helpers/session';
 
@@ -95,41 +96,64 @@ describe('AWB matching routes stay inside the requesting tenant', () => {
     expect(JSON.stringify(response.body)).not.toContain('a-order');
   });
 
-  it('confirmation cannot write another tenant order', async () => {
+  it('confirmation cannot write, or log an approval for, another tenant order', async () => {
     const before = structuredClone(recordOf('b-order'));
-    const response = await ownerA
-      .post('/api/kargo/manifesto-eslestirme/onayla')
-      .send({ eslesmeler: [{ siparisId: 'b-order', takipNo: 'AWB-0001' }] });
+    const response = await ownerA.post('/api/kargo/manifesto-eslestirme/onayla').send({
+      dosya_base64: manifest([['AWB-0001', 'Aytən Məmmədova', '+994552843911', '1']]),
+      dosya_adi: 'a.xlsx',
+      secimler: [{ satirNo: 1, siparisId: 'b-order' }],
+    });
+    // b-order is not even a candidate for tenant A, so the selection is rejected.
     expect(response.body).toMatchObject({
       basarili: false,
       uygulananlar: [],
-      reddedilenler: [{ siparisId: 'b-order', sebep: 'SIPARIS_BULUNAMADI' }],
+      reddedilenler: [{ satirNo: 1, siparisId: 'b-order', sebep: 'ONERI_GECERSIZ' }],
     });
     expect(recordOf('b-order')).toEqual(before);
+    for (const tenant of [TENANT_A, TENANT_B])
+      expect(awbOnayKayitlari(tenant).some((record) => record.siparisId === 'b-order')).toBe(false);
   });
 
   it('another tenant AWB neither blocks nor changes this tenant confirmation', async () => {
-    const response = await ownerA
-      .post('/api/kargo/manifesto-eslestirme/onayla')
-      .send({ eslesmeler: [{ siparisId: 'a-order', takipNo: SHARED_AWB }] });
+    const response = await ownerA.post('/api/kargo/manifesto-eslestirme/onayla').send({
+      dosya_base64: manifest([[SHARED_AWB, 'Aytən Məmmədova', '+994552843911', '1']]),
+      dosya_adi: 'a.xlsx',
+      secimler: [{ satirNo: 1, siparisId: 'a-order' }],
+    });
     expect(response.body.basarili).toBe(true);
     expect(recordOf('a-order')?.uluslararasi_kargo_kodu).toBe(SHARED_AWB);
     expect(recordOf('b-order')?.uluslararasi_kargo_kodu).toBe('');
     expect(recordOf('b-labelled')?.lojistik_durumu).toBe('KANADA_DEPO');
   });
 
+  it('approval records are written and listed only for the confirming tenant', async () => {
+    const response = await ownerB.post('/api/kargo/manifesto-eslestirme/onayla').send({
+      dosya_base64: manifest([['AWB-B-0042', 'Aytən Məmmədova', '+994552843911', '1']]),
+      dosya_adi: 'b.xlsx',
+      secimler: [{ satirNo: 1, siparisId: 'b-order' }],
+    });
+    expect(response.body.basarili).toBe(true);
+    const own = awbOnayKayitlari(TENANT_B).filter((record) => record.siparisId === 'b-order');
+    expect(own).toEqual([expect.objectContaining({ tenantId: TENANT_B, awb: 'AWB-B-0042' })]);
+    expect(awbOnayKayitlari(TENANT_A).some((record) => record.siparisId === 'b-order')).toBe(false);
+    expect(awbOnayKayitlari(TENANT_A).every((record) => record.tenantId === TENANT_A)).toBe(true);
+    expect(recordOf('a-order')?.uluslararasi_kargo_kodu).not.toBe('AWB-B-0042');
+  });
+
   it('rejects a header or body override to another tenant before the route runs', async () => {
     const header = await ownerA
       .post('/api/kargo/manifesto-eslestirme/onayla')
       .set('x-tenant-id', TENANT_B)
-      .send({ eslesmeler: [{ siparisId: 'b-order', takipNo: 'AWB-0001' }] });
+      .send({
+        dosya_base64: manifest([['AWB-0001', 'X', '', '']]),
+        secimler: [{ satirNo: 1, siparisId: 'b-order' }],
+      });
     const body = await ownerA
       .post('/api/kargo/manifesto-eslestirme/oneriler')
       .send({ tenantId: TENANT_B, dosya_base64: manifest([[SHARED_AWB, 'X', '', '']]) });
     expect([header.status, body.status]).toEqual([403, 403]);
     expect(recordOf('b-order')?.uluslararasi_kargo_kodu).toBe('');
   });
-
   it('keeps repository data files unchanged and uses no live database', () => {
     expect(supabase).toBeNull();
     expect(readProjectData()).toEqual(projectDataBefore);

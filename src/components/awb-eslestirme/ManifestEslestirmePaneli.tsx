@@ -20,6 +20,7 @@ const RED_SEBEBI: Record<string, string> = {
   TESLIM_EDILDI: 'sifariş təhvil verilib',
   MEVCUT_AWB: 'sifarişin artıq AWB-si var',
   AWB_BASKA_SIPARISTE: 'bu AWB başqa sifarişdədir',
+  ONERI_GECERSIZ: 'bu seçim artıq təklif deyil; təklifləri yeniləyin',
 };
 
 const OZET_SIRASI: Array<[SatirDurumu, string]> = [
@@ -75,7 +76,7 @@ export default function ManifestEslestirmePaneli({ dosyaBase64, dosyaAdi, onKapa
     () =>
       (rapor?.satirlar ?? []).flatMap((satir: ManifestSatirOnerisi): EslesmeSecimi[] => {
         const siparisId = secimler[satir.satirNo];
-        return siparisId ? [{ siparisId, takipNo: satir.takipNo, agirlikKg: satir.agirlikKg }] : [];
+        return siparisId ? [{ satirNo: satir.satirNo, siparisId }] : [];
       }),
     [rapor, secimler]
   );
@@ -99,7 +100,7 @@ export default function ManifestEslestirmePaneli({ dosyaBase64, dosyaAdi, onKapa
     setOnaylaniyor(true);
     setHata(null);
     try {
-      const sonucVerisi = await eslesmeleriOnayla(secilenler);
+      const sonucVerisi = await eslesmeleriOnayla(dosyaBase64, dosyaAdi, secilenler);
       setSonuc(sonucVerisi);
       if (sonucVerisi.basarili) {
         await onOnaylandi();
@@ -192,8 +193,8 @@ export default function ManifestEslestirmePaneli({ dosyaBase64, dosyaAdi, onKapa
           {sonuc.reddedilenler.length > 0 && (
             <ul className="mt-2 space-y-0.5 list-disc pl-5">
               {sonuc.reddedilenler.map((red: OnaySonucu['reddedilenler'][number]) => (
-                <li key={`${red.siparisId}-${red.takipNo}`}>
-                  <span className="font-mono">{red.takipNo}</span>: {RED_SEBEBI[red.sebep] ?? red.sebep}
+                <li key={`${red.satirNo}-${red.siparisId}`}>
+                  <span className="font-mono">{red.takipNo || `Sətir ${red.satirNo}`}</span>: {RED_SEBEBI[red.sebep] ?? red.sebep}
                   {red.mevcutAwb ? ` (${red.mevcutAwb})` : ''}
                 </li>
               ))}

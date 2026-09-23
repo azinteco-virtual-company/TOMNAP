@@ -122,7 +122,7 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-upload-migrations.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/private-storage.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/list-pagination.sql
-          psql -X -v ON_ERROR_STOP=1 -f tests/sql/awb-match-confirmation.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/awb-match-approvals.sql
           node tests/sql/inbox-concurrency.mjs
           node tests/sql/courier-concurrency.mjs
           node tests/sql/list-pagination-concurrency.mjs

@@ -52,17 +52,23 @@ export interface EslesmeRaporu {
   ozet: Partial<Record<SatirDurumu, number>>;
 }
 
+/** One suggested order chosen for one manifest row; the server derives the rest. */
 export interface EslesmeSecimi {
+  satirNo: number;
   siparisId: string;
-  takipNo: string;
-  agirlikKg: number | null;
 }
 
 export interface OnaySonucu {
   basarili: boolean;
   mesaj: string;
-  uygulananlar: Array<{ siparisId: string; takipNo: string; tekrar: boolean }>;
-  reddedilenler: Array<{ siparisId: string; takipNo: string; sebep: string; mevcutAwb?: string }>;
+  uygulananlar: Array<{ satirNo: number; siparisId: string; takipNo: string; tekrar: boolean }>;
+  reddedilenler: Array<{
+    satirNo: number;
+    siparisId: string;
+    takipNo: string;
+    sebep: string;
+    mevcutAwb?: string;
+  }>;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -92,12 +98,20 @@ export async function onerileriGetir(
   };
 }
 
-/** Writes only the pairs the user selected; any rejection writes nothing. */
-export async function eslesmeleriOnayla(secimler: EslesmeSecimi[]): Promise<OnaySonucu> {
+/**
+ * Sends the same manifest again with the selections. The server recomputes the
+ * suggestions, accepts only suggested pairs and logs each written AWB with its
+ * match type and name score. Any rejection writes nothing.
+ */
+export async function eslesmeleriOnayla(
+  dosyaBase64: string,
+  dosyaAdi: string,
+  secimler: EslesmeSecimi[]
+): Promise<OnaySonucu> {
   const response = await fetchWithRetry('/api/kargo/manifesto-eslestirme/onayla', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ eslesmeler: secimler }),
+    body: JSON.stringify({ dosya_base64: dosyaBase64, dosya_adi: dosyaAdi, secimler }),
     timeoutMs: 30_000,
   });
   const data: unknown = await response.json();
