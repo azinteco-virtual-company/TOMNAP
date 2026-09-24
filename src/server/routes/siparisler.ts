@@ -779,6 +779,7 @@ router.patch('/siparisler/:id', async (req, res) => {
       )
         throw new PublicResourceError('Kurye ataması için kurye atama işlemini kullanın.', 403);
       if (key === 'kalan_tutar') continue; // Calculated by the server.
+      if (key === 'duzeltme_gerekcesi') continue; // Reason for a collection correction, checked below.
       if (!allowed.has(key))
         throw new PublicResourceError('Bu alanı değiştirme yetkiniz yok: ' + key, 403);
       updates[key] = value;
@@ -802,6 +803,37 @@ router.patch('/siparisler/:id', async (req, res) => {
       changed[key] = Number(changed[key]);
       if (!Number.isFinite(changed[key]) || changed[key] < 0)
         throw new PublicResourceError('Geçersiz sayısal değer.', 400);
+    }
+    // A recorded collection is never silently erased: only the patron may lower
+    // it, with a reason that is appended to the order history.
+    const oncekiAlinan = Number(formatted.alinan_tutar) || 0;
+    if (changed.alinan_tutar < oncekiAlinan) {
+      if (role !== 'PATRON')
+        throw new PublicResourceError(
+          'Kaydedilmiş tahsilat azaltılamaz. Düzeltmeyi patron gerekçeyle yapabilir.',
+          403
+        );
+      const gerekce =
+        typeof req.body.duzeltme_gerekcesi === 'string' ? req.body.duzeltme_gerekcesi.trim() : '';
+      if (gerekce.length < 5 || gerekce.length > 500)
+        throw new PublicResourceError(
+          'Tahsilatı azaltmak için 5-500 karakterlik bir gerekçe gerekli.',
+          400
+        );
+      changed.islem_gecmisi = [
+        ...(Array.isArray(formatted.islem_gecmisi) ? formatted.islem_gecmisi : []),
+        {
+          tarih: changed.guncellenme_tarihi,
+          yapan_rol: role,
+          yapan_kisi: (req as any).auth?.userId || '',
+          eylem: 'TAHSILAT_AZALTILDI',
+          aciklama:
+            `${oncekiAlinan} → ${changed.alinan_tutar} ${changed.para_birimi || ''}: ${gerekce}`.replace(
+              /\s+:/,
+              ':'
+            ),
+        },
+      ];
     }
     changed.kalan_tutar = Math.max(0, changed.toplam_tutar - changed.alinan_tutar);
     changed.finans_durumu =

@@ -242,3 +242,12 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     (`kalan_toplam_borc`) müşteri listesinin parçası ve müşteriler testinde
     kapsanıyor.
     *Soru:* Kasa derken ayrı bir ekran ya da rapor mu kastediliyor?
+
+20. **Tahsilatın azaltılması (A3, varsayım).** Kaydedilmiş `alinan_tutar` yalnız
+    **PATRON** tarafından azaltılabilir. `SUPER_ADMIN` dahil diğer roller 403 alır.
+    - **Gerekçe:** Patron 5-500 karakterlik bir gerekçe vermek zorunda. Değişiklik
+      siparişin `islem_gecmisi`'ne `TAHSILAT_AZALTILDI` olarak yazılır.
+    - **Arayüz:** Tablodaki "BEKLIYOR" seçimi diğer rollere kapalı; patronda gerekçe
+      tarayıcı istemiyle soruluyor. Ödeme defteri (A10) gelince düzeltme ters kayıtla
+      yapılacak (K16).
+    *Soru:* SUPER_ADMIN'in de düzeltebilmesi gerekir mi?
