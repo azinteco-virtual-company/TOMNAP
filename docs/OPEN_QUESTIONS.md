@@ -242,3 +242,15 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     (`kalan_toplam_borc`) müşteri listesinin parçası ve müşteriler testinde
     kapsanıyor.
     *Soru:* Kasa derken ayrı bir ekran ya da rapor mu kastediliyor?
+
+## Faz A
+
+19. **AI ayrıştırmada müşteri eşleştirme (A1, varsayım).** Gemini'ye müşteri listesi
+    gitmiyor; eşleştirme ayrıştırmadan sonra sunucuda yapılıyor:
+    - **Telefon:** Tenant'ta normalize telefonu **tek** bir müşteriyle tam eşleşirse sipariş o
+      müşteriye bağlanır. Ad kayıtlı ada düzeltilir ve eksik adres ile şehir karttan dolar;
+      bu, eski AI davranışının sunucu karşılığı.
+    - **Ad:** Benzerlik yalnız `musteri_adaylari` olarak döner, hiçbir zaman otomatik
+      bağlanmaz. Ad adayı varsa yeni müşteri kartı da açılmaz; sipariş bağsız kalır.
+    - **Arayüz:** Adaylar arasından seçim yapılan arayüz henüz yok; A9'da eklenecek.
+    *Soru:* Ad adayı varken de yeni kart açılması mı tercih edilir?
