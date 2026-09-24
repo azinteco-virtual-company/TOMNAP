@@ -53,6 +53,8 @@ export const ROL_GRUPLARI = {
   FINANCE: [...SALES, 'BAKU_FINANS'],
   /** AWB, kargo ve kurye ataması. */
   SHIPPING: [...OWNERS, ...BUYERS],
+  /** Kur okuma ve girişi (v2 rol matrisi): sahipler, satın almacılar, Bakü finans. */
+  RATES: [...OWNERS, ...BUYERS, 'BAKU_FINANS'],
   ALL: [...STAFF, 'BAKU_KURYE'],
 } as const satisfies Record<string, readonly KullaniciRolu[]>;
 

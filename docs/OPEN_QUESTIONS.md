@@ -281,3 +281,19 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       gösteriyor. Eskiden anahtar eksikse 5 gösteriyordu; sunucu ise 0 uyguluyordu.
     *Soru:* Varsayılan 2 uygun mu? ABD satın almacısı v1'de Bakü kurye ataması
     yapabilmeli mi?
+
+23. **Kurlar ve v2 ayarları (A7, varsayım).**
+    - **Kur:** "1 birim CAD/USD = X AZN" biçiminde tutuluyor; 0 ile 100 arasında, en çok
+      6 ondalık. Tarih 2000'den eski ya da yarından ileri olamaz.
+    - **`kaynak`:** en çok 100 karakterlik isteğe bağlı serbest metin (ör. "CBAR"). K4'e
+      göre kur her zaman elle giriliyor.
+    - **Düzeltme ve güncel kur:** Düzeltme yeni bir satırdır; güncel kur, o para birimi
+      için en son girilen satırdır (tarihe göre değil, giriş zamanına göre).
+    - **Kurları okuma:** Girebilen rollerle aynı: PATRON, SUPER_ADMIN, satın almacılar,
+      BAKU_FINANS. Satış rolü kurları görmüyor.
+    - **Ayarlar:** Yalnız PATRON ve SUPER_ADMIN okuyup değiştirebiliyor. Varsayılan prim
+      oranı kişisel prim verisi sayılmadı, bu yüzden K15'in dışında tutuldu.
+    - **Yabancı anahtar:** İki tabloda da yok. Böylece `firmalar`'a dokunulmuyor ve firma
+      silme davranışı değişmiyor.
+    - **Arayüz:** Bu bölümler yalnız `/v2` kabuğunda. `localStorage` kuru henüz yerinde.
+    *Soru:* Satış rolü kurları görmeli mi? SUPER_ADMIN varsayılan prim oranını görmeli mi?
