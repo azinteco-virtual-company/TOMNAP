@@ -25,7 +25,6 @@ import { KanbanGorunumu } from './components/KanbanGorunumu';
 import { MobilAltNav } from './components/MobilAltNav';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { VeritabaniYonetimModal } from './components/VeritabaniYonetimModal';
-import { IzolasyonDogrulamaModal } from './components/IzolasyonDogrulamaModal';
 import { KargoEntegrasyonModal } from './components/KargoEntegrasyonModal';
 import { LandingPage } from './components/landing/LandingPage';
 import { ButikQeydiyyatModal } from './components/landing/ButikQeydiyyatModal';
@@ -123,7 +122,6 @@ export default function App() {
 
   // Local UI State (Modallar ve Geçici Seçimler)
   const [veritabaniModalAcik, setVeritabaniModalAcik] = useState(false);
-  const [izolasyonModalAcik, setIzolasyonModalAcik] = useState(false);
   const [seciliKodSekmesi, setSeciliKodSekmesi] = useState<string>('kurulum');
   const [mobilMenuAcik, setMobilMenuAcik] = useState(false);
   const [seciliSiparis, setSeciliSiparis] = useState<Siparis | null>(null);
@@ -164,7 +162,6 @@ export default function App() {
     setWhatsappSiparis(null);
     setSilinecekSiparis(null);
     setVeritabaniModalAcik(false);
-    setIzolasyonModalAcik(false);
     setKargoManifestAcik(false);
     setKargoModalAcik(false);
     setBakuTahsilatAcik(false);
@@ -456,7 +453,6 @@ export default function App() {
           onVeritabaniModalAc={() => setVeritabaniModalAcik(true)}
           onYeniFirmaAc={() => setVeritabaniModalAcik(true)}
           firmaSiparisSayilari={firmaSiparisSayilari}
-          onIzolasyonModalAc={() => setIzolasyonModalAcik(true)}
           onKargoModalAc={() => setKargoModalAcik(true)}
           onVitrinAc={() => navigate('/')}
           onDavetModalAc={() => setDavetModalAcik(true)}
@@ -840,14 +836,6 @@ export default function App() {
         bildirimGoster={bildirimGoster}
         seciliFirmaId={seciliFirmaId}
         onFirmaSec={setSeciliFirmaId}
-      />
-
-      {/* Tenant İzolasiya & Təhlükəsizlik Testi Modalı */}
-      <IzolasyonDogrulamaModal
-        acik={izolasyonModalAcik}
-        onKapat={() => setIzolasyonModalAcik(false)}
-        seciliFirmaId={seciliFirmaId}
-        firmalar={firmalar}
       />
 
       {/* Çoxlu Kargo (Multi-Carrier) & Aramex API İnteqrasiya Modalı */}

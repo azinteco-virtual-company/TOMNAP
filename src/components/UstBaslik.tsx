@@ -62,7 +62,6 @@ interface UstBaslikProps {
   onVeritabaniModalAc?: () => void;
   onYeniFirmaAc?: () => void;
   firmaSiparisSayilari?: Record<string, number>;
-  onIzolasyonModalAc?: () => void;
   onKargoModalAc?: () => void;
   onVitrinAc?: () => void;
   onDavetModalAc?: () => void;
@@ -91,7 +90,6 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
   onVeritabaniModalAc,
   onYeniFirmaAc,
   firmaSiparisSayilari = {},
-  onIzolasyonModalAc,
   onKargoModalAc,
   onVitrinAc,
   onDavetModalAc,
@@ -191,7 +189,6 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
               onFirmaSec={onFirmaSec}
               onYeniFirmaAc={onYeniFirmaAc}
               siparisSayilari={firmaSiparisSayilari}
-              onIzolasyonModalAc={onIzolasyonModalAc}
             />
           )
         ) : (

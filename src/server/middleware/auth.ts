@@ -31,11 +31,7 @@ const rules: Rule[] = [
   ['POST', /^\/api\/firmalar$/, ['SUPER_ADMIN']],
   ['PATCH', /^\/api\/firmalar\/[^/]+\/onay$/, ['SUPER_ADMIN']],
   ['DELETE', /^\/api\/firmalar\/[^/]+$/, ['SUPER_ADMIN']],
-  [
-    'GET',
-    /^\/api\/(sistem-durum|tenant\/izolasyon-testi|veritabani\/(durum|yedek-al))$/,
-    ['SUPER_ADMIN'],
-  ],
+  ['GET', /^\/api\/(sistem-durum|veritabani\/(durum|yedek-al))$/, ['SUPER_ADMIN']],
   [
     'POST',
     /^\/api\/(veritabani\/(temizle|demo-yukle|yedek-yukle)|ornek-verileri-yukle)$/,

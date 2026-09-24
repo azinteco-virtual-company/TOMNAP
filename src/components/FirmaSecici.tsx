@@ -8,7 +8,6 @@ interface FirmaSeciciProps {
   onFirmaSec: (firmaId: string) => void;
   onYeniFirmaAc?: () => void;
   siparisSayilari?: Record<string, number>;
-  onIzolasyonModalAc?: () => void;
 }
 
 export const FirmaSecici: React.FC<FirmaSeciciProps> = ({
@@ -17,7 +16,6 @@ export const FirmaSecici: React.FC<FirmaSeciciProps> = ({
   onFirmaSec,
   onYeniFirmaAc,
   siparisSayilari = {},
-  onIzolasyonModalAc,
 }) => {
   const [acik, setAcik] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -169,24 +167,9 @@ export const FirmaSecici: React.FC<FirmaSeciciProps> = ({
           </div>
 
           <div className="pt-1.5 px-2 border-t border-slate-100 space-y-1">
-            {onIzolasyonModalAc && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAcik(false);
-                  onIzolasyonModalAc();
-                }}
-                className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                  <span>İzolyasiya & Baza Yoxlaması</span>
-                </span>
-                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                  Butik üzrə giriş
-                </span>
-              </button>
-            )}
+            <p className="px-3 py-1.5 text-[11px] text-slate-500">
+              Tenant izolasyonu: otomatik testlerle doğrulanıyor (CI)
+            </p>
 
             {onYeniFirmaAc && (
               <button
