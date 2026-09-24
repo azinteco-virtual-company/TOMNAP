@@ -21,6 +21,9 @@ var KULLANICILAR_DOSYA_YOLU = path.join(DATA_DIR, "kullanicilar.json");
 function isAwbReviewEnabled() {
   return process.env.FF_AWB_REVIEW === "true";
 }
+function isV2FlowEnabled() {
+  return process.env.FF_V2_FLOW === "true";
+}
 var RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 var EMAIL_FROM = process.env.EMAIL_FROM || "TOMNAP Platform <onboarding@resend.dev>";
 var APP_URL = process.env.APP_URL || (IS_PRODUCTION ? "https://tomnap.com" : `http://localhost:${PORT}`);
@@ -4251,6 +4254,8 @@ var rules = [
   // Human-confirmed AWB matching (FF_AWB_REVIEW): same roles that may edit an order's AWB.
   ["POST", /^\/api\/kargo\/manifesto-eslestirme\/(oneriler|onayla)$/, SHIPPING],
   ["GET", /^\/api\/proxy-gorsel$/, STAFF2],
+  // v2 (FF_V2_FLOW): kapı bayrak kapalıyken bu kurallara hiç ulaşılmadan 404 döner.
+  ["GET", /^\/api\/v2\/durum$/, STAFF2],
   ["GET", /^(?:\/api)?\/uploads\/[^/]+$/, STAFF2],
   [
     "POST",
@@ -10716,6 +10721,18 @@ router10.post("/auth/cikis", async (req, res) => {
 });
 var auth_default = router10;
 
+// src/server/routes/v2/index.ts
+import { Router as Router11 } from "express";
+function v2Kapisi(_req, res, next) {
+  if (isV2FlowEnabled()) return next();
+  res.status(404).json({ basarili: false, hata: "Bu funksiya aktiv deyil." });
+}
+var router11 = Router11();
+router11.get("/durum", (_req, res) => {
+  res.json({ basarili: true, v2: true });
+});
+var v2_default = router11;
+
 // src/server/index.ts
 function createApp({ trustProxy = false } = {}) {
   const app2 = express();
@@ -10749,6 +10766,7 @@ function createApp({ trustProxy = false } = {}) {
     ],
     girisLimiter
   );
+  app2.use("/api/v2", v2Kapisi);
   app2.use(apiKeyAuth());
   app2.get(["/health", "/api/health"], (_req, res) => res.json({ basarili: true }));
   app2.use("/api/", genelApiLimiter);
@@ -10773,6 +10791,7 @@ function createApp({ trustProxy = false } = {}) {
     app2.use(basePath, auth_default);
   };
   mountRoutes("/api");
+  app2.use("/api/v2", v2_default);
   app2.use(errorHandler);
   return app2;
 }
