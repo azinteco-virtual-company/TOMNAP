@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   EKIP_ROLLERI,
+  EKSIK_ANAHTAR_KOTASI,
   PAKET_ROL_LIMITLERI,
   ROLLER,
   ROL_GRUPLARI,
@@ -11,11 +12,29 @@ import {
   gecerliRolMu,
   ilkKullaniciSayilari,
   rolGrubunda,
+  rolKotasi,
 } from '../../src/shared/roller';
 
 const CATALOG = path.join('src', 'shared', 'roller.ts');
 const ROLE = ROLLER.join('|');
 const literal = new RegExp(`['"\`](${ROLE})['"\`]`, 'g');
+
+/** Body of the newest migration that (re)defines the given SQL function. */
+function latestSqlDefinition(name: string): string {
+  const dir = path.join('supabase', 'migrations');
+  const pattern = new RegExp(
+    `FUNCTION public\\.${name}\\([^)]*\\)[\\s\\S]*?\\$\\$([\\s\\S]*?)\\$\\$`
+  );
+  const bodies = fs
+    .readdirSync(dir)
+    .filter((file) => file.endsWith('.sql'))
+    .sort()
+    .map((file) => fs.readFileSync(path.join(dir, file), 'utf8').match(pattern))
+    .filter((match): match is RegExpMatchArray => match !== null)
+    .map((match) => match[1]);
+  expect(bodies.length, name).toBeGreaterThan(0);
+  return bodies[bodies.length - 1];
+}
 
 function sourceFiles(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -71,21 +90,22 @@ describe('role catalog is the single source of roles (A4)', () => {
     expect(handWrittenRoleLists("r === 'BAKU_KURYE' ? a : b; const c = ['PATRON'];")).toEqual([]);
   });
 
-  it('matches the latest SQL definition of tomnap_gecerli_rol', () => {
-    const dir = path.join('supabase', 'migrations');
-    const definitions = fs
-      .readdirSync(dir)
-      .filter((file) => file.endsWith('.sql'))
-      .sort()
-      .map((file) => fs.readFileSync(path.join(dir, file), 'utf8'))
-      .map((sql) =>
-        sql.match(/FUNCTION public\.tomnap_gecerli_rol\(p_rol text\)[\s\S]*?\$\$([\s\S]*?)\$\$/)
-      )
-      .filter((match): match is RegExpMatchArray => match !== null);
-    expect(definitions.length).toBeGreaterThan(0);
-    const body = definitions[definitions.length - 1][1];
-    const sqlRoles = [...body.matchAll(/'([A-Z_]+)'/g)].map((match) => match[1]);
-    expect([...sqlRoles].sort()).toEqual([...EKIP_ROLLERI].sort());
+  it('matches the latest SQL definitions (roles, quota defaults, AWB approvers)', () => {
+    const quoted = (body: string) =>
+      [...body.matchAll(/'([A-Z_]+)'/g)].map((match) => match[1]).sort();
+    expect(quoted(latestSqlDefinition('tomnap_gecerli_rol'))).toEqual([...EKIP_ROLLERI].sort());
+    const defaults = Object.fromEntries(
+      [
+        ...latestSqlDefinition('tomnap_rol_kota_varsayilani').matchAll(
+          /WHEN '([A-Z_]+)' THEN (\d+)/g
+        ),
+      ].map((match) => [match[1], Number(match[2])])
+    );
+    expect(defaults).toEqual(EKSIK_ANAHTAR_KOTASI);
+    const approvers = latestSqlDefinition('tomnap_approve_awb_matches').match(
+      /u\.rol IN \(([^)]*)\)/
+    );
+    expect(approvers && quoted(approvers[1])).toEqual([...ROL_GRUPLARI.SHIPPING].sort());
   });
 
   it('keeps the team roles, groups and quota defaults consistent', () => {
@@ -106,5 +126,10 @@ describe('role catalog is the single source of roles (A4)', () => {
     });
     // Each call returns a fresh object: callers may mutate it.
     expect(ilkKullaniciSayilari()).not.toBe(ilkKullaniciSayilari());
+    // A missing key falls back only for ABD_SATINALMA (K18); other roles keep 0.
+    expect(rolKotasi({ PATRON: 1 }, 'ABD_SATINALMA')).toBe(2);
+    expect(rolKotasi({ PATRON: 1 }, 'KANADA_SATINALMA')).toBe(0);
+    expect(rolKotasi({ ABD_SATINALMA: 1 }, 'ABD_SATINALMA')).toBe(1);
+    expect(rolKotasi(undefined, 'ABD_SATINALMA')).toBe(2);
   });
 });
