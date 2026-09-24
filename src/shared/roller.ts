@@ -13,6 +13,7 @@ export const PLATFORM_ROLU = 'SUPER_ADMIN';
 export const EKIP_ROLLERI = [
   'PATRON', // Butik sahibi: finans, kurye ve sipariş tam kontrol; sistem kodları hariç
   'KANADA_SATINALMA', // Kanada satın alma fişleri, kargo belgeleri, kurye atama
+  'ABD_SATINALMA', // ABD'de satın alma ve ABD deposunda kabul (K18); v1'de Kanada'nın eşi
   'SATIS_SORUMLUSU', // Görsel ve WhatsApp siparişi girer, onay bekleyenleri işler
   'BAKU_FINANS', // Bakü tahsilat, kasa ve kalan borç kapama
   'BAKU_KURYE', // Yalnız kendi kurye kaydına açıkça atanmış paketleri görür
@@ -37,7 +38,9 @@ export function ekipRoluMu(value: unknown): value is EkipRolu {
 
 const OWNERS = [PLATFORM_ROLU, 'PATRON'] as const;
 const SALES = [...OWNERS, 'SATIS_SORUMLUSU'] as const;
-const STAFF = [...SALES, 'KANADA_SATINALMA', 'BAKU_FINANS'] as const;
+/** Satın almacılar: ülkeye göre (CA, US) aynı yetkiler. */
+const BUYERS = ['KANADA_SATINALMA', 'ABD_SATINALMA'] as const;
+const STAFF = [...SALES, ...BUYERS, 'BAKU_FINANS'] as const;
 
 /** Yetki grupları: allowlist, menü ve alan yetkileri bu gruplardan türetilir. */
 export const ROL_GRUPLARI = {
@@ -45,10 +48,11 @@ export const ROL_GRUPLARI = {
   STAFF,
   OWNERS,
   SALES,
-  PURCHASING: [...SALES, 'KANADA_SATINALMA'],
+  BUYERS,
+  PURCHASING: [...SALES, ...BUYERS],
   FINANCE: [...SALES, 'BAKU_FINANS'],
   /** AWB, kargo ve kurye ataması. */
-  SHIPPING: [...OWNERS, 'KANADA_SATINALMA'],
+  SHIPPING: [...OWNERS, ...BUYERS],
   ALL: [...STAFF, 'BAKU_KURYE'],
 } as const satisfies Record<string, readonly KullaniciRolu[]>;
 
@@ -67,6 +71,7 @@ export type Paket = 'BASLANGIC' | 'PRO' | 'ENTERPRISE';
 export const VARSAYILAN_ROL_LIMITLERI: Readonly<RolLimitleri> = {
   PATRON: 1,
   KANADA_SATINALMA: 2,
+  ABD_SATINALMA: 2,
   SATIS_SORUMLUSU: 4,
   BAKU_FINANS: 2,
   BAKU_KURYE: 10,
@@ -77,6 +82,7 @@ export const PAKET_ROL_LIMITLERI: Readonly<Record<Paket, Readonly<RolLimitleri>>
   BASLANGIC: {
     PATRON: 1,
     KANADA_SATINALMA: 1,
+    ABD_SATINALMA: 1,
     SATIS_SORUMLUSU: 1,
     BAKU_FINANS: 1,
     BAKU_KURYE: 1,
@@ -84,6 +90,7 @@ export const PAKET_ROL_LIMITLERI: Readonly<Record<Paket, Readonly<RolLimitleri>>
   PRO: {
     PATRON: 1,
     KANADA_SATINALMA: 2,
+    ABD_SATINALMA: 2,
     SATIS_SORUMLUSU: 2,
     BAKU_FINANS: 2,
     BAKU_KURYE: 5,
@@ -91,11 +98,33 @@ export const PAKET_ROL_LIMITLERI: Readonly<Record<Paket, Readonly<RolLimitleri>>
   ENTERPRISE: {
     PATRON: 2,
     KANADA_SATINALMA: 5,
+    ABD_SATINALMA: 5,
     SATIS_SORUMLUSU: 10,
     BAKU_FINANS: 5,
     BAKU_KURYE: 25,
   },
 };
+
+/**
+ * Kaydında anahtarı olmayan rolün kotası. Mevcut firmaların `rol_limitleri`
+ * değiştirilmez (K18): ABD_SATINALMA anahtarı yoksa varsayılana düşer; diğer
+ * rollerde eksik anahtar bugünkü gibi 0 demektir. SQL karşılığı
+ * public.tomnap_rol_kota_varsayilani(text).
+ */
+export const EKSIK_ANAHTAR_KOTASI: Readonly<Partial<RolLimitleri>> = {
+  ABD_SATINALMA: VARSAYILAN_ROL_LIMITLERI.ABD_SATINALMA,
+};
+
+/** Firmanın bir ekip rolü için kotası; kayıtta anahtar yoksa EKSIK_ANAHTAR_KOTASI. */
+export function rolKotasi(
+  limitler: Readonly<Record<string, unknown>> | undefined,
+  rol: EkipRolu
+): number {
+  const kayitli = limitler?.[rol];
+  return kayitli === undefined || kayitli === null
+    ? (EKSIK_ANAHTAR_KOTASI[rol] ?? 0)
+    : Number(kayitli);
+}
 
 /** Yeni firmanın sayaçları: yalnız sahibi (ilk patron) sayılır. */
 export function ilkKullaniciSayilari(): RolLimitleri {
