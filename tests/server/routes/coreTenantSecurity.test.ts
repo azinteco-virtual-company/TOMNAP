@@ -651,7 +651,7 @@ describe('authoritative database ownership and failure behavior', () => {
 });
 
 describe('AI prompt and upload boundaries', () => {
-  it('sends only authorized CRM context and does not write CRM on preview', async () => {
+  it('sends no CRM context to the AI and does not write CRM on preview', async () => {
     const before = structuredClone([state.musterilerVeritabani, state.siparislerVeritabani]);
     environment.ai.mockResolvedValue({
       text: JSON.stringify({
@@ -666,8 +666,9 @@ describe('AI prompt and upload boundaries', () => {
       .send({ ham_mesaj: 'A bag please', otomatik_kaydet: false });
     expect(result.status).toBe(200);
     const args = environment.ai.mock.calls[0][1];
-    expect(JSON.stringify(args.config.systemInstruction)).toContain('Customer tenant-a');
-    expect(JSON.stringify(args.config.systemInstruction)).not.toContain('tenant-b');
+    // No customer directory, not even the tenant's own (CLAUDE.md).
+    expect(JSON.stringify(args)).not.toContain('Customer tenant-a');
+    expect(JSON.stringify(args)).not.toContain('tenant-b');
     expect(result.body.siparis.musteri_id).not.toBe('customer-tenant-b');
     expect([state.musterilerVeritabani, state.siparislerVeritabani]).toEqual(before);
   });
@@ -685,13 +686,22 @@ describe('AI prompt and upload boundaries', () => {
   });
 
   it('stores a new AI customer under the authenticated tenant only', async () => {
+    // A name with no similar customer: similar names are only suggestions and
+    // would not open a new card.
+    environment.ai.mockResolvedValue({
+      text: JSON.stringify({
+        musteri_adi: 'Zümrüd Qasımova',
+        urun_aciklamasi: 'Bag',
+        toplam_tutar: 100,
+      }),
+    });
     const result = await request(app())
       .post('/api/ayristir-siparis')
       .send({ ham_mesaj: 'A bag please' });
     expect(result.status).toBe(200);
-    expect(state.musterilerVeritabani.find((c) => c.ad_soyad === 'New Customer')?.tenant_id).toBe(
-      'tenant-a'
-    );
+    expect(
+      state.musterilerVeritabani.find((c) => c.ad_soyad === 'Zümrüd Qasımova')?.tenant_id
+    ).toBe('tenant-a');
     expect(
       state.musterilerVeritabani.find((c) => c.tenant_id === 'tenant-b')?.toplam_siparis_sayisi
     ).toBe(0);
