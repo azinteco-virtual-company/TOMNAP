@@ -133,6 +133,31 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     *Soru:* `@types/react` ve `@types/react-dom` devDependency olarak eklensin
     mi? (Mevcut bileşenlerde yeni tip hataları ortaya çıkabilir.)
 
+    **Ölçüm (24 Eylül 2026):** Kurulu React 19.3.0 için `@types/react` ve
+    `@types/react-dom` 19.3.0 eklenince tsc **39 hata** verdi. Sınır 30 olduğu
+    için paketler eklenmedi; ayrı bir PR'da ele alınacak.
+
+    Dosya bazında:
+
+    | Dosya | Hata |
+    | --- | --- |
+    | `src/components/OnayBekleyenlerSayfasi.tsx` | 14 |
+    | `src/components/SiparisTablosu.tsx` | 7 |
+    | `src/components/KargoManifestoSayfasi.tsx` | 6 |
+    | `src/components/UrunGorselleriGalerisi.tsx` | 5 |
+    | `src/components/SiparisDetayModal.tsx` | 5 |
+    | `src/components/UstBaslik.tsx` | 1 |
+    | `src/components/GorselAramaLensModal.tsx` | 1 |
+
+    Türler: TS2339 32, TS2551 3, TS2353 2, TS2367 1, TS2322 1.
+
+    Hataların çoğu React'tan değil, istemci tiplerinin koddan geri kalmasından
+    geliyor. Bileşenler, tanımda olmayan alanları kullanıyor:
+    - `Siparis` tipinde: `gumruk_fin_kodu`, `gorsel_url`, `toplam_tutar_cad`,
+      `gumruk_pasaport_no`, `baku_tahsilat_azn` …
+    - `OnayBekleyenMesaj` tipinde: `mesaj_icerigi`, `gonderen`, `tarih`,
+      `tenant_id`.
+
 ## Denetim scripti
 
 14. ✅ **Karar verildi (23 Eylül 2026):** Script production veritabanına karşı salt
