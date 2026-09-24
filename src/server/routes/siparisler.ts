@@ -11,6 +11,7 @@ import { storeTenantImage, assertTenantImageReferences } from './gorsel';
 import { PublicResourceError } from '../services/publicFetch';
 import { supabase } from '../services/supabase';
 import { getGeminiClient, generateContentWithRetryAndFallback } from '../services/gemini';
+import { musteriOner } from '../services/musteriOneri';
 import {
   hazirlaSupabasePayload,
   formatlaSiparis,
@@ -128,32 +129,15 @@ router.post('/ayristir-siparis', async (req, res) => {
       });
     }
 
-    // Mevcut müşterilerin özet listesi (Gemini akıllı eşleştirme ve yazım hatası düzeltmesi için)
-    const tenantCustomers = await scopedCustomers(hedefTenantId);
-    const musterilerRehberi = tenantCustomers.map((m) => ({
-      id: m.id,
-      ad_soyad: m.ad_soyad,
-      telefon: m.telefon,
-      sehir: m.sehir,
-      adres: m.adres,
-      musteri_tipi: m.musteri_tipi,
-    }));
-
     const systemInstruction = `Sen Kanada'dan Azerbaycan'a (Bakü, Gence ve diğer şehirler) Instagram Live, Reels, DM ve WhatsApp üzerinden ürün satışı yapan uluslararası bir butik e-ticaret ve lojistik operasyonunun Uzman Sipariş ve Müşteri Ayrıştırma Yapay Zekasısın.
 
 Müşteriler siparişlerini son derece dağınık, günlük konuşma diliyle veya Azerbaycan Türkçesi / Türkiye Türkçesi karışımı karmaşık mesajlarla iletmektedirler.
 
 GÖREVİN VE ÇOK KRİTİK KURALLAR:
-1. MÜŞTERİ TANIMA VE YAZIM HATASI DÜZELTME (DEDUPLICATION & AUTOCORRECT):
-   Sistemde kayıtlı mevcut müşteriler listesi:
-   ${JSON.stringify(musterilerRehberi, null, 2)}
-
-   - Mesaj veya görseldeki telefon numarası (örn: "+994 50 694 25 25") mevcut bir müşteriyle eşleşiyorsa, mesajda isim yanlış yazılmış olsa bile (örn: "Kemake" -> "Kəmalə Bədirbəyli") müşterinin doğru ve resmi adını 'musteri_adi' alanına yaz!
-   - duzeltilen_yazim_hatasi: Eğer isimde bir harf/yazım hatası düzelttiysen belirt (örn: "Kemake -> Kəmalə Bədirbəyli (Telefon: +994 50 694 25 25 eşleşti)").
-   - eslesen_musteri_id: Eşleşen müşterinin id'sini yaz (örn: "mus-001").
-   - musteri_durumu: Mevcut müşteri eşleştiyse 'MEVCUT_MUSTERI', yeni bir müşteriyse 'YENI_MUSTERI'.
-   - musteri_tipi: Eşleşen müşterinin tipini ata, yoksa mesaja göre 'TANIMADIK' veya akraba/tanıdık olduğunu belirten bir not varsa 'AKRABA_YAKIN' ata.
-   - Teslimat şehri veya adresi mesajda eksik ama mevcut müşteri kartında varsa, otomatik tamamla (Örn: Gəncə, Ozan küçəsi).
+1. MÜŞTERİ BİLGİLERİ (YALNIZCA MESAJDAN ÇIKAR):
+   - Müşterinin adını, telefon numarasını, Instagram kullanıcı adını, şehrini ve adresini yalnızca mesajda ve görsellerde yazdığı gibi çıkar.
+   - Sana hiçbir müşteri listesi verilmez; müşteriyi tanımaya, eşleştirmeye veya adını düzeltmeye çalışma. Eşleştirmeyi sunucu yapar.
+   - musteri_tipi: Mesajda akraba/tanıdık olduğunu belirten bir not varsa 'AKRABA_YAKIN', yoksa 'TANIMADIK'.
 
 2. BİRDEN FAZLA GÖRSEL & BİRDEN FAZLA ÜRÜN ANALİZİ:
    Kullanıcı aynı müşteri için birden fazla ekran görüntüsü veya ürün fotoğrafı eklemiş olabilir:
@@ -233,9 +217,6 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
         type: Type.OBJECT,
         properties: {
           musteri_adi: { type: Type.STRING },
-          musteri_durumu: { type: Type.STRING, enum: ['MEVCUT_MUSTERI', 'YENI_MUSTERI'] },
-          eslesen_musteri_id: { type: Type.STRING },
-          duzeltilen_yazim_hatasi: { type: Type.STRING },
           musteri_tipi: {
             type: Type.STRING,
             enum: ['TANIMADIK', 'SADIK_MUSTERI', 'AKRABA_YAKIN', 'VIP'],
@@ -319,6 +300,16 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
 
     const parsedJson = JSON.parse(geminiResponse.text || '{}');
 
+    // Customer matching happens here, never in the AI prompt (CLAUDE.md): only a
+    // unique exact phone match links a customer; similar names are suggestions.
+    const tenantCustomers = await scopedCustomers(hedefTenantId);
+    const cikarilanAd =
+      typeof parsedJson.musteri_adi === 'string' ? parsedJson.musteri_adi.trim() : '';
+    const { eslesen, adaylar: musteriAdaylari } = musteriOner(tenantCustomers, {
+      telefon: parsedJson.telefon_numarasi,
+      ad: cikarilanAd,
+    });
+
     const alinan = Number(parsedJson.alinan_tutar || 0);
     const toplam = Number(parsedJson.toplam_tutar || alinan);
     const kalan = Math.max(0, toplam - alinan);
@@ -333,11 +324,11 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
         (tumGorseller.length > 0 ? `[${tumGorseller.length} Ekran Görüntüsü & WhatsApp Notu]` : '')
       ).trim(),
       siparis_kaynagi: siparis_kaynagi || 'INSTAGRAM_LIVE',
-      musteri_adi: parsedJson.musteri_adi || 'Bilinmeyen Müşteri',
+      musteri_adi: eslesen?.ad_soyad || cikarilanAd || 'Bilinmeyen Müşteri',
       instagram_kullanici_adi: parsedJson.instagram_kullanici_adi || '',
       telefon_numarasi: parsedJson.telefon_numarasi || '',
-      teslimat_sehri: parsedJson.teslimat_sehri || 'Bakü',
-      teslimat_adresi: parsedJson.teslimat_adresi || '',
+      teslimat_sehri: parsedJson.teslimat_sehri || eslesen?.sehir || 'Bakü',
+      teslimat_adresi: parsedJson.teslimat_adresi || eslesen?.adres || '',
       urun_aciklamasi: parsedJson.urun_aciklamasi || 'Sipariş Edilen Ürün',
       beden_veya_olcu: parsedJson.beden_veya_olcu || '',
       renk: parsedJson.renk || '',
@@ -359,12 +350,13 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
           )
         : [],
       ai_guven_skoru: Number(parsedJson.ai_guven_skoru || 0.95),
-      musteri_id: tenantCustomers.some((m) => m.id === parsedJson.eslesen_musteri_id)
-        ? parsedJson.eslesen_musteri_id
-        : '',
-      musteri_tipi: parsedJson.musteri_tipi || 'TANIMADIK',
-      duzeltilen_yazim_hatasi: parsedJson.duzeltilen_yazim_hatasi || '',
-      musteri_durumu: parsedJson.musteri_durumu || 'YENI_MUSTERI',
+      musteri_id: eslesen?.id || '',
+      musteri_tipi: eslesen?.musteri_tipi || parsedJson.musteri_tipi || 'TANIMADIK',
+      duzeltilen_yazim_hatasi:
+        eslesen && cikarilanAd && cikarilanAd !== eslesen.ad_soyad
+          ? `${cikarilanAd} → ${eslesen.ad_soyad} (telefon eşleşti)`
+          : '',
+      musteri_durumu: eslesen ? 'MEVCUT_MUSTERI' : 'YENI_MUSTERI',
       birden_fazla_urun:
         parsedJson.birden_fazla_urun ||
         (Array.isArray(parsedJson.urunler) && parsedJson.urunler.length > 1),
@@ -439,9 +431,9 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
           nihaiSiparis = {
             ...formatlaSiparis(data),
             musteri_id: dbPayload.musteri_id,
-            musteri_tipi: parsedJson.musteri_tipi,
-            duzeltilen_yazim_hatasi: parsedJson.duzeltilen_yazim_hatasi,
-            musteri_durumu: parsedJson.musteri_durumu,
+            musteri_tipi: dbPayload.musteri_tipi,
+            duzeltilen_yazim_hatasi: dbPayload.duzeltilen_yazim_hatasi,
+            musteri_durumu: dbPayload.musteri_durumu,
             ozel_not: dbPayload.ozel_not,
             urunler: dbPayload.urunler,
             gorsel_urlleri: dbPayload.gorsel_urlleri,
@@ -467,15 +459,9 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
       }
     }
 
-    // Müşteri Deduplication
-    const eslesenMusteriId = parsedJson.eslesen_musteri_id;
-    const telNo = (parsedJson.telefon_numarasi || '').replace(/\s+/g, '');
-    let bulunanMusteri = tenantCustomers.find(
-      (m) =>
-        (eslesenMusteriId && m.id === eslesenMusteriId) ||
-        (telNo && m.telefon && m.telefon.replace(/\s+/g, '') === telNo) ||
-        m.ad_soyad.toLowerCase().trim() === (parsedJson.musteri_adi || '').toLowerCase().trim()
-    );
+    // Müşteri kartı: yalnız güçlü telefon eşleşmesi mevcut kartı günceller. Ad adayı
+    // varsa yeni kart da açılmaz; bağlantıyı bir kişi seçer.
+    const bulunanMusteri = eslesen;
 
     if (otomatik_kaydet !== false && !dbActive(hedefTenantId) && bulunanMusteri) {
       bulunanMusteri.toplam_siparis_sayisi += 1;
@@ -494,13 +480,14 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
       otomatik_kaydet !== false &&
       !dbActive(hedefTenantId) &&
       !bulunanMusteri &&
-      parsedJson.musteri_adi &&
-      parsedJson.musteri_adi !== 'Bilinmeyen Müşteri'
+      musteriAdaylari.length === 0 &&
+      cikarilanAd &&
+      cikarilanAd !== 'Bilinmeyen Müşteri'
     ) {
       const yeniMusteri: MusteriKaydi = {
         id: 'mus-' + randomUUID(),
         tenant_id: hedefTenantId,
-        ad_soyad: parsedJson.musteri_adi,
+        ad_soyad: cikarilanAd,
         telefon: parsedJson.telefon_numarasi || '',
         instagram_kullanici_adi: parsedJson.instagram_kullanici_adi || '',
         sehir: parsedJson.teslimat_sehri || 'Bakü',
@@ -522,6 +509,7 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
       mesaj: 'Mesaj başarıyla Gemini AI tarafından ayrıştırıldı ve kaydedildi.',
       siparis: nihaiSiparis,
       ayristirilan_veri: nihaiSiparis,
+      musteri_adaylari: musteriAdaylari,
       kaydedildi: otomatik_kaydet !== false,
       kaynak: dbActive(hedefTenantId)
         ? 'supabase'
