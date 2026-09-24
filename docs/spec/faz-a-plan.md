@@ -3,7 +3,7 @@
 **Kaynaklar:**
 
 - Mevcut durum: [Belge 1](../audit/2026-09-mevcut-durum.md).
-- Hedef: [Belge 2](tomnap-v2.md). Kararlar K1–K22 onaylanmış varsayılır.
+- Hedef: [Belge 2](tomnap-v2.md). Kararlar K1–K22 onaylandı (24 Eylül 2026): K11 değişti, K15'e ek, K8'e not.
 
 **Faz A'nın amacı:** v2'nin üzerine kurulacağı zemin. İçeriği:
 
@@ -123,7 +123,7 @@ A1–A3 birbirinden ve v2'den bağımsızdır; önce yapılmaları önerilir (bk
 - **Dosyalar:** `src/shared/roller.ts`, `src/server/middleware/auth.ts`, `src/components/DavetOlusturModal.tsx`, `src/components/YanMenu.tsx`; migration (katalog fonksiyonu + kota varsayılanı), testler.
 - **Kabul ölçütleri:**
   - ABD rolüyle davet, kabul ve giriş çalışıyor; kota uygulanıyor (SQL testi).
-  - Allowlist testleri yeni rolü kapsıyor; maaş ve prim rotaları (henüz yok) planda PATRON'a kapalı.
+  - Allowlist testleri yeni rolü kapsıyor; maaş ve prim rotaları (henüz yok) planda: patron herkesi, ekip üyesi yalnız kendini görür; SUPER_ADMIN hiç görmez (K15).
 
 ### A6 — v2 bayrağı ve iskelet
 

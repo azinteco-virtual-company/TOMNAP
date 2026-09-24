@@ -1,33 +1,39 @@
 # TOMNAP v2 — hedef spec
 
-## Kararlar ve varsayımlar — Tural onaylayacak
+## Kararlar ve varsayımlar — onaylandı (24 Eylül 2026)
 
-Spec'teki belirsiz iş kararları için makul bir seçim yapıldı. Aşağıdaki tablo onaylanırsa spec bu haliyle geçerlidir. Bir satır değişirse ilgili bölüm ona göre güncellenir.
+Tural 24 Eylül 2026'da K1–K22'yi onayladı; üç değişiklik var:
 
-| #   | Karar                     | Seçtiğim                                                                                                                                                                        | Alternatif                                       | Neden                                                                                                   |
-| --- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| K1  | Eski siparişler           | v1'de kalır. Yalnız yeni siparişler v2 modeliyle açılır (`siparisler.model_surumu`); geriye dönük taşıma yapılmaz.                                                              | Her eski siparişe otomatik satır açan backfill   | Veritabanındaki kayıtlara dokunulmaz (ORTAM kuralı). Risk sıfır; eski ekranlar olduğu gibi çalışır.     |
-| K2  | Sipariş satırı ve birim   | Satır = müşterinin istediği ürün, `adet` ile. Satın alınan her fiziksel parça bir **birim** kaydıdır; `adet = 3` olan bir satıra 3 birim bağlanır.                              | Satır = birim (her parça ayrı satır)             | Sipariş girişi doğal kalır; birim bazlı takip yine mümkün.                                              |
-| K3  | Birim ↔ satır bağı        | `urun_birimleri.siparis_satiri_id` kolonu. Birim tek satıra bağlanır; satır kapasitesi (`adet`) RPC'de kilitle kontrol edilir. Her değişiklik append-only olay kaydına yazılır. | Ayrı eşleştirme tablosu + `UNIQUE(birim_id)`     | Tek kolon, "bir birim tek satıra" kuralını şemanın kendisiyle garanti eder; geçmiş olay kaydında durur. |
-| K4  | Kur kaynağı               | Fatura onaylanırken kur elle girilir ve **faturaya sabitlenir**. Öneri, tenant'ın `kurlar` tablosundaki son değerden gelir.                                                     | Otomatik kur servisi (ör. Merkez Bankası API'si) | Dış servise bağımlılık yok, denetlenebilir. Sonradan otomatik öneri eklenebilir.                        |
-| K5  | Satış para birimi         | Müşteriye satış satırları **AZN**.                                                                                                                                              | Satır bazında serbest para birimi                | Tahsilat Bakü'de AZN yapılıyor; kâr AZN'de tek para birimiyle hesaplanır.                               |
-| K6  | Kargo payının dağıtımı    | Gönderinin kargo maliyeti paketlere **kg oranında**, paket içinde birimlere birim ağırlığı varsa ağırlığa, yoksa **eşit** dağıtılır.                                            | Değer oranında dağıtım                           | İstenen model "kargo payı (kg)"; birimler tek tek tartılmıyor.                                          |
-| K7  | Gümrük                    | Paket bazında girilir; paket içindeki birimlere fatura değeri oranında dağıtılır.                                                                                               | Sipariş bazında elle                             | Gümrük paket (alıcı) için ödeniyor.                                                                     |
-| K8  | Aylık beyan sınırı        | Tenant ayarı. Varsayılan **300 USD / alıcı / ay** (doğrulanmalı). Beyan değeri USD tutulur.                                                                                     | Koda gömülü sabit                                | Sınır mevzuata bağlı ve değişebilir.                                                                    |
-| K9  | Paket alıcısı (consignee) | Bir `musteriler` kaydı. Siparişin müşterisinden farklı olabilir (ör. akraba adına).                                                                                             | Ayrı `alicilar` tablosu                          | Mevcut müşteri tablosu yeniden kullanılır; alıcı da bir kişidir.                                        |
-| K10 | Sipariş kârının ayı       | Siparişin **teslim edildiği ay**                                                                                                                                                | Sipariş ayı ya da tahsilatın tamamlandığı ay     | Landed cost teslimde kesinleşir.                                                                        |
-| K11 | Primin tabanı             | Siparişin **tahsil edilen satış tutarı (AZN)** üzerinden yüzde                                                                                                                  | Sipariş kârı üzerinden yüzde                     | Tahsilatla birlikte bilinir; landed cost'un gecikmesine bağlı değil.                                    |
-| K12 | Primin hak edilmesi       | Sipariş **tamamen tahsil edildiğinde** hak edilir; iade ya da ters kayıtta geri alınır.                                                                                         | Tahsilat oranında kısmi hak ediş                 | Basit ve anlaşmazlığa kapalı.                                                                           |
-| K13 | İş başı ücret             | Siparişe aittir (ör. kurye teslim ücreti) ve landed cost'un "yerel teslimat" payına girer.                                                                                      | Aya ait gider                                    | İşin yapıldığı teslimat, siparişe bağlanabiliyor.                                                       |
-| K14 | Maaş                      | Aya ait; siparişlere dağıtılmaz. Aylık net kârdan düşülür.                                                                                                                      | Siparişlere dağıtmak                             | İstenen model bu.                                                                                       |
-| K15 | Maaş ve prim görünürlüğü  | Yalnız **PATRON**; `SUPER_ADMIN` dahil değil.                                                                                                                                   | SUPER_ADMIN de görür                             | Platform yöneticisinin butik maaşlarını görmesine gerek yok.                                            |
-| K16 | Ödeme düzeltme            | Silme yok. Düzeltme **ters kayıtla** (negatif ödeme) yapılır.                                                                                                                   | Soft delete                                      | Defter append-only kalır; denetim izi korunur.                                                          |
-| K17 | Kurye nakdi               | Kuryenin tahsilatı önce onun **zimmetine** yazılır; kasaya teslim ayrı bir kayıttır.                                                                                            | Tahsilat doğrudan kasaya                         | "Kuryede bekleyen nakit" kaçağı ancak böyle görülebilir.                                                |
-| K18 | ABD sorumlusu rolü        | Yeni rol `ABD_SATINALMA`: ABD'de satın alma ve ABD deposunda kabul. Kanada'daki `KANADA_SATINALMA` rolünün eşi.                                                                 | Ayrı bir `DEPO` rolü                             | Mevcut rol modeline en küçük ekleme.                                                                    |
-| K19 | Tablo adları              | Türkçe snake_case (`siparis_satirlari`, `faturalar`…); mevcut `siparisler` ve `musteriler` ile uyumlu.                                                                          | İngilizce (`awb_match_approvals` gibi)           | Alan adları ve arayüz Türkçe; tutarlılık.                                                               |
-| K20 | Eski durum kolonları      | v2 siparişlerde `lojistik_durumu`, `finans_durumu`, `alinan_tutar` **yalnız RPC'lerle, türetilerek** yazılır; eski ekranlar okumaya devam eder.                                 | v2 siparişlerde bu kolonları boş bırakmak        | Eski ekranlar ve raporlar kırılmaz; enum değişmez.                                                      |
-| K21 | Demo alanı                | v2 akışı `demo_sandbox`'ta kapalı; o alan bellekte ve v2 tabloları yok.                                                                                                         | Demo için veritabanında bir tenant               | Bellek modu transactional RPC'leri taşıyamaz.                                                           |
-| K22 | Fatura yükleme boyutu     | Fatura PDF ve fotoğrafı, istemciden **doğrudan** Supabase Storage'a imzalı URL ile yüklenir; sunucu yalnız referansı alır.                                                      | Sunucudan geçirmek                               | Vercel Functions'ın 4,5 MB sınırı (RELEASE_READINESS madde 4).                                          |
+- K11 değişti: prim tabanı sipariş kârı.
+- K15'e ek yapıldı: her ekip üyesi yalnız kendi kazancını görür.
+- K8'e açık not eklendi.
+
+İlgili bölümler buna göre güncellendi.
+
+| #   | Karar                     | Seçtiğim                                                                                                                                                                                                                                               | Alternatif                                        | Neden                                                                                                   |
+| --- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| K1  | Eski siparişler           | v1'de kalır. Yalnız yeni siparişler v2 modeliyle açılır (`siparisler.model_surumu`); geriye dönük taşıma yapılmaz.                                                                                                                                     | Her eski siparişe otomatik satır açan backfill    | Veritabanındaki kayıtlara dokunulmaz (ORTAM kuralı). Risk sıfır; eski ekranlar olduğu gibi çalışır.     |
+| K2  | Sipariş satırı ve birim   | Satır = müşterinin istediği ürün, `adet` ile. Satın alınan her fiziksel parça bir **birim** kaydıdır; `adet = 3` olan bir satıra 3 birim bağlanır.                                                                                                     | Satır = birim (her parça ayrı satır)              | Sipariş girişi doğal kalır; birim bazlı takip yine mümkün.                                              |
+| K3  | Birim ↔ satır bağı        | `urun_birimleri.siparis_satiri_id` kolonu. Birim tek satıra bağlanır; satır kapasitesi (`adet`) RPC'de kilitle kontrol edilir. Her değişiklik append-only olay kaydına yazılır.                                                                        | Ayrı eşleştirme tablosu + `UNIQUE(birim_id)`      | Tek kolon, "bir birim tek satıra" kuralını şemanın kendisiyle garanti eder; geçmiş olay kaydında durur. |
+| K4  | Kur kaynağı               | Fatura onaylanırken kur elle girilir ve **faturaya sabitlenir**. Öneri, tenant'ın `kurlar` tablosundaki son değerden gelir.                                                                                                                            | Otomatik kur servisi (ör. Merkez Bankası API'si)  | Dış servise bağımlılık yok, denetlenebilir. Sonradan otomatik öneri eklenebilir.                        |
+| K5  | Satış para birimi         | Müşteriye satış satırları **AZN**.                                                                                                                                                                                                                     | Satır bazında serbest para birimi                 | Tahsilat Bakü'de AZN yapılıyor; kâr AZN'de tek para birimiyle hesaplanır.                               |
+| K6  | Kargo payının dağıtımı    | Gönderinin kargo maliyeti paketlere **kg oranında**, paket içinde birimlere birim ağırlığı varsa ağırlığa, yoksa **eşit** dağıtılır.                                                                                                                   | Değer oranında dağıtım                            | İstenen model "kargo payı (kg)"; birimler tek tek tartılmıyor.                                          |
+| K7  | Gümrük                    | Paket bazında girilir; paket içindeki birimlere fatura değeri oranında dağıtılır.                                                                                                                                                                      | Sipariş bazında elle                              | Gümrük paket (alıcı) için ödeniyor.                                                                     |
+| K8  | Aylık beyan sınırı        | Tenant ayarı olarak **alıcı başına aylık toplam** beyan modellenir; varsayılan **300 USD**. Beyan değeri USD tutulur. **Açık not:** Kuralın kesin metni (alıcı başına aylık toplam mı, ayda bir gönderi mi) **ilk gerçek butikten önce doğrulanacak**. | Koda gömülü sabit                                 | Sınır mevzuata bağlı ve değişebilir.                                                                    |
+| K9  | Paket alıcısı (consignee) | Bir `musteriler` kaydı. Siparişin müşterisinden farklı olabilir (ör. akraba adına).                                                                                                                                                                    | Ayrı `alicilar` tablosu                           | Mevcut müşteri tablosu yeniden kullanılır; alıcı da bir kişidir.                                        |
+| K10 | Sipariş kârının ayı       | Siparişin **teslim edildiği ay**                                                                                                                                                                                                                       | Sipariş ayı ya da tahsilatın tamamlandığı ay      | Landed cost teslimde kesinleşir.                                                                        |
+| K11 | Primin tabanı             | **Sipariş kârı** üzerinden yüzde. Taban, prim öncesi kârdır (§6); varsayılan oran **%5**. Butiklere verilen "Siparişin 7 Durağı" sayfasındaki "sipariş kârından %5" ifadesiyle aynı.                                                                   | Tahsil edilen satış tutarı                        | Sayfadaki taahhüt; teşviki kârla hizalar.                                                               |
+| K12 | Primin hak edilmesi       | Sipariş **tamamen tahsil edildiğinde** hak edilir. O anda kâr kesinleşmemişse (landed cost eksik) prim **beklemede** görünür; kâr kesinleşince hesaplanır. İade ya da ters kayıtta geri alınır.                                                        | Tahsilat oranında kısmi hak ediş                  | Basit ve anlaşmazlığa kapalı.                                                                           |
+| K13 | İş başı ücret             | Siparişe aittir (ör. kurye teslim ücreti) ve landed cost'un "yerel teslimat" payına girer.                                                                                                                                                             | Aya ait gider                                     | İşin yapıldığı teslimat, siparişe bağlanabiliyor.                                                       |
+| K14 | Maaş                      | Aya ait; siparişlere dağıtılmaz. Aylık net kârdan düşülür.                                                                                                                                                                                             | Siparişlere dağıtmak                              | İstenen model bu.                                                                                       |
+| K15 | Maaş ve prim görünürlüğü  | **PATRON** herkesin verisini görür. Her ekip üyesi **yalnız kendi** kazancını (maaş, prim, iş başı) görür. **SUPER_ADMIN** kimsenin maaş ve prim verisini görmez.                                                                                      | SUPER_ADMIN de görür; ekip kendi kazancını görmez | Sayfadaki "kendi kazancını görür" sözü; platform yöneticisinin buna ihtiyacı yok.                       |
+| K16 | Ödeme düzeltme            | Silme yok. Düzeltme **ters kayıtla** (negatif ödeme) yapılır.                                                                                                                                                                                          | Soft delete                                       | Defter append-only kalır; denetim izi korunur.                                                          |
+| K17 | Kurye nakdi               | Kuryenin tahsilatı önce onun **zimmetine** yazılır; kasaya teslim ayrı bir kayıttır.                                                                                                                                                                   | Tahsilat doğrudan kasaya                          | "Kuryede bekleyen nakit" kaçağı ancak böyle görülebilir.                                                |
+| K18 | ABD sorumlusu rolü        | Yeni rol `ABD_SATINALMA`: ABD'de satın alma ve ABD deposunda kabul. Kanada'daki `KANADA_SATINALMA` rolünün eşi.                                                                                                                                        | Ayrı bir `DEPO` rolü                              | Mevcut rol modeline en küçük ekleme.                                                                    |
+| K19 | Tablo adları              | Türkçe snake_case (`siparis_satirlari`, `faturalar`…); mevcut `siparisler` ve `musteriler` ile uyumlu.                                                                                                                                                 | İngilizce (`awb_match_approvals` gibi)            | Alan adları ve arayüz Türkçe; tutarlılık.                                                               |
+| K20 | Eski durum kolonları      | v2 siparişlerde `lojistik_durumu`, `finans_durumu`, `alinan_tutar` **yalnız RPC'lerle, türetilerek** yazılır; eski ekranlar okumaya devam eder.                                                                                                        | v2 siparişlerde bu kolonları boş bırakmak         | Eski ekranlar ve raporlar kırılmaz; enum değişmez.                                                      |
+| K21 | Demo alanı                | v2 akışı `demo_sandbox`'ta kapalı; o alan bellekte ve v2 tabloları yok.                                                                                                                                                                                | Demo için veritabanında bir tenant                | Bellek modu transactional RPC'leri taşıyamaz.                                                           |
+| K22 | Fatura yükleme boyutu     | Fatura PDF ve fotoğrafı, istemciden **doğrudan** Supabase Storage'a imzalı URL ile yüklenir; sunucu yalnız referansı alır.                                                                                                                             | Sunucudan geçirmek                                | Vercel Functions'ın 4,5 MB sınırı (RELEASE_READINESS madde 4).                                          |
 
 ## 1. İlkeler ve kapsam
 
@@ -85,10 +91,10 @@ Bütün yeni tablolarda şunlar ortak:
 | `kasa_teslimleri`                | `kurye_id`, `teslim_alan_kullanici_id`, `tutar_azn`, `zaman`; append-only                                                                                                                                                          | 1–N `odemeler` (nakit)                                                                             |
 | `maliyet_kalemleri`              | `birim_id` ya da `paket_id`, `tur` (`ALIS`/`KARGO`/`YEREL_TESLIMAT`/`GUMRUK`/`IS_BASI`), `tutar_azn`, `kaynak_kayit`; RPC'lerin ürettiği türetilmiş kayıt                                                                          | Landed cost toplamı                                                                                |
 | `kazanc_kurallari`               | `kullanici_id`, `tur` (`MAAS`/`YUZDE`/`IS_BASI`), `oran`/`tutar`, `gecerlilik_baslangic/bitis`                                                                                                                                     | Yalnız PATRON                                                                                      |
-| `primler`                        | `siparis_id`, `kullanici_id`, `tutar_azn`, `durum` (`BEKLIYOR`/`HAK_EDILDI`/`GERI_ALINDI`/`ODENDI`)                                                                                                                                | Siparişe ait; yalnız PATRON                                                                        |
+| `primler`                        | `siparis_id`, `kullanici_id`, `oran`, `taban_kar_azn`, `tutar_azn`, `durum` (`TAHSILAT_BEKLIYOR`/`KAR_BEKLIYOR`/`HAK_EDILDI`/`GERI_ALINDI`/`ODENDI`)                                                                               | Siparişe ait; patron herkesi, çalışan kendini görür                                                |
 | `maaslar`                        | `kullanici_id`, `ay`, `tutar_azn`, `odeme_tarihi`                                                                                                                                                                                  | Aya ait; yalnız PATRON                                                                             |
 | `giderler`                       | `ay`, `tur` (kira, reklam…), `tutar_azn`, `not`                                                                                                                                                                                    | Aya ait; yalnız PATRON                                                                             |
-| `tenant_v2_ayarlari`             | `aylik_beyan_sinir_usd`, `varsayilan_kg_fiyati_azn`, `prim_orani_varsayilan`                                                                                                                                                       | Tenant başına bir satır                                                                            |
+| `tenant_v2_ayarlari`             | `aylik_beyan_sinir_usd` (alıcı başına aylık toplam, K8), `varsayilan_kg_fiyati_azn`, `prim_orani_varsayilan` (%5, K11)                                                                                                             | Tenant başına bir satır                                                                            |
 
 ## 4. Birbirinden bağımsız üç durum ekseni
 
@@ -149,10 +155,12 @@ Eski `alinan_tutar` = defterin toplamı (Σ `odemeler.tutar_azn`); eski `toplam_
 - **Sipariş kârı:**
 
   ```
-  sipariş kârı = Σ satır satış tutarı (AZN)
-               − Σ bağlı birimlerin landed cost'u
-               − siparişin primleri
+  prim öncesi kâr = Σ satır satış tutarı (AZN) − Σ bağlı birimlerin landed cost'u
+  prim            = prim oranı × max(0, prim öncesi kâr)       (K11; zararda prim 0)
+  sipariş kârı    = prim öncesi kâr − prim
   ```
+
+  - Prim, prim öncesi kâr üzerinden hesaplanır; böylece tanım döngüsel değildir.
 
   - Zarar sıfırlanmaz; `max(0, …)` yok.
   - Eksik veri (kur, ağırlık, gönderi maliyeti) varsa kâr tahmin edilmez; "**eksik veri**" olarak gösterilir. Belge 1'deki %55 ve 0,8 kg tahminleri kalkar.
@@ -172,13 +180,28 @@ Eski `alinan_tutar` = defterin toplamı (Σ `odemeler.tutar_azn`); eski `toplam_
 ## 7. Kazanç modeli
 
 - **Kuralın kaynağı:** Her çalışanın kuralı `kazanc_kurallari`'ndadır: maaşlı, yüzdeli ya da iş başı. Birden fazla kural aynı anda olabilir (ör. maaş + prim). Kuralların geçerlilik aralığı var; eski aylar kendi dönemindeki kuralla hesaplanır.
-- **Prim siparişe aittir:** Sipariş sahibinin (`sahip_kullanici_id`) primi, sipariş **tamamen tahsil edildiğinde** hak edilir (K12). Taban, tahsil edilen satış tutarıdır (K11). Ters kayıt ya da iade ödemeyi `TAM`'ın altına düşürürse prim `GERI_ALINDI` olur. Prim, sipariş kârından düşülür.
+- **Prim siparişe aittir:** Sipariş sahibinin (`sahip_kullanici_id`) primi.
+  - **Tutar:** Oran × prim öncesi sipariş kârı (K11, §6). Oran çalışanın kuralından gelir; kural yoksa tenant varsayılanı %5.
+  - **Durum akışı:**
+    - `TAHSILAT_BEKLIYOR` → sipariş **tamamen tahsil edildiğinde** (K12):
+      - kâr kesinse `HAK_EDILDI` (tutar yazılır),
+      - landed cost eksikse `KAR_BEKLIYOR` (tutar yok, "beklemede" görünür).
+    - Kâr kesinleşince RPC tutarı hesaplar ve `HAK_EDILDI` yapar.
+    - Ters kayıt ya da iade ödemeyi `TAM`'ın altına düşürürse `GERI_ALINDI`.
+  - Prim öncesi kâr sıfır ya da negatifse prim 0'dır.
 - **İş başı ücret siparişe aittir:** Ör. kurye başına teslim ücreti. Teslimat tamamlandığında RPC tarafından `maliyet_kalemleri`'ne (`IS_BASI`) yazılır ve landed cost'a girer (K13).
 - **Maaş aya aittir:** Aylık net kârdan düşülür, siparişe dağıtılmaz.
 - **Görünürlük (K15):**
-  - `kazanc_kurallari`, `primler`, `maaslar`, `giderler` ve kâr raporları yalnız `PATRON` rolüne açık.
-  - Bu, **API katmanında** uygulanır: allowlist kuralları yalnız `PATRON` içerir. Diğer rollerin gördüğü yanıtlara (sipariş detayı, liste) bu alanlar hiç eklenmez.
-  - Kanıt olarak her rota için testler yazılır: diğer her rol 403 alır; sipariş ve teslimat yanıtlarında prim/maaş alanı bulunmaz; iki tenant arasında izolasyon ortak yardımcıyla sınanır.
+  - **PATRON:** herkesin `kazanc_kurallari`, `primler` ve `maaslar` kayıtlarını, ayrıca `giderler`'i, kâr raporlarını ve aylık net kârı görür.
+  - **Diğer ekip üyeleri:** Yalnız **kendi** kural, prim, maaş ve iş başı kayıtlarını görür (`GET /api/v2/kazanclarim`). Başkasının kaydını, giderleri ve kâr raporlarını göremez.
+  - **SUPER_ADMIN:** Hiçbir tenant'ın maaş ve prim verisini görmez (K15).
+  - **Uygulama yeri:** API katmanı. Patron rotalarının allowlist'i yalnız `PATRON` içerir. `kazanclarim` rotası kullanıcı kimliğini oturumdan alır ve istemcinin gönderdiği kullanıcı kimliğini yok sayar. Sipariş ve teslimat yanıtlarına bu alanlar hiç eklenmez.
+  - **Kanıt olarak testler:**
+    - patron rotalarında diğer her rol ve SUPER_ADMIN 403 alır;
+    - bir ekip üyesi başka bir üyenin kazancını hiçbir parametreyle göremez;
+    - SUPER_ADMIN `kazanclarim` ile de veri alamaz;
+    - sipariş ve teslimat yanıtlarında prim ve maaş alanı bulunmaz;
+    - iki tenant arasındaki izolasyon ortak yardımcıyla sınanır.
 
 ## 8. Rol matrisi
 
@@ -189,25 +212,26 @@ Sembollerin anlamı:
 - **—**: erişemez,
 - **(kendi)**: yalnız kendisine atanmış kayıtlar.
 
-`ABD_SATINALMA` yeni rol (K18). `SUPER_ADMIN` platform yöneticisidir; tenant iş verisinde PATRON gibi davranır, ancak maaş ve prim verisini göremez (K15).
+`ABD_SATINALMA` yeni rol (K18). `SUPER_ADMIN` platform yöneticisidir; tenant iş verisinde PATRON gibi davranır, ancak **kimsenin** maaş ve prim verisini göremez (K15).
 
-| İşlem                             | PATRON    | SATIS_SORUMLUSU    | KANADA_SATINALMA | ABD_SATINALMA | BAKU_FINANS    | BAKU_KURYE |
-| --------------------------------- | --------- | ------------------ | ---------------- | ------------- | -------------- | ---------- |
-| Sipariş + satır oluşturma         | Y         | Y (sahibi kendisi) | —                | —             | —              | —          |
-| Sipariş okuma                     | O         | O                  | O                | O             | O              | —          |
-| Fatura yükleme ve onay            | Y         | —                  | Y (CA)           | Y (US)        | —              | —          |
-| Birim ↔ satır eşleştirme          | Y         | O                  | Y (CA)           | Y (US)        | —              | —          |
-| Depo kabul                        | Y         | —                  | Y (CA)           | Y (US)        | —              | —          |
-| Paket ve gönderi                  | Y         | —                  | Y (CA)           | Y (US)        | —              | —          |
-| Bakü varış kontrolü               | Y         | —                  | —                | —             | Y              | —          |
-| Teslimat oluşturma ve kurye atama | Y         | —                  | —                | —             | Y              | —          |
-| Teslim + tahsilat                 | —         | —                  | —                | —             | —              | Y (kendi)  |
-| Ödeme kaydı ve ters kayıt         | Y         | Y (butikte)        | —                | —             | Y              | —          |
-| Kasa teslimi alma                 | Y         | —                  | —                | —             | Y              | —          |
-| Kur girme                         | Y         | —                  | Y                | Y             | Y              | —          |
-| Landed cost / sipariş kârı        | O         | —                  | —                | —             | —              | —          |
-| Maaş, prim, gider, aylık net kâr  | Y/O       | —                  | —                | —             | —              | —          |
-| Kaçaklar panosu                   | O (hepsi) | —                  | O (Q1–Q3, Q7)    | O (Q1–Q3, Q7) | O (Q4, Q5, Q8) | —          |
+| İşlem                                           | PATRON    | SATIS_SORUMLUSU    | KANADA_SATINALMA | ABD_SATINALMA | BAKU_FINANS    | BAKU_KURYE |
+| ----------------------------------------------- | --------- | ------------------ | ---------------- | ------------- | -------------- | ---------- |
+| Sipariş + satır oluşturma                       | Y         | Y (sahibi kendisi) | —                | —             | —              | —          |
+| Sipariş okuma                                   | O         | O                  | O                | O             | O              | —          |
+| Fatura yükleme ve onay                          | Y         | —                  | Y (CA)           | Y (US)        | —              | —          |
+| Birim ↔ satır eşleştirme                        | Y         | O                  | Y (CA)           | Y (US)        | —              | —          |
+| Depo kabul                                      | Y         | —                  | Y (CA)           | Y (US)        | —              | —          |
+| Paket ve gönderi                                | Y         | —                  | Y (CA)           | Y (US)        | —              | —          |
+| Bakü varış kontrolü                             | Y         | —                  | —                | —             | Y              | —          |
+| Teslimat oluşturma ve kurye atama               | Y         | —                  | —                | —             | Y              | —          |
+| Teslim + tahsilat                               | —         | —                  | —                | —             | —              | Y (kendi)  |
+| Ödeme kaydı ve ters kayıt                       | Y         | Y (butikte)        | —                | —             | Y              | —          |
+| Kasa teslimi alma                               | Y         | —                  | —                | —             | Y              | —          |
+| Kur girme                                       | Y         | —                  | Y                | Y             | Y              | —          |
+| Landed cost / sipariş kârı                      | O         | —                  | —                | —             | —              | —          |
+| Kendi kazancı (maaş, prim, iş başı)             | O         | O (kendi)          | O (kendi)        | O (kendi)     | O (kendi)      | O (kendi)  |
+| Herkesin maaş ve primi, giderler, aylık net kâr | Y/O       | —                  | —                | —             | —              | —          |
+| Kaçaklar panosu                                 | O (hepsi) | —                  | O (Q1–Q3, Q7)    | O (Q1–Q3, Q7) | O (Q4, Q5, Q8) | —          |
 
 Rol listesi bugün 15'ten fazla yerde tekrar ediyor (Belge 1 §6). ABD rolünden **önce** tek kaynağa toplanır (Faz A).
 
@@ -215,16 +239,16 @@ Rol listesi bugün 15'ten fazla yerde tekrar ediyor (Belge 1 §6). ABD rolünden
 
 Hepsi tenant filtreli, salt okunur SQL görünümleri ya da RPC'lerdir. Eşikler `tenant_v2_ayarlari`'ndan gelir.
 
-| #   | Kaçak                          | Tanım                                                                                                           | Varsayılan eşik |
-| --- | ------------------------------ | --------------------------------------------------------------------------------------------------------------- | --------------- |
-| Q1  | Sahipsiz stok                  | `durum ∉ {IADE}` ve `siparis_satiri_id IS NULL`, fatura onayından bu yana N gün geçmiş birimler                 | 7 gün           |
-| Q2  | Eksik satın alma               | `adet − bağlı birim sayısı > 0` olan, iptal edilmemiş, sipariş tarihinden N gün geçmiş satırlar                 | 5 gün           |
-| Q3  | Çözülmemiş depo sorunu         | `durum ∈ {EKSIK, HASARLI, YANLIS}` olup sonrasında `IADE` ya da düzeltme olayı olmayan birimler                 | 3 gün           |
-| Q4  | Teslim edildi, ödenmedi        | Bütün birimleri `TESLIM_EDILDI`, ödeme durumu `ODENMEDI`/`KISMI` olan siparişler; kalan tutar ve yaşla birlikte | 0 gün           |
-| Q5  | Kuryede bekleyen nakit         | Kurye başına Σ nakit tahsilat − Σ kasa teslimi > 0 ve en eski teslim edilmemiş tahsilat N saatten eski          | 24 saat         |
-| Q6  | Zararlı / düşük marjlı sipariş | Landed cost'u tam olan siparişlerde kâr < 0 ya da marj < %M                                                     | M = %10         |
-| Q7  | Beyan sınırı                   | Alıcının o ayki `toplam_beyan_usd`'si sınırı aşan ya da %X'ine yaklaşan paketler                                | %90             |
-| Q8  | Varışı kontrol edilmemiş       | `YOLDA` durumunda N günden eski paketler, ya da `VARDI` olup `varis_kontrolu` boş kalan paketler                | 10 gün          |
+| #   | Kaçak                          | Tanım                                                                                                                                                               | Varsayılan eşik |
+| --- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| Q1  | Sahipsiz stok                  | `durum ∉ {IADE}` ve `siparis_satiri_id IS NULL`, fatura onayından bu yana N gün geçmiş birimler                                                                     | 7 gün           |
+| Q2  | Eksik satın alma               | `adet − bağlı birim sayısı > 0` olan, iptal edilmemiş, sipariş tarihinden N gün geçmiş satırlar                                                                     | 5 gün           |
+| Q3  | Çözülmemiş depo sorunu         | `durum ∈ {EKSIK, HASARLI, YANLIS}` olup sonrasında `IADE` ya da düzeltme olayı olmayan birimler                                                                     | 3 gün           |
+| Q4  | Teslim edildi, ödenmedi        | Bütün birimleri `TESLIM_EDILDI`, ödeme durumu `ODENMEDI`/`KISMI` olan siparişler; kalan tutar ve yaşla birlikte                                                     | 0 gün           |
+| Q5  | Kuryede bekleyen nakit         | Kurye başına Σ nakit tahsilat − Σ kasa teslimi > 0 ve en eski teslim edilmemiş tahsilat N saatten eski                                                              | 24 saat         |
+| Q6  | Zararlı / düşük marjlı sipariş | Landed cost'u tam olan siparişlerde kâr < 0 ya da marj < %M                                                                                                         | M = %10         |
+| Q7  | Beyan sınırı                   | Alıcının o ayki `toplam_beyan_usd`'si sınırı aşan ya da %X'ine yaklaşan paketler (K8: alıcı başına aylık toplam; kesin kural ilk gerçek butikten önce doğrulanacak) | %90             |
+| Q8  | Varışı kontrol edilmemiş       | `YOLDA` durumunda N günden eski paketler, ya da `VARDI` olup `varis_kontrolu` boş kalan paketler                                                                    | 10 gün          |
 
 ## 10. API ve ekranlar
 
