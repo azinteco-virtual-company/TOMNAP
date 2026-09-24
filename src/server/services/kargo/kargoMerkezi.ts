@@ -127,9 +127,11 @@ export class KargoMerkezi {
 
     const awbListesi = aktifSiparisler.map((s) => s.uluslararasi_kargo_kodu.trim());
     const takipSonuclari = await provider.topluTakipEt(awbListesi, ayarlar);
+    // Simulated tracking must never change an order; 409 tells the client why.
     if (takipSonuclari.some((result) => result.kaynak !== 'LIVE'))
-      throw new Error(
-        'Simülasyon sonuçları siparişlere kaydedilemez. Canlı kargo hesabı yapılandırın.'
+      throw new CargoSettingsError(
+        'Simülasyon sonuçları siparişlere kaydedilemez. Canlı kargo hesabı yapılandırın.',
+        409
       );
     const takipMap = new Map<string, KargoTakipGuncelleme>();
     for (const res of takipSonuclari) {

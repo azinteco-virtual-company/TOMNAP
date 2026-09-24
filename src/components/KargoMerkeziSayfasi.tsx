@@ -580,6 +580,11 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
                         hizliSorguSonuc.kaynak ||
                         'Mənbə göstərilməyib'}
                     </span>
+                    {hizliSorguSonuc.kaynak === 'SIMULATION' && (
+                      <span className="px-2 py-0.5 rounded text-2xs font-extrabold bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100">
+                        Simulyasiya — canlı deyil
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-blue-900 dark:text-blue-300 mt-0.5">
                     {hizliSorguSonuc.hamAciklama}
