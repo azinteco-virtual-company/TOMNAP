@@ -86,6 +86,9 @@ function prepareRows(rows: any, tenant: string, demo = false) {
     'gorsel_urlleri',
     'ozel_not',
     'birden_fazla_urun',
+    // v1 export of the A8 columns; only v1 values are accepted below.
+    'model_surumu',
+    'sahip_kullanici_id',
   ]);
   return rows.map((raw: any) => {
     if (
@@ -110,6 +113,14 @@ function prepareRows(rows: any, tenant: string, demo = false) {
         'Yedekte desteklenmeyen alan var; veri kaybını önlemek için yükleme durduruldu.',
         400
       );
+    // v2 orders need their lines (siparis_satirlari); a v1 backup cannot carry them.
+    if (
+      (raw.model_surumu !== undefined &&
+        raw.model_surumu !== null &&
+        Number(raw.model_surumu) !== 1) ||
+      (raw.sahip_kullanici_id !== undefined && raw.sahip_kullanici_id !== null)
+    )
+      throw new PublicResourceError('v2 siparişleri bu yedekle yüklenemez.', 400);
     const claims = [
       raw.tenant_id,
       raw.tenantId,

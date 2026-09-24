@@ -702,6 +702,19 @@ const salesFields = new Set(
   )
 );
 const financeFields = new Set(['alinan_tutar', 'finans_durumu', 'baku_tahsilat_notu']);
+// v2 orders (model_surumu = 2, K20): these old columns are derived from the order lines
+// or written only by RPCs; the generic PATCH never changes them.
+const v2DerivedFields = new Set([
+  'toplam_tutar',
+  'alinan_tutar',
+  'finans_durumu',
+  'lojistik_durumu',
+  'urun_aciklamasi',
+  'adet',
+  'beden_veya_olcu',
+  'renk',
+  'urunler',
+]);
 const purchaseFields = new Set([
   'urun_aciklamasi',
   'beden_veya_olcu',
@@ -756,6 +769,8 @@ router.patch('/siparisler/:id', async (req, res) => {
         continue;
       }
       if (JSON.stringify(value) === JSON.stringify(formatted[key])) continue;
+      if (Number(formatted.model_surumu) === 2 && v2DerivedFields.has(key))
+        throw new PublicResourceError('v2 siparişte bu alan satırlardan türetilir: ' + key, 409);
       if (
         [
           'baku_kurye_id',
