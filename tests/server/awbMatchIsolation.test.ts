@@ -1,20 +1,21 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as XLSX from 'xlsx';
 import { createApp } from '../../src/server';
 import { setSiparislerVeritabani, siparislerVeritabani } from '../../src/server/services/state';
 import { awbOnayKayitlari } from '../../src/server/services/kargo/awbMatchStore';
 import { supabase } from '../../src/server/services/supabase';
-import { loginFixture } from './helpers/session';
+import {
+  readProjectData,
+  tenantAgents,
+  TENANT_A,
+  TENANT_B,
+  type Agent,
+} from './helpers/tenantIsolation';
 
-// Tenant isolation for the AWB matching routes, following isolation.test.ts:
-// repository data stays untouched and no live service is reachable.
-const TENANT_A = 'kanada_shopper_baku';
-const TENANT_B = 'ayla_boutique';
+// AWB-specific tenant isolation checks on top of the shared helper (see also
+// tenantIsolation.test.ts): repository data stays untouched, no live service.
 const SHARED_PHONE = '055 284 39 11';
 const SHARED_AWB = '37349392426';
-type Agent = Awaited<ReturnType<typeof loginFixture>>['agent'];
 
 function manifest(rows: string[][]): string {
   const workbook = XLSX.utils.book_new();
@@ -38,14 +39,6 @@ function order(id: string, tenant: string, extra: Record<string, unknown> = {}) 
   };
 }
 
-const projectFiles = ['identity.json', 'firmalar.json', 'kullanicilar.json', 'kargo_ayarlari.json'];
-function readProjectData() {
-  return projectFiles.map((name) => {
-    const filename = path.join(process.cwd(), 'data', name);
-    return fs.existsSync(filename) ? fs.readFileSync(filename, 'utf8') : null;
-  });
-}
-
 function recordOf(id: string): Record<string, unknown> | undefined {
   return siparislerVeritabani.find((row) => row.id === id);
 }
@@ -56,8 +49,7 @@ describe('AWB matching routes stay inside the requesting tenant', () => {
   let ownerA: Agent;
   let ownerB: Agent;
   beforeAll(async () => {
-    ownerA = (await loginFixture(app, 'PATRON', TENANT_A)).agent;
-    ownerB = (await loginFixture(app, 'PATRON', TENANT_B)).agent;
+    ({ a: ownerA, b: ownerB } = await tenantAgents(app));
   });
   beforeEach(() => {
     vi.stubEnv('FF_AWB_REVIEW', 'true');

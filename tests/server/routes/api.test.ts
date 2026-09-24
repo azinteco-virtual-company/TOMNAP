@@ -73,14 +73,14 @@ describe('API Rota Entegrasyon Testleri', () => {
     expect(res.body).toHaveProperty('toplam_siparis');
   });
 
-  it('GET /api/tenant/izolasyon-testi — izolasyon testini hatasız tamamlamalı', async () => {
+  it('GET /api/tenant/izolasyon-testi — kaldırıldı; yetkili oturumda bile reddedilir', async () => {
+    // The removed check filtered by tenant and then looked for other tenants in
+    // the same result, so it could never fail. Isolation is covered by tests.
     const res = await authenticated.get(
       '/api/tenant/izolasyon-testi?tenant_id=kanada_shopper_baku'
     );
-    expect(res.status).toBe(200);
-    expect(res.body.basarili).toBe(true);
-    expect(res.body.tum_testler_gecti).toBe(true);
-    expect(res.body.toplam_sizinti_sayisi).toBe(0);
+    expect(res.status).toBe(403);
+    expect(res.body.tum_testler_gecti).toBeUndefined();
   });
 
   it('POST /api/siparisler & PATCH & DELETE — CRUD yaşam döngüsünü tamamlamalı', async () => {

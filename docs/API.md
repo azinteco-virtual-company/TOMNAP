@@ -50,13 +50,9 @@ Sunucunun genel sağlık durumunu, veritabanı rejimini ve ortam değişkeni yap
 }
 ```
 
-### `GET /api/tenant/izolasyon-testi`
-
-Kiracılar arası veri sızıntısı olup olmadığını doğrular.
-
-**Parametreler:**
-
-- `tenant_id` (zorunlu): Test edilecek firma kimliği.
+Eski `GET /api/tenant/izolasyon-testi` uç noktası kaldırıldı: önce tenant'a göre
+filtreleyip sonra aynı sonuçta başka tenant arıyordu, bu yüzden hiçbir zaman
+başarısız olamazdı. Tenant izolasyonu CI'daki otomatik testlerle doğrulanır.
 
 ---
 

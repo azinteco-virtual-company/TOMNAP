@@ -4156,11 +4156,7 @@ var rules = [
   ["POST", /^\/api\/firmalar$/, ["SUPER_ADMIN"]],
   ["PATCH", /^\/api\/firmalar\/[^/]+\/onay$/, ["SUPER_ADMIN"]],
   ["DELETE", /^\/api\/firmalar\/[^/]+$/, ["SUPER_ADMIN"]],
-  [
-    "GET",
-    /^\/api\/(sistem-durum|tenant\/izolasyon-testi|veritabani\/(durum|yedek-al))$/,
-    ["SUPER_ADMIN"]
-  ],
+  ["GET", /^\/api\/(sistem-durum|veritabani\/(durum|yedek-al))$/, ["SUPER_ADMIN"]],
   [
     "POST",
     /^\/api\/(veritabani\/(temizle|demo-yukle|yedek-yukle)|ornek-verileri-yukle)$/,
@@ -4486,96 +4482,6 @@ router.get("/sistem-durum", async (req, res) => {
     },
     sunucu_zamani: (/* @__PURE__ */ new Date()).toISOString()
   });
-});
-router.get("/tenant/izolasyon-testi", async (req, res) => {
-  try {
-    const hedefTenant = req.query.tenant_id || "kanada_shopper_baku";
-    const testSonuclari = [];
-    let toplamSizinti = 0;
-    let siparislerTest = [];
-    if (supabase) {
-      const { data } = await supabase.from("siparisler").select("id, tenant_id, musteri_adi").eq("tenant_id", hedefTenant);
-      if (data) siparislerTest = data;
-    } else {
-      siparislerTest = siparislerVeritabani.filter(
-        (s) => (s.tenant_id || "kanada_shopper_baku") === hedefTenant
-      );
-    }
-    const siparisSizintilari = siparislerTest.filter(
-      (s) => (s.tenant_id || "kanada_shopper_baku") !== hedefTenant
-    );
-    toplamSizinti += siparisSizintilari.length;
-    testSonuclari.push({
-      modul: "Sipari\u015Fler",
-      toplam_kayit: siparislerTest.length,
-      sizinti_sayisi: siparisSizintilari.length,
-      durum: siparisSizintilari.length === 0 ? "GECTI" : "BASARISIZ",
-      aciklama: siparisSizintilari.length === 0 ? `T\xFCm ${siparislerTest.length} sipari\u015F kesin olarak "${hedefTenant}" tenant'\u0131na ait.` : `UYARI: ${siparisSizintilari.length} sipari\u015F ba\u015Fka tenant'a ait!`
-    });
-    let musterilerTest = [];
-    if (supabase) {
-      const { data } = await supabase.from("musteriler").select("id, tenant_id, ad_soyad").eq("tenant_id", hedefTenant);
-      if (data) musterilerTest = data;
-    } else {
-      musterilerTest = musterilerVeritabani.filter(
-        (m) => (m.tenant_id || "kanada_shopper_baku") === hedefTenant
-      );
-    }
-    const musteriSizintilari = musterilerTest.filter(
-      (m) => (m.tenant_id || "kanada_shopper_baku") !== hedefTenant
-    );
-    toplamSizinti += musteriSizintilari.length;
-    testSonuclari.push({
-      modul: "M\xFC\u015Fteriler (CRM)",
-      toplam_kayit: musterilerTest.length,
-      sizinti_sayisi: musteriSizintilari.length,
-      durum: musteriSizintilari.length === 0 ? "GECTI" : "BASARISIZ",
-      aciklama: musteriSizintilari.length === 0 ? `T\xFCm ${musterilerTest.length} m\xFC\u015Fteri kayd\u0131 kesin olarak "${hedefTenant}" tenant'\u0131na ait.` : `UYARI: ${musteriSizintilari.length} m\xFC\u015Fteri kayd\u0131 ba\u015Fka tenant'a ait!`
-    });
-    const inboxTest = onayBekleyenler.filter(
-      (m) => (m.tenant_id || "kanada_shopper_baku") === hedefTenant
-    );
-    const inboxSizintilari = inboxTest.filter(
-      (m) => (m.tenant_id || "kanada_shopper_baku") !== hedefTenant
-    );
-    toplamSizinti += inboxSizintilari.length;
-    testSonuclari.push({
-      modul: "Gelen Kutusu (Inbox)",
-      toplam_kayit: inboxTest.length,
-      sizinti_sayisi: inboxSizintilari.length,
-      durum: inboxSizintilari.length === 0 ? "GECTI" : "BASARISIZ",
-      aciklama: `T\xFCm ${inboxTest.length} webhook/inbox mesaj\u0131 bu butike aittir.`
-    });
-    const hayaletTenantId = "hayalet_tenant_" + Math.random().toString(36).substring(7);
-    let hayaletSiparisler = [];
-    if (supabase) {
-      const { data } = await supabase.from("siparisler").select("id").eq("tenant_id", hayaletTenantId);
-      if (data) hayaletSiparisler = data;
-    } else {
-      hayaletSiparisler = siparislerVeritabani.filter((s) => s.tenant_id === hayaletTenantId);
-    }
-    const hayaletBasarili = hayaletSiparisler.length === 0;
-    if (!hayaletBasarili) toplamSizinti += hayaletSiparisler.length;
-    testSonuclari.push({
-      modul: "Negatif Kontrol (Hayalet Tenant)",
-      toplam_kayit: hayaletSiparisler.length,
-      sizinti_sayisi: hayaletSiparisler.length,
-      durum: hayaletBasarili ? "GECTI" : "BASARISIZ",
-      aciklama: hayaletBasarili ? "Rastgele olu\u015Fturulan sahte tenant sorgusunda 0 kay\u0131t d\xF6nd\xFC (Veri s\u0131zmas\u0131 yok)." : "HATA: Sahte tenant i\xE7in kay\u0131t d\xF6nd\xFC!"
-    });
-    res.json({
-      basarili: true,
-      test_zamani: (/* @__PURE__ */ new Date()).toISOString(),
-      tenant_id: hedefTenant,
-      tum_testler_gecti: toplamSizinti === 0,
-      toplam_sizinti_sayisi: toplamSizinti,
-      guvenlik_derecesi: toplamSizinti === 0 ? "F\u0130LTREL\u0130 SORGU TUTARLI" : "R\u0130SKL\u0130",
-      sonuclar: testSonuclari,
-      ozet: toplamSizinti === 0 ? `"${hedefTenant}" i\xE7in filtreli sorgular tutarl\u0131. Bu tan\u0131lama yetkisiz eri\u015Fim veya RLS g\xFCvenli\u011Fini kan\u0131tlamaz.` : `D\u0130KKAT: ${toplamSizinti} adet yabanc\u0131 kay\u0131t tespit edildi!`
-    });
-  } catch (err) {
-    res.status(500).json({ basarili: false, hata: "\u0130zolasyon testi s\u0131ras\u0131nda hata: " + err.message });
-  }
 });
 var sistem_default = router;
 

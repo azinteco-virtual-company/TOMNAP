@@ -118,17 +118,45 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     İnsan onayı sayesinde bu hatalar artık otomatik yazmaya dönüşmüyor ama
     öneri kalitesini düşürüyorlar.
     *Soru:* Ayrı bir görev olarak düzeltilsin mi?
-12. **İzolasyon testinin yeri.** `tests/server/isolation.test.ts` ortam izolasyonunu
-    (geçici dizin, ağ engeli) test ediyor. Yeni rotaların tenant izolasyonu
-    `tests/server/awbMatchIsolation.test.ts` dosyasında; ortam izolasyonu
-    kontrollerini de içeriyor.
-    *Soru:* Bu ayrım uygun mu?
+12. ✅ **Karar verildi (24 Eylül 2026):** Ortam izolasyonu testi
+    `tests/server/environmentIsolation.test.ts` adını aldı; içeriği değişmedi.
+    Tenant izolasyonu ortak yardımcı `tests/server/helpers/tenantIsolation.ts` ile
+    test ediliyor: iki tenant kurulur; A'nın oturumu B'nin kaydını okumayı,
+    listelemeyi ve yazmayı dener. Her deneme bir pozitif kontrolle eşleşir.
+    Kritik beş rota grubu `tests/server/tenantIsolation.test.ts` dosyasında;
+    `awbMatchIsolation.test.ts` de aynı yardımcıyı kullanıyor. Faz A–D'deki
+    izolasyon testleri bu yardımcıyı kullanacak.
 13. **`@types/react` projede yok.** React 19 kendi tiplerini taşımadığı için JSX
     strict modda denetlenemiyor. Yeni bileşenler strict kontrolden yalnız bu
     ortam uyarılarıyla (TS7026/TS7016) geçiyor; mevcut bileşenlerde de aynı durum
     var.
     *Soru:* `@types/react` ve `@types/react-dom` devDependency olarak eklensin
     mi? (Mevcut bileşenlerde yeni tip hataları ortaya çıkabilir.)
+
+    **Ölçüm (24 Eylül 2026):** Kurulu React 19.3.0 için `@types/react` ve
+    `@types/react-dom` 19.3.0 eklenince tsc **39 hata** verdi. Sınır 30 olduğu
+    için paketler eklenmedi; ayrı bir PR'da ele alınacak.
+
+    Dosya bazında:
+
+    | Dosya | Hata |
+    | --- | --- |
+    | `src/components/OnayBekleyenlerSayfasi.tsx` | 14 |
+    | `src/components/SiparisTablosu.tsx` | 7 |
+    | `src/components/KargoManifestoSayfasi.tsx` | 6 |
+    | `src/components/UrunGorselleriGalerisi.tsx` | 5 |
+    | `src/components/SiparisDetayModal.tsx` | 5 |
+    | `src/components/UstBaslik.tsx` | 1 |
+    | `src/components/GorselAramaLensModal.tsx` | 1 |
+
+    Türler: TS2339 32, TS2551 3, TS2353 2, TS2367 1, TS2322 1.
+
+    Hataların çoğu React'tan değil, istemci tiplerinin koddan geri kalmasından
+    geliyor. Bileşenler, tanımda olmayan alanları kullanıyor:
+    - `Siparis` tipinde: `gumruk_fin_kodu`, `gorsel_url`, `toplam_tutar_cad`,
+      `gumruk_pasaport_no`, `baku_tahsilat_azn` …
+    - `OnayBekleyenMesaj` tipinde: `mesaj_icerigi`, `gonderen`, `tarih`,
+      `tenant_id`.
 
 ## Denetim scripti
 
@@ -195,3 +223,22 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     *Soru:* Varsayılan pencere sınırsız mı kalsın, yoksa bir gün sayısı mı
     olsun (ör. 60)? Aynı telefonlu adaşlar, yani tekrar eden müşteriler, ayrı
     bir türe ya da daha düşük öneme ayrılsın mı?
+
+## Test altyapısı
+
+17. **CLAUDE.md'deki dosya yolu güncellendi (varsayım).**
+    `tests/server/isolation.test.ts`, `environmentIsolation.test.ts` olarak yeniden
+    adlandırıldı. CLAUDE.md'deki kural bu dosyayı adıyla anıyordu. Yol eskimesin
+    diye kural metninde yalnız dosya adı değişti; kuralın anlamı aynı.
+    *Soru:* CLAUDE.md'ye yalnız sizin dokunmanızı mı tercih edersiniz?
+
+18. **"Kasa/bakiyeler" izolasyon testinin kapsamı (varsayım).** Ayrı bir kasa
+    tablosu ya da uç noktası yok. Bakiyeler sipariş kayıtlarından türetiliyor:
+    - kuryelerin bekleyen tahsilatı `GET /api/kuryeler` ile okunuyor,
+    - finans rolü tahsilatı `PATCH /api/siparisler/:id` ile yazıyor
+      (`alinan_tutar`).
+
+    Test bu iki yolu `BAKU_FINANS` rolüyle sınıyor. Müşteri borcu
+    (`kalan_toplam_borc`) müşteri listesinin parçası ve müşteriler testinde
+    kapsanıyor.
+    *Soru:* Kasa derken ayrı bir ekran ya da rapor mu kastediliyor?
