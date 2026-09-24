@@ -304,7 +304,7 @@ Belge 1'deki mevcut durumla bu spec'in çeliştiği noktalar ve çözüm:
 4. **AWB sipariş başına** (PR #3). v2'de AWB paket başına. PR #3'ün öneri + onay deseni ve `awb_match_approvals` kaydı korunur; v2'de manifest satırı pakete eşlenir. v1 siparişlerde sipariş başına AWB aynen sürer.
 5. **Kurye ataması sipariş başına** (PR #2 RPC'leri). v2'de teslimat (müşteri paketi) başına. PR #2'nin kurye kaydı ve atama deseni yeniden kullanılır; v2 için yeni RPC'ler eklenir, eski RPC'ler değişmez.
 6. **Kurye teslimi tahsilatı kaydetmiyor** (Belge 1 §4). v2'de `tomnap_v2_teslim_ve_tahsilat` teslim ve ödemeyi aynı transaction'da yazıyor.
-7. **Simüle kargo durumu canlıda (`90b8eae`) gerçek siparişe yazılıyor** (Belge 1 KRİTİK 4). Main'de PR #2'nin koruması bunu engelliyor ama testi yok. v2 durumları yalnız paket ve gönderi olaylarından gelir; koruma Faz A'da (A2) testle sabitlenir.
+7. **Simüle kargo durumu canlıda (`90b8eae`) gerçek siparişe yazılıyor** (Belge 1 KRİTİK 4). Main'de PR #2'nin koruması bunu engelliyor, ama tek rota testi korumaya ulaşmıyordu. v2 durumları yalnız paket ve gönderi olaylarından gelir; koruma Faz A'da (A2) testle sabitlenir.
 8. **Gemini'ye müşteri rehberi gidiyor** (Belge 1 KRİTİK 1). v2 AI yalnız belgeden alan çıkarır. Mevcut yol, v2'ye geçmeden Faz A'nın ilk PR'ında kapatılır.
 9. **Rol listesi dağınık; SQL'de `IN (...)` listeleri** (Belge 1 §6). `ABD_SATINALMA` eklenmeden önce tek kaynağa toplanır. SQL listeleri yeni bir migration'daki fonksiyonla değiştirilir. `firmalar.rol_limitleri` varsayılanı değiştirilmez (mevcut tablo); eksik rol anahtarı RPC'de varsayılana düşer.
 10. **Sunucudan geçen yükleme ile 4,5 MB sınırı** (RELEASE_READINESS madde 4). Fatura belgeleri imzalı URL ile doğrudan Storage'a yüklenir (K22).

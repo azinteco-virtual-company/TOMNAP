@@ -75,7 +75,7 @@ A1–A3 birbirinden ve v2'den bağımsızdır; önce yapılmaları önerilir (bk
 
 ### A2 — Simülasyon korumasını testle sabitle (Belge 1 KRİTİK 4)
 
-Belge 1'in düzeltmesine göre simüle sonuçların siparişe yazılması yalnız canlı kodda var. Main'de PR #2'nin koruması bunu engelliyor, ama korumanın testi yok.
+Belge 1'in düzeltmesine göre simüle sonuçların siparişe yazılması yalnız canlı kodda var. Main'de PR #2'nin koruması bunu engelliyor, ama tek rota testi sorgulanacak sipariş kurmadığı için korumaya hiç ulaşmıyor.
 
 - **Kapsam:**
   - Koruma değişmeden testle sabitlenir: simüle sonuç (kimliksiz Aramex, DHL, UPS) hiçbir siparişi değiştirmez; `LIVE` sonuç değiştirir.
