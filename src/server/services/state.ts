@@ -7,6 +7,7 @@ import {
   SUPABASE_URL,
 } from '../config';
 import { JsonStorageError, readJsonFile, writeJsonAtomic } from './atomicJson';
+import { ekipRoluMu, gecerliRolMu } from '../../shared/roller';
 import { BASLANGIC_SIPARISLER } from '../../data/ornek-siparisler';
 import {
   MusteriKaydi,
@@ -134,14 +135,6 @@ type PersistedIdentity = IdentitySnapshot & { version: 1 };
 const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
 const nonempty = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
-const roles = new Set([
-  'SUPER_ADMIN',
-  'PATRON',
-  'KANADA_SATINALMA',
-  'SATIS_SORUMLUSU',
-  'BAKU_FINANS',
-  'BAKU_KURYE',
-]);
 function companyRecord(value: unknown): value is FirmaTenantItem {
   return (
     object(value) &&
@@ -161,7 +154,7 @@ function userRecord(value: unknown): value is KullaniciKaydi {
     nonempty(value.tenant_id) &&
     typeof value.ad_soyad === 'string' &&
     typeof value.email === 'string' &&
-    roles.has(String(value.rol)) &&
+    gecerliRolMu(value.rol) &&
     ['BEKLEMEDE_SIFRE', 'AKTIF', 'PASIF'].includes(String(value.durum)) &&
     typeof value.olusturma_tarihi === 'string'
   );
@@ -172,8 +165,7 @@ function inviteRecord(value: unknown): value is DavetKaydi {
     nonempty(value.token) &&
     nonempty(value.tenantId) &&
     typeof value.tenantAd === 'string' &&
-    roles.has(String(value.rol)) &&
-    value.rol !== 'SUPER_ADMIN' &&
+    ekipRoluMu(value.rol) &&
     typeof value.olusturanKisi === 'string' &&
     typeof value.olusturmaTarihi === 'string' &&
     typeof value.gecerlilikTarihi === 'string' &&

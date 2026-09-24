@@ -1,3 +1,5 @@
+import type { KullaniciRolu, RolLimitleri } from '../../shared/roller';
+
 export interface MusteriKaydi {
   id: string;
   ad_soyad: string;
@@ -78,20 +80,8 @@ export interface FirmaTenantItem {
   sahipTelefon?: string;
   kayitTarihi?: string;
   menseiUlke?: string;
-  rolLimitleri?: {
-    PATRON: number;
-    KANADA_SATINALMA: number;
-    SATIS_SORUMLUSU: number;
-    BAKU_FINANS: number;
-    BAKU_KURYE: number;
-  };
-  aktifKullaniciSayilari?: {
-    PATRON: number;
-    KANADA_SATINALMA: number;
-    SATIS_SORUMLUSU: number;
-    BAKU_FINANS: number;
-    BAKU_KURYE: number;
-  };
+  rolLimitleri?: RolLimitleri;
+  aktifKullaniciSayilari?: RolLimitleri;
 }
 
 export interface DavetKaydi {
@@ -113,7 +103,7 @@ export interface KullaniciKaydi {
   ad_soyad: string;
   email: string;
   telefon?: string;
-  rol: 'SUPER_ADMIN' | 'PATRON' | 'KANADA_SATINALMA' | 'SATIS_SORUMLUSU' | 'BAKU_FINANS' | 'BAKU_KURYE';
+  rol: KullaniciRolu;
   sifre_hash?: string;
   durum: 'BEKLEMEDE_SIFRE' | 'AKTIF' | 'PASIF';
   aktivasyon_token?: string | null;
