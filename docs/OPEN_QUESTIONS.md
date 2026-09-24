@@ -195,3 +195,11 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     *Soru:* Varsayılan pencere sınırsız mı kalsın, yoksa bir gün sayısı mı
     olsun (ör. 60)? Aynı telefonlu adaşlar, yani tekrar eden müşteriler, ayrı
     bir türe ya da daha düşük öneme ayrılsın mı?
+
+## Test altyapısı
+
+17. **CLAUDE.md'deki dosya yolu güncellendi (varsayım).**
+    `tests/server/isolation.test.ts`, `environmentIsolation.test.ts` olarak yeniden
+    adlandırıldı. CLAUDE.md'deki kural bu dosyayı adıyla anıyordu. Yol eskimesin
+    diye kural metninde yalnız dosya adı değişti; kuralın anlamı aynı.
+    *Soru:* CLAUDE.md'ye yalnız sizin dokunmanızı mı tercih edersiniz?

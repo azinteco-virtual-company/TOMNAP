@@ -36,7 +36,7 @@ GUARDRAIL — bu projedeki her görev için geçerli:
   filtresi zorunlu. Her yeni rota için 00-A'da yazılan awbMatchIsolation.test.ts desenine
   (00-E sonrası: ortak tenant izolasyon yardımcısına) uygun test yaz: başka tenant'ın verisi
   okunamamalı, listelenmemeli, yazılamamalı. Testi bir kez mutasyonla doğrula: tenant
-  filtresini geçici kaldır, test düşmeli, geri al. DİKKAT: tests/server/isolation.test.ts
+  filtresini geçici kaldır, test düşmeli, geri al. DİKKAT: tests/server/environmentIsolation.test.ts
   ORTAM izolasyonunu test eder, tenant izolasyonunu değil; onu desen olarak kullanma.
 - Her yeni API rotasını src/server/middleware/auth.ts allowlist'ine metod+yol+rol ile ekle.
   Listede olmayan rota zaten reddedilir; bunu bilerek yaz.
