@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=build/server.cjs && esbuild src/server/vercel.ts --bundle --platform=node --format=esm --packages=external --outfile=api/index.js && node -e \"import('node:fs').then(m => m.copyFileSync('api/index.js', 'api/[...all].js'))\" && npm run check:client-artifacts",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=build/server.cjs && esbuild src/server/vercel.ts --bundle --platform=node --format=esm --packages=external --outfile=api/index.js && node -e \"import('node:fs').then(m => m.copyFileSync('api/index.js', 'api/[...all].js'))\" && npm run check:client-artifacts && npm run check:v2-bundle",
     "check:client-artifacts": "node --import tsx scripts/check-client-artifacts.ts",
     "start": "node build/server.cjs",
     "preview": "vite preview",
@@ -19,7 +19,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "node scripts/test-e2e.mjs",
     "test:e2e:install": "node scripts/test-e2e.mjs --install",
-    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts"
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "check:v2-bundle": "node --import tsx scripts/check-v2-bundle.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

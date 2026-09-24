@@ -25,6 +25,7 @@ import gorselRouter, { serveUploadedImage } from './routes/gorsel';
 import veritabaniRouter from './routes/veritabani';
 import kargoRouter from './routes/kargoEntegrasyon';
 import authRouter from './routes/auth';
+import v2Router, { v2Kapisi } from './routes/v2';
 
 export interface AppOptions {
   /** Express "trust proxy": hops whose X-Forwarded-For entry is trusted; false = none. */
@@ -75,6 +76,8 @@ export function createApp({ trustProxy = false }: AppOptions = {}) {
     ],
     girisLimiter
   );
+  // v2 kapısı oturumdan önce: FF_V2_FLOW kapalıyken /api/v2 hiçbir kodu çalıştırmadan 404.
+  app.use('/api/v2', v2Kapisi);
   app.use(apiKeyAuth());
   app.get(['/health', '/api/health'], (_req, res) => res.json({ basarili: true }));
 
@@ -109,6 +112,7 @@ export function createApp({ trustProxy = false }: AppOptions = {}) {
     app.use(basePath, authRouter);
   };
   mountRoutes('/api');
+  app.use('/api/v2', v2Router);
 
   // Global Hata Yakalayıcı
   app.use(errorHandler);

@@ -52,6 +52,8 @@ const rules: Rule[] = [
   // Human-confirmed AWB matching (FF_AWB_REVIEW): same roles that may edit an order's AWB.
   ['POST', /^\/api\/kargo\/manifesto-eslestirme\/(oneriler|onayla)$/, SHIPPING],
   ['GET', /^\/api\/proxy-gorsel$/, STAFF],
+  // v2 (FF_V2_FLOW): kapı bayrak kapalıyken bu kurallara hiç ulaşılmadan 404 döner.
+  ['GET', /^\/api\/v2\/durum$/, STAFF],
   ['GET', /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
   [
     'POST',

@@ -1,5 +1,5 @@
 import { apiFetch, getApiContextVersion } from './lib/apiClient';
-import React, { useState, useEffect, useLayoutEffect, useMemo } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Siparis, KullaniciRolu } from './types';
 import { useAppStore } from './store/appStore';
@@ -34,6 +34,12 @@ import { SifreBelirleSayfasi } from './components/SifreBelirleSayfasi';
 import { DavetOlusturModal } from './components/DavetOlusturModal';
 import { TenantOnayMerkeziModal } from './components/TenantOnayMerkeziModal';
 import { CheckCircle2, Trash2, X, Loader2, RotateCcw } from 'lucide-react';
+import { V2_FLOW_ENABLED } from './lib/featureFlags';
+import { rolGrubunda } from './shared/roller';
+
+// v2 kabuğu (VITE_FF_V2_FLOW): ayrı bir parça. Bayrak kapalıyken import derlemeden
+// tamamen düşer; ilk yük paketinde v2 kodu yoktur (scripts/check-v2-bundle.ts).
+const V2Kabuk = V2_FLOW_ENABLED ? lazy(() => import('./components/v2/V2Kabuk')) : null;
 
 type SekmeTipi =
   | 'panel'
@@ -325,6 +331,19 @@ export default function App() {
           onBasariliKayit={handleBasariliKayit}
         />
       </>
+    );
+  }
+
+  // 4. v2 kabuğu (/v2): yalnız VITE_FF_V2_FLOW açıkken, girişten sonra ve /api/v2 ile aynı rollere.
+  if (
+    V2Kabuk &&
+    rolGrubunda(aktifRol, 'STAFF') &&
+    (location.pathname === '/v2' || location.pathname.startsWith('/v2/'))
+  ) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-slate-950" />}>
+        <V2Kabuk />
+      </Suspense>
     );
   }
 

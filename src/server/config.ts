@@ -29,6 +29,15 @@ export function isAwbReviewEnabled(): boolean {
   return process.env.FF_AWB_REVIEW === 'true';
 }
 
+/**
+ * v2 akışı (yeni ekranlar ve /api/v2). Her istekte okunur; yalnız tam olarak
+ * 'true' açar, unset ya da başka değer kapalıdır. Kapalıyken /api/v2 her istekte
+ * 404 döner ve hiçbir v2 kodu çalışmaz (routes/v2/index.ts, v2Kapisi).
+ */
+export function isV2FlowEnabled(): boolean {
+  return process.env.FF_V2_FLOW === 'true';
+}
+
 export const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 export const EMAIL_FROM = process.env.EMAIL_FROM || 'TOMNAP Platform <onboarding@resend.dev>';
 export const APP_URL =
