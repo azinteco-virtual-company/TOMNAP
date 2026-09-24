@@ -60,6 +60,8 @@ export const ROL_GRUPLARI = {
   COURIER_ASSIGN: [...OWNERS, 'KANADA_SATINALMA'],
   /** Kur okuma ve girişi (v2 rol matrisi): sahipler, satın almacılar, Bakü finans. */
   RATES: [...OWNERS, ...BUYERS, 'BAKU_FINANS'],
+  /** Maaş ve prim verisi, varsayılan prim oranı dahil: yalnız patron; SUPER_ADMIN değil (K15). */
+  PAYROLL: ['PATRON'],
   ALL: [...STAFF, 'BAKU_KURYE'],
 } as const satisfies Record<string, readonly KullaniciRolu[]>;
 

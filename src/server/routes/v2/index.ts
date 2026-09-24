@@ -6,7 +6,9 @@ import {
   ayarGuncellemesiniDogrula,
   ayarlariGuncelle,
   ayarlariOku,
+  type V2Ayarlari,
 } from '../../services/v2/ayarlar';
+import { rolGrubunda } from '../../../shared/roller';
 
 /**
  * v2 akışı (FF_V2_FLOW). Kapı, oturum doğrulamasından ÖNCE bağlanır: bayrak
@@ -55,10 +57,18 @@ router.post('/kurlar', async (req, res) => {
   }
 });
 
-// v2 tenant ayarları (K8, K11): yalnız sahipler (allowlist: OWNERS).
+// v2 tenant ayarları (K8, K11): yalnız sahipler (allowlist: OWNERS). Prim oranını yalnız
+// patron görür ve değiştirir; SUPER_ADMIN ayarların geri kalanını görür (K15).
+const primGorur = (req: Request) => rolGrubunda(req.auth?.role, 'PAYROLL');
+function gorunur(req: Request, ayarlar: V2Ayarlari) {
+  if (primGorur(req)) return ayarlar;
+  const { primOraniVarsayilan: _gizli, ...digerleri } = ayarlar;
+  return digerleri;
+}
+
 router.get('/ayarlar', async (req, res) => {
   try {
-    res.json({ basarili: true, ayarlar: await ayarlariOku(req.tenantId) });
+    res.json({ basarili: true, ayarlar: gorunur(req, await ayarlariOku(req.tenantId)) });
   } catch (error) {
     hata(res, error);
   }
@@ -66,10 +76,12 @@ router.get('/ayarlar', async (req, res) => {
 
 router.patch('/ayarlar', async (req, res) => {
   try {
+    if (!primGorur(req) && Object.hasOwn(Object(req.body), 'prim_orani_varsayilan'))
+      throw new PublicResourceError('Prim oranını yalnız patron değiştirebilir.', 403);
     const degisiklik = ayarGuncellemesiniDogrula(req.body);
     res.json({
       basarili: true,
-      ayarlar: await ayarlariGuncelle(req.tenantId, kullanici(req), degisiklik),
+      ayarlar: gorunur(req, await ayarlariGuncelle(req.tenantId, kullanici(req), degisiklik)),
     });
   } catch (error) {
     hata(res, error);

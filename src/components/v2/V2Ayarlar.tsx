@@ -4,7 +4,8 @@ import { apiFetch } from '../../lib/apiClient';
 interface Ayarlar {
   aylikBeyanSinirUsd: number;
   varsayilanKgFiyatiAzn: number | null;
-  primOraniVarsayilan: number;
+  /** Only the owner receives the prim rate (K15); absent for the administrator. */
+  primOraniVarsayilan?: number;
   kayitli: boolean;
 }
 interface Form {
@@ -17,7 +18,10 @@ const formdan = (ayarlar: Ayarlar): Form => ({
   beyan: String(ayarlar.aylikBeyanSinirUsd),
   kg: ayarlar.varsayilanKgFiyatiAzn === null ? '' : String(ayarlar.varsayilanKgFiyatiAzn),
   // Stored as a fraction (0.05), shown as a percentage (5).
-  prim: String(Math.round(ayarlar.primOraniVarsayilan * 10000) / 100),
+  prim:
+    ayarlar.primOraniVarsayilan === undefined
+      ? ''
+      : String(Math.round(ayarlar.primOraniVarsayilan * 10000) / 100),
 });
 const sayi = (value: string) => Number(value.replace(',', '.'));
 const hataMetni = (error: unknown) =>
@@ -47,8 +51,10 @@ export default function V2Ayarlar() {
     if (beyan !== ayarlar.aylikBeyanSinirUsd) degisiklik.aylik_beyan_sinir_usd = beyan;
     const kg = form.kg.trim() ? sayi(form.kg) : null;
     if (kg !== ayarlar.varsayilanKgFiyatiAzn) degisiklik.varsayilan_kg_fiyati_azn = kg;
-    const prim = Math.round(sayi(form.prim) * 100) / 10000;
-    if (prim !== ayarlar.primOraniVarsayilan) degisiklik.prim_orani_varsayilan = prim;
+    if (ayarlar.primOraniVarsayilan !== undefined) {
+      const prim = Math.round(sayi(form.prim) * 100) / 10000;
+      if (prim !== ayarlar.primOraniVarsayilan) degisiklik.prim_orani_varsayilan = prim;
+    }
     if (Object.keys(degisiklik).length === 0) {
       setMesaj('Dəyişiklik yoxdur.');
       return;
@@ -97,7 +103,8 @@ export default function V2Ayarlar() {
       >
         {sahe('beyan', 'Aylıq bəyan limiti (USD)', 'Alıcı başına aylıq cəm; standart 300.')}
         {sahe('kg', 'Standart kq qiyməti (AZN)', 'Boş: təyin edilməyib.')}
-        {sahe('prim', 'Standart prim faizi (%)', 'Prim öncəsi mənfəətdən; standart 5%.')}
+        {ayarlar?.primOraniVarsayilan !== undefined &&
+          sahe('prim', 'Standart prim faizi (%)', 'Prim öncəsi mənfəətdən; standart 5%.')}
         <button
           type="submit"
           disabled={!ayarlar}
