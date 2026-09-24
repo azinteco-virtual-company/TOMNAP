@@ -25,6 +25,7 @@ import {
   Building2,
 } from 'lucide-react';
 import { KullaniciRolu } from '../types';
+import { rolGrubunda } from '../shared/roller';
 import { useDil } from '../context/DilKonteksti';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -149,26 +150,14 @@ export const YanMenu: React.FC<YanMenuProps> = ({
   // Bakü Finans: Siparişler, Bakü tahsilat, Müşteriler görür
   // Bakü Kurye: Öncelikle sadece Kurye Teslimat Masası'nı görür
   const canSeePanel = aktifRol !== 'BAKU_KURYE';
-  const canSeeGorselGiris =
-    aktifRol === 'SUPER_ADMIN' ||
-    aktifRol === 'PATRON' ||
-    aktifRol === 'SATIS_SORUMLUSU' ||
-    aktifRol === 'KANADA_SATINALMA';
-  const canSeeMusteriler =
-    aktifRol === 'SUPER_ADMIN' ||
-    aktifRol === 'PATRON' ||
-    aktifRol === 'BAKU_FINANS' ||
-    aktifRol === 'SATIS_SORUMLUSU';
-  const canSeeKargoManifest =
-    aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'KANADA_SATINALMA';
-  const canSeeKargoMerkezi =
-    aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'KANADA_SATINALMA';
-  const canSeeBakuTahsilat =
-    aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'BAKU_FINANS';
-  const canSeeInbox =
-    aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'SATIS_SORUMLUSU';
-  const canSeeKuryeMasasi =
-    aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON' || aktifRol === 'KANADA_SATINALMA';
+  // Menü görünürlüğü rol kataloğundaki gruplardan türetilir (src/shared/roller.ts).
+  const canSeeGorselGiris = rolGrubunda(aktifRol, 'PURCHASING');
+  const canSeeMusteriler = rolGrubunda(aktifRol, 'FINANCE');
+  const canSeeKargoManifest = rolGrubunda(aktifRol, 'SHIPPING');
+  const canSeeKargoMerkezi = rolGrubunda(aktifRol, 'SHIPPING');
+  const canSeeBakuTahsilat = rolGrubunda(aktifRol, 'OWNERS') || aktifRol === 'BAKU_FINANS';
+  const canSeeInbox = rolGrubunda(aktifRol, 'SALES');
+  const canSeeKuryeMasasi = rolGrubunda(aktifRol, 'SHIPPING');
   // Patron kesinlikle Sistem & Devir kodlarını GÖREMEZ!
   const canSeeSistemKodlar = aktifRol === 'SUPER_ADMIN';
 
@@ -675,7 +664,7 @@ export const YanMenu: React.FC<YanMenuProps> = ({
           )}
 
           {/* 7. Komanda Dəvət Linki (Super Admin və Patron) */}
-          {onDavetModalAc && (aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON') && (
+          {onDavetModalAc && rolGrubunda(aktifRol, 'OWNERS') && (
             <div className="relative group flex justify-center w-full">
               <button
                 id="nav-btn-davet-modal"

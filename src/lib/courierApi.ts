@@ -1,5 +1,6 @@
 import { apiFetch } from './apiClient';
 import type { KullaniciRolu, Siparis } from '../types';
+import { rolGrubunda } from '../shared/roller';
 
 export interface CourierRecord {
   id: string;
@@ -41,9 +42,9 @@ export interface CourierTasks {
 }
 
 export const canManageCouriers = (role: KullaniciRolu | null | undefined) =>
-  role === 'PATRON' || role === 'SUPER_ADMIN';
+  rolGrubunda(role, 'OWNERS');
 export const canAssignCourier = (role: KullaniciRolu | null | undefined) =>
-  canManageCouriers(role) || role === 'KANADA_SATINALMA';
+  rolGrubunda(role, 'SHIPPING');
 export const assignableCouriers = (couriers: CourierRecord[]) =>
   couriers.filter((courier) => courier.aktif && !!courier.kullanici_id);
 export const ordersForCourier = (orders: Siparis[], courierId: string) =>

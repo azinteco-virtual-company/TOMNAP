@@ -15,6 +15,7 @@ import {
   User,
 } from 'lucide-react';
 import { FirmaTenant, KullaniciRolu } from '../types';
+import { VARSAYILAN_ROL_LIMITLERI, ilkKullaniciSayilari } from '../shared/roller';
 
 interface DavetOlusturModalProps {
   acik: boolean;
@@ -38,21 +39,9 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
 
   if (!acik || !seciliFirma) return null;
 
-  const rolLimitleri = seciliFirma.rolLimitleri || {
-    PATRON: 1,
-    KANADA_SATINALMA: 2,
-    SATIS_SORUMLUSU: 4,
-    BAKU_FINANS: 2,
-    BAKU_KURYE: 10,
-  };
+  const rolLimitleri = seciliFirma.rolLimitleri || VARSAYILAN_ROL_LIMITLERI;
 
-  const aktifSayilar = seciliFirma.aktifKullaniciSayilari || {
-    PATRON: 1,
-    KANADA_SATINALMA: 0,
-    SATIS_SORUMLUSU: 0,
-    BAKU_FINANS: 0,
-    BAKU_KURYE: 0,
-  };
+  const aktifSayilar = seciliFirma.aktifKullaniciSayilari || ilkKullaniciSayilari();
 
   const limit = (rolLimitleri as any)[seciliRol] || 5;
   const movcud = (aktifSayilar as any)[seciliRol] || 0;

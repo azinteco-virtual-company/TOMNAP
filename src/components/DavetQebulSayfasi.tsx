@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { KullaniciRolu } from '../types';
+import type { EkipRolu } from '../shared/roller';
 
 export const DavetQebulSayfasi: React.FC = () => {
   const location = useLocation();
@@ -100,7 +101,7 @@ export const DavetQebulSayfasi: React.FC = () => {
     }
   };
 
-  const rolEtiketleri: Record<string, string> = {
+  const rolEtiketleri: Record<EkipRolu, string> = {
     PATRON: 'Butik Patronu (Yüksək İdarəçi)',
     KANADA_SATINALMA: 'Kanada Satınalma & Kargo Məsuliyyətlisi',
     SATIS_SORUMLUSU: 'Satış & AI Sifariş Girişi',

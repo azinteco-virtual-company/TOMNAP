@@ -117,13 +117,9 @@ export interface Siparis {
   }[];
 }
 
-export type KullaniciRolu =
-  | 'SUPER_ADMIN' // Biz / Geliştirici (Her şeyi görür, sistem mimarisi dahil)
-  | 'PATRON' // Şirket Sahibi / Baş Yönetici (Finans, kurye, sipariş tam kontrol; kod devir gizli)
-  | 'SATIS_SORUMLUSU' // Görsel & WhatsApp sipariş girer, onay bekleyenleri işler
-  | 'KANADA_SATINALMA' // Kanada satınalma fişleri, kargo firması belgeleri, kurye atama
-  | 'BAKU_FINANS' // Bakü tahsilat, kasa ve kalan borç kapama
-  | 'BAKU_KURYE'; // Yalnız sunucuda bağlı olduğu kuryeye açıkça atanmış paketleri görür.
+// Roller ve kotalar rol kataloğundan gelir (src/shared/roller.ts).
+import type { KullaniciRolu, RolLimitleri } from './shared/roller';
+export type { KullaniciRolu, RolLimitleri };
 
 export interface BakuKuryeProfili {
   id: string;
@@ -174,14 +170,6 @@ export interface OnayBekleyenMesaj {
   tetikleyici_kod?: '#SİPARİŞ' | '#ONAY' | '#KNB' | 'MANUEL';
   oneri_siparis: AiAyristirmaSonucu;
   durum: 'BEKLEMEDE' | 'ONAYLANDI' | 'REDDEDILDI';
-}
-
-export interface RolLimitleri {
-  PATRON: number;
-  KANADA_SATINALMA: number;
-  SATIS_SORUMLUSU: number;
-  BAKU_FINANS: number;
-  BAKU_KURYE: number;
 }
 
 export interface FirmaTenant {
