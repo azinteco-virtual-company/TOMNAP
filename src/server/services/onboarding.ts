@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { getIdentitySnapshot, saveIdentitySnapshot } from './state';
 import type { DavetKaydi, FirmaTenantItem, KullaniciKaydi } from '../types';
-import { ekipRoluMu } from '../../shared/roller';
+import { ekipRoluMu, rolKotasi } from '../../shared/roller';
 
 export class OnboardingError extends Error {
   constructor(
@@ -51,7 +51,7 @@ function available(invite: DavetKaydi, token: string) {
 
 function capacity(firma: FirmaTenantItem, users: KullaniciKaydi[], role: string) {
   if (firma.onayDurumu !== 'AKTIF') throw new OnboardingError(403, 'Firma aktiv deyil.');
-  const limit = Number(firma.rolLimitleri?.[role]);
+  const limit = ekipRoluMu(role) ? rolKotasi(firma.rolLimitleri, role) : Number.NaN;
   const count = users.filter(
     (user) => user.tenant_id === firma.id && user.rol === role && user.durum !== 'PASIF'
   ).length;

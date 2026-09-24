@@ -25,6 +25,7 @@ import {
   sifirlaDemoVeritabani,
 } from '../services/state';
 import { MusteriKaydi } from '../types';
+import { rolGrubunda } from '../../shared/roller';
 
 const router = Router();
 const rowTenant = (row: any): string => {
@@ -741,7 +742,7 @@ router.patch('/siparisler/:id', async (req, res) => {
     const allowed =
       role === 'BAKU_FINANS'
         ? financeFields
-        : role === 'KANADA_SATINALMA'
+        : rolGrubunda(role, 'BUYERS')
           ? purchaseFields
           : role === 'SATIS_SORUMLUSU'
             ? salesFields

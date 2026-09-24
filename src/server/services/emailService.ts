@@ -186,6 +186,7 @@ export function buildInviteEmail(params: InviteEmailParams) {
 
   const rolAdlari: Record<EkipRolu, string> = {
     KANADA_SATINALMA: 'Kanada Satınalma Meneceri',
+    ABD_SATINALMA: 'ABD Satınalma Meneceri',
     SATIS_SORUMLUSU: 'Satış və Müştəri Xidmətləri',
     BAKU_FINANS: 'Bakı Maliyyə / Kassa Sorumlusu',
     BAKU_KURYE: 'Bakı Daxili Çatdırılma / Kuryer',

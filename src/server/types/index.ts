@@ -80,8 +80,9 @@ export interface FirmaTenantItem {
   sahipTelefon?: string;
   kayitTarihi?: string;
   menseiUlke?: string;
-  rolLimitleri?: RolLimitleri;
-  aktifKullaniciSayilari?: RolLimitleri;
+  // Eski kayıtlarda yeni rollerin anahtarı yoktur (rolKotasi varsayılana düşer).
+  rolLimitleri?: Partial<RolLimitleri>;
+  aktifKullaniciSayilari?: Partial<RolLimitleri>;
 }
 
 export interface DavetKaydi {
