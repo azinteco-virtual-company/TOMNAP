@@ -118,11 +118,14 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     İnsan onayı sayesinde bu hatalar artık otomatik yazmaya dönüşmüyor ama
     öneri kalitesini düşürüyorlar.
     *Soru:* Ayrı bir görev olarak düzeltilsin mi?
-12. **İzolasyon testinin yeri.** `tests/server/isolation.test.ts` ortam izolasyonunu
-    (geçici dizin, ağ engeli) test ediyor. Yeni rotaların tenant izolasyonu
-    `tests/server/awbMatchIsolation.test.ts` dosyasında; ortam izolasyonu
-    kontrollerini de içeriyor.
-    *Soru:* Bu ayrım uygun mu?
+12. ✅ **Karar verildi (24 Eylül 2026):** Ortam izolasyonu testi
+    `tests/server/environmentIsolation.test.ts` adını aldı; içeriği değişmedi.
+    Tenant izolasyonu ortak yardımcı `tests/server/helpers/tenantIsolation.ts` ile
+    test ediliyor: iki tenant kurulur; A'nın oturumu B'nin kaydını okumayı,
+    listelemeyi ve yazmayı dener. Her deneme bir pozitif kontrolle eşleşir.
+    Kritik beş rota grubu `tests/server/tenantIsolation.test.ts` dosyasında;
+    `awbMatchIsolation.test.ts` de aynı yardımcıyı kullanıyor. Faz A–D'deki
+    izolasyon testleri bu yardımcıyı kullanacak.
 13. **`@types/react` projede yok.** React 19 kendi tiplerini taşımadığı için JSX
     strict modda denetlenemiyor. Yeni bileşenler strict kontrolden yalnız bu
     ortam uyarılarıyla (TS7026/TS7016) geçiyor; mevcut bileşenlerde de aynı durum
@@ -203,3 +206,14 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     adlandırıldı. CLAUDE.md'deki kural bu dosyayı adıyla anıyordu. Yol eskimesin
     diye kural metninde yalnız dosya adı değişti; kuralın anlamı aynı.
     *Soru:* CLAUDE.md'ye yalnız sizin dokunmanızı mı tercih edersiniz?
+
+18. **"Kasa/bakiyeler" izolasyon testinin kapsamı (varsayım).** Ayrı bir kasa
+    tablosu ya da uç noktası yok. Bakiyeler sipariş kayıtlarından türetiliyor:
+    - kuryelerin bekleyen tahsilatı `GET /api/kuryeler` ile okunuyor,
+    - finans rolü tahsilatı `PATCH /api/siparisler/:id` ile yazıyor
+      (`alinan_tutar`).
+
+    Test bu iki yolu `BAKU_FINANS` rolüyle sınıyor. Müşteri borcu
+    (`kalan_toplam_borc`) müşteri listesinin parçası ve müşteriler testinde
+    kapsanıyor.
+    *Soru:* Kasa derken ayrı bir ekran ya da rapor mu kastediliyor?
