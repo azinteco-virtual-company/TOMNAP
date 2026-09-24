@@ -262,27 +262,34 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       yapılacak (K16).
     *Soru:* SUPER_ADMIN'in de düzeltebilmesi gerekir mi?
 
-21. **Rol kataloğunun SQL karşılığı (A4, varsayım).** `tomnap_gecerli_rol(text)` yalnız
+21. ✅ **Onaylandı (24 Eylül 2026):** **Rol kataloğunun SQL karşılığı (A4).** `tomnap_gecerli_rol(text)` yalnız
     davetle verilebilen ekip rolleri için `true` döner; `SUPER_ADMIN` platform rolü
     olduğundan `false`. Bu, davet ve kabul RPC'lerindeki eski `IN (...)` listesinin
     birebir karşılığı. TypeScript'te aynı liste `EKIP_ROLLERI`; `ROLLER` buna
     `SUPER_ADMIN`'i ekler.
-    *Soru:* Yok; bilgi için.
 
-22. **`ABD_SATINALMA`'nın v1 yetkileri ve kotası (A5, varsayım).**
-    - **Yetkiler:** v1'de `KANADA_SATINALMA`'nın birebir eşi (STAFF, PURCHASING,
-      SHIPPING). Buna AWB onayı ve kurye ataması da dahil; SQL'deki AWB onay RPC'si
-      de ABD'yi kabul ediyor. Depo ülkesine göre kısıt (yalnız US) Faz B–C'de gelir.
+22. ✅ **Karar (24 Eylül 2026):** **`ABD_SATINALMA`'nın v1 yetkileri ve kotası (A5).**
+    **Karar:** ABD satın almacısı Bakü kurye ataması yapmaz (Bakü dağıtımı Bakü ofisinin
+    işi); `KANADA_SATINALMA`'nın yetkisi değişmez. Uygulama: yeni `COURIER_ASSIGN` grubu
+    (sahipler + Kanada) kurye atamasını, kurye listesini (`GET /api/kuryeler`, Bakü finans
+    ayrıca okur) ve kurye masasını belirler. **Varsayım:** kurye listesi yalnız atama ve
+    tahsilat içindir, bu yüzden ABD onu da görmez. ABD'nin AWB ve uluslararası kargo
+    yetkisi (SHIPPING) sürüyor.
+    - **Yetkiler:** v1'de STAFF, PURCHASING ve SHIPPING gruplarında; AWB onayı dahil
+      (SQL'deki AWB onay RPC'si de ABD'yi kabul ediyor), Bakü kurye ataması hariç.
+      Depo ülkesine göre kısıt (yalnız US) Faz B–C'de gelir.
     - **Kota:** Kaydında `ABD_SATINALMA` anahtarı olmayan firmada kota 2
       (`tomnap_rol_kota_varsayilani`). Diğer rollerde eksik anahtar bugünkü gibi 0.
       Mevcut `rol_limitleri` kayıtlarına ve tablo varsayılanına dokunulmadı. Yeni
       firmalarda paket sınırları Kanada'yla aynı: Başlangıç 1, Pro 2, Enterprise 5.
     - **Arayüz:** Davet penceresi kalan kotayı sunucuyla aynı kuralla (`rolKotasi`)
       gösteriyor. Eskiden anahtar eksikse 5 gösteriyordu; sunucu ise 0 uyguluyordu.
-    *Soru:* Varsayılan 2 uygun mu? ABD satın almacısı v1'de Bakü kurye ataması
-    yapabilmeli mi?
 
-23. **Kurlar ve v2 ayarları (A7, varsayım).**
+23. ✅ **Karar (24 Eylül 2026):** **Kurlar ve v2 ayarları (A7).**
+    **Karar:** SUPER_ADMIN ayarları görür ama varsayılan prim oranını göremez ve
+    değiştiremez; prim oranı yalnız patronda (K15'in ruhu). Uygulama: yeni `PAYROLL`
+    grubu (yalnız PATRON); diğer sahiplerin yanıtında `primOraniVarsayilan` yok, prim
+    alanlı PATCH 403.
     - **Kur:** "1 birim CAD/USD = X AZN" biçiminde tutuluyor; 0 ile 100 arasında, en çok
       6 ondalık. Tarih 2000'den eski ya da yarından ileri olamaz.
     - **`kaynak`:** en çok 100 karakterlik isteğe bağlı serbest metin (ör. "CBAR"). K4'e
@@ -291,9 +298,8 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       için en son girilen satırdır (tarihe göre değil, giriş zamanına göre).
     - **Kurları okuma:** Girebilen rollerle aynı: PATRON, SUPER_ADMIN, satın almacılar,
       BAKU_FINANS. Satış rolü kurları görmüyor.
-    - **Ayarlar:** Yalnız PATRON ve SUPER_ADMIN okuyup değiştirebiliyor. Varsayılan prim
-      oranı kişisel prim verisi sayılmadı, bu yüzden K15'in dışında tutuldu.
+    - **Ayarlar:** PATRON ve SUPER_ADMIN okuyup değiştirebiliyor; prim oranı yalnız
+      PATRON'da (yukarıdaki karar).
     - **Yabancı anahtar:** İki tabloda da yok. Böylece `firmalar`'a dokunulmuyor ve firma
       silme davranışı değişmiyor.
     - **Arayüz:** Bu bölümler yalnız `/v2` kabuğunda. `localStorage` kuru henüz yerinde.
-    *Soru:* Satış rolü kurları görmeli mi? SUPER_ADMIN varsayılan prim oranını görmeli mi?
