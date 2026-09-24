@@ -226,13 +226,12 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
 
 ## Test altyapısı
 
-17. **CLAUDE.md'deki dosya yolu güncellendi (varsayım).**
+17. ✅ **Onaylandı (24 Eylül 2026):** **CLAUDE.md'deki dosya yolu güncellendi.**
     `tests/server/isolation.test.ts`, `environmentIsolation.test.ts` olarak yeniden
     adlandırıldı. CLAUDE.md'deki kural bu dosyayı adıyla anıyordu. Yol eskimesin
     diye kural metninde yalnız dosya adı değişti; kuralın anlamı aynı.
-    *Soru:* CLAUDE.md'ye yalnız sizin dokunmanızı mı tercih edersiniz?
 
-18. **"Kasa/bakiyeler" izolasyon testinin kapsamı (varsayım).** Ayrı bir kasa
+18. ✅ **Onaylandı (24 Eylül 2026):** **"Kasa/bakiyeler" izolasyon testinin kapsamı.** Ayrı bir kasa
     tablosu ya da uç noktası yok. Bakiyeler sipariş kayıtlarından türetiliyor:
     - kuryelerin bekleyen tahsilatı `GET /api/kuryeler` ile okunuyor,
     - finans rolü tahsilatı `PATCH /api/siparisler/:id` ile yazıyor
@@ -241,4 +240,15 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     Test bu iki yolu `BAKU_FINANS` rolüyle sınıyor. Müşteri borcu
     (`kalan_toplam_borc`) müşteri listesinin parçası ve müşteriler testinde
     kapsanıyor.
-    *Soru:* Kasa derken ayrı bir ekran ya da rapor mu kastediliyor?
+
+## Faz A
+
+19. **AI ayrıştırmada müşteri eşleştirme (A1, varsayım).** Gemini'ye müşteri listesi
+    gitmiyor; eşleştirme ayrıştırmadan sonra sunucuda yapılıyor:
+    - **Telefon:** Tenant'ta normalize telefonu **tek** bir müşteriyle tam eşleşirse sipariş o
+      müşteriye bağlanır. Ad kayıtlı ada düzeltilir ve eksik adres ile şehir karttan dolar;
+      bu, eski AI davranışının sunucu karşılığı.
+    - **Ad:** Benzerlik yalnız `musteri_adaylari` olarak döner, hiçbir zaman otomatik
+      bağlanmaz. Ad adayı varsa yeni müşteri kartı da açılmaz; sipariş bağsız kalır.
+    - **Arayüz:** Adaylar arasından seçim yapılan arayüz henüz yok; A9'da eklenecek.
+    *Soru:* Ad adayı varken de yeni kart açılması mı tercih edilir?
