@@ -14,6 +14,8 @@ interface Answer {
 const db = vi.hoisted(() => ({
   calls: [] as Call[],
   answer: (_call: Call): Answer => ({ data: null, error: null }),
+  rpcs: [] as Array<{ name: string; args: Record<string, unknown> }>,
+  rpcAnswer: (): Answer => ({ data: null, error: null }),
 }));
 
 function builder(call: Call) {
@@ -32,6 +34,7 @@ function builder(call: Call) {
       chain
     ),
     eq: (key: string, value: unknown) => (call.filters.push([key, value]), chain),
+    in: (key: string, values: unknown) => (call.filters.push([`${key}:in`, values]), chain),
     order: () => chain,
     limit: () => chain,
     single: answer,
@@ -43,6 +46,10 @@ function builder(call: Call) {
 }
 vi.mock('../../../src/server/services/supabase', () => ({
   supabase: {
+    rpc: (name: string, args: Record<string, unknown>) => {
+      db.rpcs.push({ name, args });
+      return Promise.resolve(db.rpcAnswer());
+    },
     from: (table: string) => {
       const call: Call = { table, op: 'select', filters: [] };
       db.calls.push(call);
@@ -53,6 +60,12 @@ vi.mock('../../../src/server/services/supabase', () => ({
 
 import { kurEkle, kurlariListele } from '../../../src/server/services/v2/kurlar';
 import { ayarlariGuncelle, ayarlariOku } from '../../../src/server/services/v2/ayarlar';
+import {
+  v2SiparisGetir,
+  v2SiparisGirdisiniDogrula,
+  v2SiparisleriListele,
+  v2SiparisOlustur,
+} from '../../../src/server/services/v2/siparisStore';
 
 const rate = (tenant: string, extra: Record<string, unknown> = {}) => ({
   id: `${tenant}-rate`,
@@ -77,6 +90,8 @@ const settings = (tenant: string) => ({
 beforeEach(() => {
   db.calls = [];
   db.answer = () => ({ data: null, error: null });
+  db.rpcs = [];
+  db.rpcAnswer = () => ({ data: null, error: null });
 });
 
 describe('v2 stores on Supabase (service_role): every query is tenant-scoped (A7)', () => {
@@ -160,5 +175,119 @@ describe('v2 stores on Supabase (service_role): every query is tenant-scoped (A7
       status: 400,
     });
     expect(db.calls).toEqual([]);
+  });
+});
+
+const ORDER = '80000000-0000-4000-8000-000000000001';
+const header = (tenant: string) => ({
+  id: ORDER,
+  tenant_id: tenant,
+  model_surumu: 2,
+  sahip_kullanici_id: 'u-1',
+  musteri_adi: 'Aytən',
+  toplam_tutar: '100.00',
+  alinan_tutar: '0.00',
+  kalan_tutar: '100.00',
+  finans_durumu: 'BEKLIYOR',
+  lojistik_durumu: 'KANADA_SATINALIM_BEKLIYOR',
+  ek_veriler: { musteri_id: 'm-1' },
+  olusturma_tarihi: '2026-09-24T10:00:00.000Z',
+});
+const orderLine = (tenant: string) => ({
+  id: '80000000-0000-4000-8000-0000000000aa',
+  tenant_id: tenant,
+  siparis_id: ORDER,
+  sira: 1,
+  urun_aciklamasi: 'Çanta',
+  beden: null,
+  renk: null,
+  adet: 2,
+  birim_satis_fiyati_azn: '50.00',
+  kaynak_ulke: 'CA',
+  iptal: false,
+});
+const girdi = () =>
+  v2SiparisGirdisiniDogrula({
+    musteri_adi: 'Aytən',
+    satirlar: [
+      { urun_aciklamasi: 'Çanta', adet: 2, birim_satis_fiyati_azn: 50, kaynak_ulke: 'CA' },
+    ],
+  });
+
+describe('v2 order store on Supabase: one RPC per order, tenant-scoped reads (A8)', () => {
+  it('creates through the transactional RPC with the session tenant and creator only', async () => {
+    db.rpcAnswer = () => ({
+      data: { siparis: header('t-a'), satirlar: [orderLine('t-a')] },
+      error: null,
+    });
+    const created = await v2SiparisOlustur('t-a', 'u-1', girdi());
+    expect(db.rpcs).toHaveLength(1);
+    expect(db.rpcs[0]).toMatchObject({
+      name: 'tomnap_v2_siparis_olustur',
+      args: { p_tenant_id: 't-a', p_user_id: 'u-1', p_siparis: { musteri_adi: 'Aytən' } },
+    });
+    expect(db.calls).toEqual([]);
+    expect(created).toMatchObject({ tenantId: 't-a', musteriId: 'm-1', toplamTutar: 100 });
+    expect(created.satirlar[0]).toMatchObject({ urunAciklamasi: 'Çanta', birimSatisFiyatiAzn: 50 });
+  });
+
+  it('maps RPC refusals and refuses foreign rows', async () => {
+    for (const [code, status] of [
+      ['PT403', 403],
+      ['PT409', 409],
+      ['23514', 400],
+      ['22003', 400],
+      ['XX000', 503],
+    ] as const) {
+      db.rpcAnswer = () => ({ data: null, error: { code } });
+      await expect(v2SiparisOlustur('t-a', 'u-1', girdi())).rejects.toMatchObject({ status });
+    }
+    db.rpcAnswer = () => ({ data: { siparis: header('t-b'), satirlar: [] }, error: null });
+    await expect(v2SiparisOlustur('t-a', 'u-1', girdi())).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('reads v2 headers and their lines with tenant filters on every query', async () => {
+    db.answer = (call) => ({
+      data: call.table === 'siparisler' ? [header('t-a')] : [orderLine('t-a')],
+      error: null,
+    });
+    const list = await v2SiparisleriListele('t-a');
+    expect(list[0]).toMatchObject({ id: ORDER, satirlar: [{ adet: 2 }] });
+    const [headers, lines] = db.calls;
+    expect(headers).toMatchObject({ table: 'siparisler' });
+    expect(headers.filters).toEqual(
+      expect.arrayContaining([
+        ['tenant_id', 't-a'],
+        ['model_surumu', 2],
+      ])
+    );
+    expect(lines).toMatchObject({ table: 'siparis_satirlari' });
+    expect(lines.filters).toEqual(
+      expect.arrayContaining([
+        ['tenant_id', 't-a'],
+        ['siparis_id:in', [ORDER]],
+      ])
+    );
+
+    db.calls = [];
+    db.answer = (call) => ({
+      data: call.table === 'siparisler' ? header('t-a') : [orderLine('t-a')],
+      error: null,
+    });
+    await v2SiparisGetir('t-a', ORDER);
+    expect(db.calls[0].filters).toEqual(
+      expect.arrayContaining([
+        ['tenant_id', 't-a'],
+        ['model_surumu', 2],
+        ['id', ORDER],
+      ])
+    );
+    expect(db.calls[1].filters).toContainEqual(['tenant_id', 't-a']);
+
+    db.answer = (call) => ({
+      data: call.table === 'siparisler' ? [header('t-a')] : [orderLine('t-b')],
+      error: null,
+    });
+    await expect(v2SiparisleriListele('t-a')).rejects.toMatchObject({ status: 503 });
   });
 });
