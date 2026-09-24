@@ -10,6 +10,7 @@ import {
   siparislerVeritabani,
 } from '../../../src/server/services/state';
 import { loginFixture } from '../helpers/session';
+import { canAssignCourier } from '../../../src/lib/courierApi';
 
 // A firm whose stored limits predate ABD_SATINALMA (no key): the default of 2 applies.
 const TENANT = 'abd-test-firma';
@@ -87,7 +88,7 @@ describe('ABD_SATINALMA invitation, acceptance, login and quota (A5)', () => {
   });
 });
 
-describe('ABD_SATINALMA allowlist mirrors KANADA_SATINALMA on every rule (A5)', () => {
+describe('ABD_SATINALMA allowlist mirrors KANADA_SATINALMA except Baku courier assignment', () => {
   // Echo app: status is decided by the allowlist alone, no handler side effects.
   const echo = express()
     .use(express.json())
@@ -141,7 +142,7 @@ describe('ABD_SATINALMA allowlist mirrors KANADA_SATINALMA on every rule (A5)', 
         .send({})
     ).status;
 
-  it('gets exactly the Canadian buyer’s decision on every rule', async () => {
+  it('gets the Canadian buyer’s decision on every rule but the two Baku courier rules', async () => {
     const decisions = [];
     for (const [method, path] of probes)
       decisions.push({
@@ -149,18 +150,28 @@ describe('ABD_SATINALMA allowlist mirrors KANADA_SATINALMA on every rule (A5)', 
         canada: await status(canada, method, path),
         us: await status(us, method, path),
       });
-    expect(decisions.filter((row) => row.canada !== row.us)).toEqual([]);
+    // Baku delivery is the Baku office's job (OPEN_QUESTIONS 22); Canada keeps its rights.
+    expect(decisions.filter((row) => row.canada !== row.us)).toEqual([
+      { rule: 'GET /api/kuryeler', canada: 200, us: 403 },
+      { rule: 'POST /api/siparisler/x/kurye', canada: 200, us: 403 },
+    ]);
+    expect([canAssignCourier('KANADA_SATINALMA'), canAssignCourier('ABD_SATINALMA')]).toEqual([
+      true,
+      false,
+    ]);
   });
 
-  it('can read orders, purchase, confirm AWBs and assign couriers but not administer', async () => {
+  it('can read orders, purchase and confirm AWBs, but not assign Baku couriers or administer', async () => {
     for (const [method, path] of [
       ['GET', '/api/siparisler'],
       ['POST', '/api/siparisler'],
       ['POST', '/api/kargo/manifesto-eslestirme/onayla'],
-      ['POST', '/api/siparisler/x/kurye'],
+      ['POST', '/api/siparisler/tumunu-uluslararasi-kargo-yap'],
     ])
       expect([path, await status(us, method, path)]).toEqual([path, 200]);
     for (const [method, path] of [
+      ['POST', '/api/siparisler/x/kurye'],
+      ['GET', '/api/kuryeler'],
       ['POST', '/api/kargo/ayarlar'],
       ['POST', '/api/firmalar/davet-olustur'],
       ['GET', '/api/musteriler'],
