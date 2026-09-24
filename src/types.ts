@@ -187,7 +187,7 @@ export interface FirmaTenant {
   sahipTelefon?: string;
   kayitTarihi?: string;
   menseiUlke?: string;
-  rolLimitleri?: RolLimitleri;
+  rolLimitleri?: Partial<RolLimitleri>;
   aktifKullaniciSayilari?: Partial<RolLimitleri>;
 }
 

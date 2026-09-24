@@ -12,6 +12,7 @@ const labels: Record<KullaniciRolu, string> = {
   SUPER_ADMIN: 'Super Admin',
   PATRON: 'Butik rəhbəri',
   KANADA_SATINALMA: 'Kanada satınalma',
+  ABD_SATINALMA: 'ABD satınalma',
   SATIS_SORUMLUSU: 'Satış məsulu',
   BAKU_FINANS: 'Bakı maliyyə',
   BAKU_KURYE: 'Bakı kuryer',
