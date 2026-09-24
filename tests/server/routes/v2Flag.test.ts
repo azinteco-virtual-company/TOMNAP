@@ -62,7 +62,7 @@ describe('FF_V2_FLOW gate (A6)', () => {
     expect([ok.status, ok.body]).toEqual([200, { basarili: true, v2: true }]);
     expect((await courier.get('/api/v2/durum')).status).toBe(403);
     // Unreviewed v2 routes stay denied by the allowlist.
-    expect((await owner.get('/api/v2/kurlar')).status).toBe(403);
+    expect((await owner.get('/api/v2/incelenmemis')).status).toBe(403);
     expect((await owner.post('/api/v2/durum').send({})).status).toBe(403);
   });
 
