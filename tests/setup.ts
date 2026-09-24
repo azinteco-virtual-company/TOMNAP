@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { afterAll, vi } from 'vitest';
+import { avoidTakenLoopbackPort } from './helpers/loopbackPort';
 
 // The setup runs independently for every test file, before application imports.
 // Never load local .env credentials or persisted company/carrier data in tests.
@@ -62,10 +63,29 @@ globalThis.fetch = async (input, init) => {
   return originalFetch(input, init);
 };
 
+// Test servers that ask for any port never keep one that another process holds
+// on 127.0.0.1 (tests/helpers/loopbackPort.ts).
+const originalListen = net.Server.prototype.listen;
+net.Server.prototype.listen = function (this: net.Server, ...args: unknown[]) {
+  const result = Reflect.apply(originalListen, this, args);
+  const [first] = args;
+  const anyPort =
+    args.length === 0 ||
+    typeof first === 'function' ||
+    first === 0 ||
+    (!!first &&
+      typeof first === 'object' &&
+      !('path' in first) &&
+      !(first as { port?: unknown }).port);
+  if (anyPort) avoidTakenLoopbackPort(this);
+  return result;
+} as typeof originalListen;
+
 const cleanup = () => fs.rmSync(testRoot, { recursive: true, force: true });
 process.once('exit', cleanup);
 afterAll(() => {
   net.Socket.prototype.connect = originalConnect;
+  net.Server.prototype.listen = originalListen;
   globalThis.fetch = originalFetch;
   cleanup();
   process.removeListener('exit', cleanup);
