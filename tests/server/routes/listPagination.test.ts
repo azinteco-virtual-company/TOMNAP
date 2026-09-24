@@ -69,34 +69,22 @@ async function allPages(server: any, path: string, field: string) {
   } while (cursor);
   return { items, first };
 }
-// The musteriler case rebuilds 1207 customer cards from 1207 orders on every page
-// request, matching each order against each customer twice (about 3 million
-// comparisons per request, three requests). Measured on Node 22 with 8 cores:
-// 1.5-1.9 s alone and 6.8 s inside the full parallel suite, close to the 10 s
-// default, so a busier or smaller machine timed out. 30 s is about four times
-// the loaded measurement; siparisler and inbox finish in well under a second.
-const LARGE_LIST_TIMEOUT_MS = 30_000;
-
 describe('complete revisioned lists', () => {
   it.each([
     ['siparisler', 'siparisler'],
     ['inbox', 'mesajlar'],
     ['musteriler', 'musteriler'],
-  ])(
-    'returns all >1000 %s rows with exact totals and tenant scope',
-    async (path, field) => {
-      state.siparislerVeritabani.push(order(9999, 'page-b'));
-      const { items, first } = await allPages(app(), '/api/' + path, field);
-      expect(items).toHaveLength(1207);
-      expect(new Set(items.map((i) => i.id)).size).toBe(1207);
-      expect(first.pagination.total).toBe(1207);
-      expect(items.every((i) => i.tenant_id === 'page-a')).toBe(true);
-      if (path === 'musteriler')
-        expect(items.reduce((n, c) => n + c.kalan_toplam_borc, 0)).toBe(1207 * 8);
-      if (path === 'inbox') expect(first.toplam).toBe(604);
-    },
-    LARGE_LIST_TIMEOUT_MS
-  );
+  ])('returns all >1000 %s rows with exact totals and tenant scope', async (path, field) => {
+    state.siparislerVeritabani.push(order(9999, 'page-b'));
+    const { items, first } = await allPages(app(), '/api/' + path, field);
+    expect(items).toHaveLength(1207);
+    expect(new Set(items.map((i) => i.id)).size).toBe(1207);
+    expect(first.pagination.total).toBe(1207);
+    expect(items.every((i) => i.tenant_id === 'page-a')).toBe(true);
+    if (path === 'musteriler')
+      expect(items.reduce((n, c) => n + c.kalan_toplam_borc, 0)).toBe(1207 * 8);
+    if (path === 'inbox') expect(first.toplam).toBe(604);
+  });
   it('paginates a customer full order history beyond the REST cap', async () => {
     for (const row of state.siparislerVeritabani) {
       row.musteri_adi = 'One customer';
