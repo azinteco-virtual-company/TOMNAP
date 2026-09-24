@@ -312,4 +312,4 @@ Belge 1'deki mevcut durumla bu spec'in çeliştiği noktalar ve çözüm:
 12. **`demo_sandbox` bellekte** (Belge 1 §2). v2 orada kapalı (K21).
 13. **`varsayilan_komisyon_yuzdesi` kullanılmıyor** (Belge 1 7 durak, EK). v2 primleri `kazanc_kurallari`'ndan gelir. Eski kolona dokunulmaz ve kullanılmaz.
 14. **Lojistik enum'unda ABD aşaması yok.** Enum değişmez; ülke bilgisi birim ve gönderide (§5).
-15. **Müşteri listesi her istekte siparişlerden karesel olarak yeniden kuruluyor** (Belge 1 §3). v2 siparişlerde yeni `musteri_id` kolonu doğrudan bağ kurar. Liste performansı ayrı bir iş olarak kalır.
+15. **Müşteri listesi her istekte siparişlerden karesel olarak yeniden kuruluyor** (Belge 1 §3). v2 siparişlerde yeni `musteri_id` kolonu doğrudan bağ kurar. Liste performansı ayrı bir iş olarak kalır. **Güncelleme (24 Eylül 2026):** v1 hesabı doğrusal yapıldı (`src/server/services/musteriGecmisi.ts`); sonuç aynı.
