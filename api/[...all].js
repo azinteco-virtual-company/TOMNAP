@@ -6921,6 +6921,7 @@ router3.patch("/siparisler/:id", async (req, res) => {
       ].includes(key))
         throw new PublicResourceError("Kurye atamas\u0131 i\xE7in kurye atama i\u015Flemini kullan\u0131n.", 403);
       if (key === "kalan_tutar") continue;
+      if (key === "duzeltme_gerekcesi") continue;
       if (!allowed.has(key))
         throw new PublicResourceError("Bu alan\u0131 de\u011Fi\u015Ftirme yetkiniz yok: " + key, 403);
       updates[key] = value;
@@ -6940,6 +6941,33 @@ router3.patch("/siparisler/:id", async (req, res) => {
       changed[key] = Number(changed[key]);
       if (!Number.isFinite(changed[key]) || changed[key] < 0)
         throw new PublicResourceError("Ge\xE7ersiz say\u0131sal de\u011Fer.", 400);
+    }
+    const oncekiAlinan = Number(formatted.alinan_tutar) || 0;
+    if (changed.alinan_tutar < oncekiAlinan) {
+      if (role !== "PATRON")
+        throw new PublicResourceError(
+          "Kaydedilmi\u015F tahsilat azalt\u0131lamaz. D\xFCzeltmeyi patron gerek\xE7eyle yapabilir.",
+          403
+        );
+      const gerekce = typeof req.body.duzeltme_gerekcesi === "string" ? req.body.duzeltme_gerekcesi.trim() : "";
+      if (gerekce.length < 5 || gerekce.length > 500)
+        throw new PublicResourceError(
+          "Tahsilat\u0131 azaltmak i\xE7in 5-500 karakterlik bir gerek\xE7e gerekli.",
+          400
+        );
+      changed.islem_gecmisi = [
+        ...Array.isArray(formatted.islem_gecmisi) ? formatted.islem_gecmisi : [],
+        {
+          tarih: changed.guncellenme_tarihi,
+          yapan_rol: role,
+          yapan_kisi: req.auth?.userId || "",
+          eylem: "TAHSILAT_AZALTILDI",
+          aciklama: `${oncekiAlinan} \u2192 ${changed.alinan_tutar} ${changed.para_birimi || ""}: ${gerekce}`.replace(
+            /\s+:/,
+            ":"
+          )
+        }
+      ];
     }
     changed.kalan_tutar = Math.max(0, changed.toplam_tutar - changed.alinan_tutar);
     changed.finans_durumu = changed.alinan_tutar >= changed.toplam_tutar && changed.toplam_tutar > 0 ? "ODENDI" : changed.alinan_tutar > 0 ? "KISMI_ODEME" : "BEKLIYOR";

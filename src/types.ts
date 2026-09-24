@@ -106,6 +106,8 @@ export interface Siparis {
   kanada_gumruk_fin_kodu?: string; // Müşteri FIN Kodu (SmartCustoms gümrük beyannamesi için)
   tenant_id?: string; // Firma / Butik İdentifikatoru (Multi-Tenant SaaS)
   is_demo?: boolean; // Demo / Sınaq qeydi olub-olmadığı
+  /** Request-only: reason the patron gives when lowering a recorded collection. */
+  duzeltme_gerekcesi?: string;
   islem_gecmisi?: {
     tarih: string;
     yapan_rol: string;

@@ -252,3 +252,12 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       bağlanmaz. Ad adayı varsa yeni müşteri kartı da açılmaz; sipariş bağsız kalır.
     - **Arayüz:** Adaylar arasından seçim yapılan arayüz henüz yok; A9'da eklenecek.
     *Soru:* Ad adayı varken de yeni kart açılması mı tercih edilir?
+
+20. **Tahsilatın azaltılması (A3, varsayım).** Kaydedilmiş `alinan_tutar` yalnız
+    **PATRON** tarafından azaltılabilir. `SUPER_ADMIN` dahil diğer roller 403 alır.
+    - **Gerekçe:** Patron 5-500 karakterlik bir gerekçe vermek zorunda. Değişiklik
+      siparişin `islem_gecmisi`'ne `TAHSILAT_AZALTILDI` olarak yazılır.
+    - **Arayüz:** Tablodaki "BEKLIYOR" seçimi diğer rollere kapalı; patronda gerekçe
+      tarayıcı istemiyle soruluyor. Ödeme defteri (A10) gelince düzeltme ters kayıtla
+      yapılacak (K16).
+    *Soru:* SUPER_ADMIN'in de düzeltebilmesi gerekir mi?

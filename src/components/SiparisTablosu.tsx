@@ -24,6 +24,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { useDil } from '../context/DilKonteksti';
+import { useAppStore } from '../store/appStore';
 import { KanbanGorunumu } from './KanbanGorunumu';
 
 interface SiparisTablosuProps {
@@ -50,6 +51,7 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
   inboxSayisi = 0,
 }) => {
   const { t } = useDil();
+  const aktifRol = useAppStore((state) => state.aktifRol);
   const [aramaMetni, setAramaMetni] = useState('');
   const [seciliFinans, setSeciliFinans] = useState<string>('TUMU');
   const [seciliLojistik, setSeciliLojistik] = useState<string>('TUMU');
@@ -87,11 +89,23 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
     } else if (yeniDurum === 'BEKLIYOR') {
       alinan = 0;
     }
-    onDurumGuncelle(siparis.id, {
+    const guncelleme: Partial<Siparis> = {
       finans_durumu: yeniDurum,
       alinan_tutar: alinan,
       kalan_tutar: Math.max(0, siparis.toplam_tutar - alinan),
-    });
+    };
+    // A recorded collection is lowered only by the patron, with a reason (A3).
+    if (alinan < siparis.alinan_tutar) {
+      if (aktifRol !== 'PATRON') return;
+      const gerekce = window
+        .prompt(
+          `Alınan ${siparis.alinan_tutar} ${siparis.para_birimi} → ${alinan}. Düzeltme gerekçesi (en az 5 karakter):`
+        )
+        ?.trim();
+      if (!gerekce) return;
+      guncelleme.duzeltme_gerekcesi = gerekce;
+    }
+    onDurumGuncelle(siparis.id, guncelleme);
   };
 
   const handleLojistikDurumDegistir = (id: string, yeniDurum: LojistikDurumu) => {
@@ -708,7 +722,17 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
                           >
                             <option value="ODENDI">ODENDI</option>
                             <option value="KISMI_ODEME">KISMI_ODEME</option>
-                            <option value="BEKLIYOR">BEKLIYOR</option>
+                            <option
+                              value="BEKLIYOR"
+                              disabled={siparis.alinan_tutar > 0 && aktifRol !== 'PATRON'}
+                              title={
+                                siparis.alinan_tutar > 0 && aktifRol !== 'PATRON'
+                                  ? 'Kaydedilmiş tahsilatı yalnız patron gerekçeyle düzeltebilir.'
+                                  : undefined
+                              }
+                            >
+                              BEKLIYOR
+                            </option>
                           </select>
                         </td>
 
