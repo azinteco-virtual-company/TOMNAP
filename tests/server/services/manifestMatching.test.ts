@@ -341,3 +341,33 @@ describe('ASCII folding widens weak candidates only', () => {
     expect(report.satirlar[2].adaylar[0]).toMatchObject({ eslesmeTipi: 'SIPARIS_KODU', guc: 'GUCLU' });
   });
 });
+
+describe('Strong phone rule is an exact normalized match', () => {
+  it('reduces international, local and bare Azerbaijani formats to one canonical number', () => {
+    for (const value of ['+994 50 123 45 67', '050 123 45 67', '994501234567'])
+      expect(normalizePhone(value)).toBe('994501234567');
+  });
+
+  it('does not match two operators that share the last seven digits', () => {
+    // The removed matcher accepted any number containing the manifest's last 7 digits.
+    expect(normalizePhone('050 123 45 67')).not.toBe(normalizePhone('055 123 45 67'));
+    const report = eslesmeOnerileriOlustur(
+      [row({ telefon: '050 123 45 67' })],
+      [order('other-operator', { telefon: '055 123 45 67' })]
+    );
+    expect(report.satirlar[0]).toMatchObject({ durum: 'ESLESME_YOK', onerilenSiparisId: null, adaylar: [] });
+  });
+
+  it('keeps a Canadian number apart from an Azerbaijani one with the same last seven digits', () => {
+    expect(normalizePhone('+1 780 123 4567')).toBe('17801234567');
+    expect(normalizePhone('780 123 4567')).not.toMatch(/^994/);
+    const report = eslesmeOnerileriOlustur(
+      [row({ telefon: '+1 780 123 4567' }), row({ takipNo: '37349392427', telefon: '780 123 4567' })],
+      [order('baku', { telefon: '050 123 45 67' })]
+    );
+    expect(report.satirlar.map((item) => [item.durum, item.adaylar.length])).toEqual([
+      ['ESLESME_YOK', 0],
+      ['ESLESME_YOK', 0],
+    ]);
+  });
+});
