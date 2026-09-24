@@ -26,11 +26,18 @@ import veritabaniRouter from './routes/veritabani';
 import kargoRouter from './routes/kargoEntegrasyon';
 import authRouter from './routes/auth';
 
-export function createApp() {
+export interface AppOptions {
+  /** Express "trust proxy": hops whose X-Forwarded-For entry is trusted; false = none. */
+  trustProxy?: number | false;
+}
+
+export function createApp({ trustProxy = false }: AppOptions = {}) {
   const app = express();
 
-  // Reverse proxy / Vercel / Cloudflare uyumu
-  app.set('trust proxy', 1);
+  // Without a proxy in front (local, Docker) X-Forwarded-For is client-controlled
+  // and must not decide req.ip, which keys the rate limiters. Only the Vercel
+  // entry point trusts its one hop (see src/server/vercel.ts).
+  app.set('trust proxy', trustProxy);
 
   // 1. HTTP Güvenlik Başlıkları (Helmet)
   app.use(
