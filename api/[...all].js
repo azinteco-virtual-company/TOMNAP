@@ -9509,8 +9509,9 @@ var KargoMerkezi = class {
     const awbListesi = aktifSiparisler.map((s) => s.uluslararasi_kargo_kodu.trim());
     const takipSonuclari = await provider.topluTakipEt(awbListesi, ayarlar);
     if (takipSonuclari.some((result2) => result2.kaynak !== "LIVE"))
-      throw new Error(
-        "Sim\xFClasyon sonu\xE7lar\u0131 sipari\u015Flere kaydedilemez. Canl\u0131 kargo hesab\u0131 yap\u0131land\u0131r\u0131n."
+      throw new CargoSettingsError(
+        "Sim\xFClasyon sonu\xE7lar\u0131 sipari\u015Flere kaydedilemez. Canl\u0131 kargo hesab\u0131 yap\u0131land\u0131r\u0131n.",
+        409
       );
     const takipMap = /* @__PURE__ */ new Map();
     for (const res of takipSonuclari) {
