@@ -4272,6 +4272,8 @@ var rules = [
   ["GET", /^\/api\/v2\/ayarlar$/, OWNERS2],
   ["PATCH", /^\/api\/v2\/ayarlar$/, OWNERS2],
   ["POST", /^\/api\/v2\/siparisler$/, SALES2],
+  ["POST", /^\/api\/v2\/siparisler\/ayristir$/, SALES2],
+  ["GET", /^\/api\/v2\/siparis-sahipleri$/, OWNERS2],
   ["GET", /^\/api\/v2\/siparisler(?:\/[^/]+)?$/, STAFF2],
   ["GET", /^(?:\/api)?\/uploads\/[^/]+$/, STAFF2],
   [
@@ -7459,8 +7461,8 @@ router5.post("/webhook/siparis", async (req, res) => {
     if (!mesaj || typeof mesaj !== "string") {
       return res.status(400).json({ basarili: false, hata: "Mesaj metni zorunludur." });
     }
-    const metin2 = mesaj.toUpperCase();
-    const bulunanKod = tetikleyici_kod || (metin2.includes("#S\u0130PAR\u0130\u015E") || metin2.includes("#SIPARIS") ? "#S\u0130PAR\u0130\u015E" : metin2.includes("#ONAY") ? "#ONAY" : metin2.includes("#KNB") ? "#KNB" : "MANUEL");
+    const metin3 = mesaj.toUpperCase();
+    const bulunanKod = tetikleyici_kod || (metin3.includes("#S\u0130PAR\u0130\u015E") || metin3.includes("#SIPARIS") ? "#S\u0130PAR\u0130\u015E" : metin3.includes("#ONAY") ? "#ONAY" : metin3.includes("#KNB") ? "#KNB" : "MANUEL");
     let aiSonuc = null;
     if (GEMINI_API_KEY) {
       try {
@@ -10912,15 +10914,15 @@ async function kurEkle(tenant2, userId, girdi) {
   if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
   const client2 = supabase;
   if (!client2) {
-    const kayit3 = {
+    const kayit4 = {
       ...girdi,
       id: randomUUID9(),
       tenantId,
       girenKullaniciId: userId,
       olusturmaZamani: (/* @__PURE__ */ new Date()).toISOString()
     };
-    bellek.push(kayit3);
-    return { ...kayit3 };
+    bellek.push(kayit4);
+    return { ...kayit4 };
   }
   const { data, error: error2 } = await client2.from("kurlar").insert({
     tenant_id: tenantId,
@@ -10931,20 +10933,20 @@ async function kurEkle(tenant2, userId, girdi) {
     giren_kullanici_id: userId
   }).select(COLUMNS).single();
   if (error2 || !data) throw new PublicResourceError("Kur kaydedilemedi.", 503);
-  const kayit2 = satirdan(data);
-  if (kayit2.tenantId !== tenantId) throw new PublicResourceError("Kur kaydedilemedi.", 503);
-  return kayit2;
+  const kayit3 = satirdan(data);
+  if (kayit3.tenantId !== tenantId) throw new PublicResourceError("Kur kaydedilemedi.", 503);
+  return kayit3;
 }
 var yenidenEskiye = (a, b) => b.olusturmaZamani.localeCompare(a.olusturmaZamani) || b.id.localeCompare(a.id);
 async function kurlariListele(tenant2) {
   const tenantId = v2Tenant(tenant2);
   const client2 = supabase;
   if (!client2) {
-    const kurlar2 = bellek.filter((kayit2) => kayit2.tenantId === tenantId).sort(yenidenEskiye).map((kayit2) => ({ ...kayit2 }));
+    const kurlar2 = bellek.filter((kayit3) => kayit3.tenantId === tenantId).sort(yenidenEskiye).map((kayit3) => ({ ...kayit3 }));
     const guncel2 = Object.fromEntries(
       KUR_PARA_BIRIMLERI.map((para) => [
         para,
-        kurlar2.find((kayit2) => kayit2.paraBirimi === para) ?? null
+        kurlar2.find((kayit3) => kayit3.paraBirimi === para) ?? null
       ])
     );
     return { guncel: guncel2, kurlar: kurlar2.slice(0, KUR_LISTE_SINIRI) };
@@ -10956,7 +10958,7 @@ async function kurlariListele(tenant2) {
     if (error2 || !Array.isArray(data)) throw new PublicResourceError("Kurlar okunamad\u0131.", 503);
     const rows = data;
     const kurlar2 = rows.map(satirdan);
-    if (kurlar2.some((kayit2) => kayit2.tenantId !== tenantId))
+    if (kurlar2.some((kayit3) => kayit3.tenantId !== tenantId))
       throw new PublicResourceError("Kurlar okunamad\u0131.", 503);
     return kurlar2;
   };
@@ -11393,6 +11395,160 @@ async function v2SiparisGetir(tenant2, id) {
   return basliktan(data, tenantId, await satirlariOku(tenantId, [id]));
 }
 
+// src/server/services/v2/siparisAyristirma.ts
+import { Type as Type3 } from "@google/genai";
+var HAM_MESAJ_SINIRI = 2e4;
+var SISTEM_TALIMATI = `Sen Instagram ve WhatsApp \xFCzerinden sat\u0131\u015F yapan bir buti\u011Fin sipari\u015F ayr\u0131\u015Ft\u0131rma asistan\u0131s\u0131n.
+G\xF6revin yaln\u0131zca SANA VER\u0130LEN MESAJDAN alan \xE7\u0131karmak.
+
+KURALLAR:
+1. M\xFC\u015Fteri bilgilerini (ad, telefon, Instagram kullan\u0131c\u0131 ad\u0131, \u015Fehir, adres) yaln\u0131zca mesajda yazd\u0131\u011F\u0131 gibi \xE7\u0131kar.
+   Sana hi\xE7bir m\xFC\u015Fteri listesi verilmez; m\xFC\u015Fteriyi tan\u0131maya, e\u015Fle\u015Ftirmeye veya ad\u0131n\u0131 d\xFCzeltmeye \xE7al\u0131\u015Fma. E\u015Fle\u015Ftirmeyi sunucu yapar.
+2. Mesajdaki HER FARKLI \xDCR\xDCN ayr\u0131 bir sat\u0131rd\u0131r ("satirlar"). Ayn\u0131 \xFCr\xFCnden birden fazla isteniyorsa tek sat\u0131rda "adet" ile yaz.
+   Her sat\u0131r i\xE7in: urun_aciklamasi, beden, renk, adet, birim_fiyat (AZN, bir adedin fiyat\u0131).
+   Fiyat mesajda yoksa birim_fiyat alan\u0131n\u0131 bo\u015F b\u0131rak.
+3. Teslimat, paketleme veya kurye ile ilgili \xF6zel istek varsa ozel_not alan\u0131na yaz.
+4. Eksik ya da belirsiz her bilgiyi k\u0131sa T\xFCrk\xE7e c\xFCmlelerle eksik_bilgiler listesine ekle.`;
+var SEMA = {
+  type: Type3.OBJECT,
+  properties: {
+    musteri_adi: { type: Type3.STRING },
+    telefon_numarasi: { type: Type3.STRING },
+    instagram_kullanici_adi: { type: Type3.STRING },
+    teslimat_sehri: { type: Type3.STRING },
+    teslimat_adresi: { type: Type3.STRING },
+    ozel_not: { type: Type3.STRING },
+    satirlar: {
+      type: Type3.ARRAY,
+      items: {
+        type: Type3.OBJECT,
+        properties: {
+          urun_aciklamasi: { type: Type3.STRING },
+          beden: { type: Type3.STRING },
+          renk: { type: Type3.STRING },
+          adet: { type: Type3.INTEGER },
+          birim_fiyat: { type: Type3.NUMBER }
+        },
+        required: ["urun_aciklamasi", "adet"]
+      }
+    },
+    eksik_bilgiler: { type: Type3.ARRAY, items: { type: Type3.STRING } }
+  },
+  required: ["musteri_adi", "satirlar", "eksik_bilgiler"]
+};
+function kayit2(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function metin2(value, enCok) {
+  if (typeof value !== "string") return null;
+  const temiz = value.replace(/[\p{Cc}\p{Cf}]/gu, " ").trim();
+  return temiz ? temiz.slice(0, enCok) : null;
+}
+function aiYanitiniOneriyeCevir(raw) {
+  const r = kayit2(raw);
+  const eksik = Array.isArray(r.eksik_bilgiler) ? r.eksik_bilgiler.map((x) => metin2(x, 200)).filter((x) => !!x).slice(0, 20) : [];
+  const satirlar = (Array.isArray(r.satirlar) ? r.satirlar : []).slice(0, 100).flatMap((value, index) => {
+    const s = kayit2(value);
+    const aciklama = metin2(s.urun_aciklamasi, 500);
+    if (!aciklama) return [];
+    const adet = Number(s.adet);
+    const fiyat = Number(s.birim_fiyat);
+    const fiyatVar = s.birim_fiyat !== void 0 && s.birim_fiyat !== null && Number.isFinite(fiyat) && fiyat >= 0 && fiyat < 1e6;
+    if (!fiyatVar) eksik.push(`${index + 1}. sat\u0131r\u0131n fiyat\u0131 yok.`);
+    return [
+      {
+        urun_aciklamasi: aciklama,
+        beden: metin2(s.beden, 50),
+        renk: metin2(s.renk, 50),
+        adet: Number.isInteger(adet) && adet >= 1 && adet <= 1e3 ? adet : 1,
+        birim_satis_fiyati_azn: fiyatVar ? Math.round(fiyat * 100) / 100 : 0,
+        // The country of purchase is not in a customer message; the person chooses it.
+        kaynak_ulke: "CA"
+      }
+    ];
+  });
+  if (satirlar.length === 0) eksik.push("Mesajda \xFCr\xFCn bulunamad\u0131.");
+  return {
+    oneri: {
+      musteri_adi: metin2(r.musteri_adi, 150) ?? "",
+      telefon_numarasi: metin2(r.telefon_numarasi, 50),
+      instagram_kullanici_adi: metin2(r.instagram_kullanici_adi, 100),
+      teslimat_sehri: metin2(r.teslimat_sehri, 100),
+      teslimat_adresi: metin2(r.teslimat_adresi, 500),
+      ozel_not: metin2(r.ozel_not, 1e3),
+      satirlar
+    },
+    eksikBilgiler: eksik
+  };
+}
+async function tenantMusterileri(tenantId) {
+  const rows = !supabase || tenantId === "demo_sandbox" ? musterilerVeritabani.filter((m) => satirTenanti(m) === tenantId) : await completeCustomerDirectory(tenantId);
+  return rows.map(kayit2).filter(
+    (m) => typeof m.id === "string" && typeof m.ad_soyad === "string" && satirTenanti(m) === tenantId
+  ).map((m) => ({
+    id: m.id,
+    ad_soyad: m.ad_soyad,
+    telefon: typeof m.telefon === "string" ? m.telefon : void 0
+  }));
+}
+async function v2SiparisAyristir(tenant2, body2) {
+  const tenantId = v2Tenant(tenant2);
+  const alanlar = v2GovdesiniAyikla(body2, ["ham_mesaj"]);
+  const hamMesaj = typeof alanlar.ham_mesaj === "string" ? alanlar.ham_mesaj.trim() : "";
+  if (!hamMesaj) throw new PublicResourceError("Ayr\u0131\u015Ft\u0131r\u0131lacak mesaj gereklidir.", 400);
+  if (hamMesaj.length > HAM_MESAJ_SINIRI)
+    throw new PublicResourceError(`Mesaj en fazla ${HAM_MESAJ_SINIRI} karakter olabilir.`, 413);
+  let ai;
+  try {
+    ai = getGeminiClient();
+  } catch {
+    throw new PublicResourceError("AI hizmeti yap\u0131land\u0131r\u0131lmam\u0131\u015F.", 503);
+  }
+  const yanit = await generateContentWithRetryAndFallback(ai, {
+    // Only the message itself: no customer directory, no other order (A1, CLAUDE.md).
+    contents: `Mesaj:
+"""
+${hamMesaj}
+"""`,
+    config: {
+      systemInstruction: SISTEM_TALIMATI,
+      temperature: 0.1,
+      responseMimeType: "application/json",
+      responseSchema: SEMA
+    }
+  });
+  let parsed;
+  try {
+    parsed = JSON.parse(yanit?.text || "{}");
+  } catch {
+    throw new PublicResourceError("AI yan\u0131t\u0131 okunamad\u0131.", 503);
+  }
+  const { oneri, eksikBilgiler } = aiYanitiniOneriyeCevir(parsed);
+  const { eslesen, adaylar } = musteriOner(await tenantMusterileri(tenantId), {
+    telefon: oneri.telefon_numarasi,
+    ad: oneri.musteri_adi
+  });
+  return {
+    oneri,
+    eksikBilgiler,
+    musteriEslesen: eslesen ? { musteri_id: eslesen.id, ad_soyad: eslesen.ad_soyad } : null,
+    musteriAdaylari: adaylar
+  };
+}
+async function siparisSahipAdaylari(tenant2) {
+  const tenantId = v2Tenant(tenant2);
+  if (!supabase || tenantId === "demo_sandbox")
+    return kullanicilarVeritabani.filter(
+      (u) => u.tenant_id === tenantId && u.durum === "AKTIF" && rolGrubunda(u.rol, "ORDER_OWNERS")
+    ).map((u) => ({ id: u.id, adSoyad: u.ad_soyad, rol: u.rol }));
+  const { data, error: error2 } = await supabase.from("kullanicilar").select("id,tenant_id,ad_soyad,rol,durum").eq("tenant_id", tenantId).eq("durum", "AKTIF").in("rol", [...ROL_GRUPLARI.ORDER_OWNERS]);
+  if (error2 || !Array.isArray(data)) throw new PublicResourceError("Ekip okunamad\u0131.", 503);
+  const rows = data;
+  return rows.map(kayit2).flatMap(
+    (u) => u.tenant_id === tenantId && typeof u.id === "string" && rolGrubunda(u.rol, "ORDER_OWNERS") ? [{ id: u.id, adSoyad: String(u.ad_soyad ?? ""), rol: String(u.rol) }] : []
+  );
+}
+
 // src/server/routes/v2/siparisler.ts
 var router11 = Router11();
 function hata2(res, error2) {
@@ -11402,6 +11558,20 @@ function hata2(res, error2) {
   }
   return res.status(500).json({ basarili: false, hata: "\u0130\u015Flem tamamlanamad\u0131." });
 }
+router11.post("/siparisler/ayristir", async (req, res) => {
+  try {
+    res.json({ basarili: true, ...await v2SiparisAyristir(req.tenantId, req.body) });
+  } catch (error2) {
+    hata2(res, error2);
+  }
+});
+router11.get("/siparis-sahipleri", async (req, res) => {
+  try {
+    res.json({ basarili: true, sahipler: await siparisSahipAdaylari(req.tenantId) });
+  } catch (error2) {
+    hata2(res, error2);
+  }
+});
 router11.post("/siparisler", async (req, res) => {
   try {
     const girdi = v2SiparisGirdisiniDogrula(req.body);
@@ -11531,6 +11701,7 @@ function createApp({ trustProxy = false } = {}) {
   app2.use("/api/urun-katalog-gorseli-ara", aiEndpointLimiter);
   app2.use("/api/gorselden-urun-ara", aiEndpointLimiter);
   app2.use("/api/webhook/siparis", aiEndpointLimiter);
+  app2.use("/api/v2/siparisler/ayristir", aiEndpointLimiter);
   app2.use("/api/veritabani/temizle", veritabaniYonetimLimiter);
   app2.use("/api/veritabani/demo-yukle", veritabaniYonetimLimiter);
   app2.use("/api/veritabani/yedek-yukle", veritabaniYonetimLimiter);

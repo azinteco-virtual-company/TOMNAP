@@ -89,6 +89,7 @@ export function createApp({ trustProxy = false }: AppOptions = {}) {
   app.use('/api/urun-katalog-gorseli-ara', aiEndpointLimiter);
   app.use('/api/gorselden-urun-ara', aiEndpointLimiter);
   app.use('/api/webhook/siparis', aiEndpointLimiter);
+  app.use('/api/v2/siparisler/ayristir', aiEndpointLimiter);
 
   // 7. Veritabanı yönetim endpoint'leri için çok sıkı rate limiter (3 istek / 1 dk)
   app.use('/api/veritabani/temizle', veritabaniYonetimLimiter);

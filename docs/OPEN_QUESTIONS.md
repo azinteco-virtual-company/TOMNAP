@@ -330,3 +330,23 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **Geri alma:** v2 siparişi varken down dosyası çalışmayı reddediyor; aksi hâlde
       satırlar sessizce silinirdi.
     *Soru:* SUPER_ADMIN sipariş açtığında sahip seçmek zorunlu olsun mu? (Prim sahibe ait.)
+
+25. **v2 sipariş girişi ve AI satır önerisi (A9, varsayım).**
+    - **Ayrı uç:** Spec AI şemasını `src/server/routes/siparisler.ts`'e koyuyordu. v1
+      `/api/ayristir-siparis` ayrıştırıp hemen kaydettiği için ona dokunulmadı. Yeni
+      `POST /api/v2/siparisler/ayristir` (SALES, AI hız sınırı) yalnız öneri döndürür,
+      hiçbir şey yazmaz; kayıt, insan formu onaylayınca `POST /api/v2/siparisler` ile olur.
+    - **AI'a giden:** Yalnız mesaj metni (en çok 20.000 karakter). Müşteri önerisi AI
+      yanıtındaki ad ve telefonla sunucuda, oturum tenant'ının müşterileri üzerinde yapılır
+      (A1). Gövdede `ham_mesaj` dışında alan gelirse istek reddedilir. Görsel/ekran
+      görüntüsü ayrıştırması henüz yok.
+    - **Eksik bilgi:** Mesajda ülke yoksa satır `CA` önerilir, kişi seçer. Fiyat yoksa
+      alan boş gelir ve "N. satırın fiyatı yok" notu çıkar; form fiyat girilmeden
+      gönderilmez (0 AZN bilerek yazılabilir).
+    - **Sahip seçimi:** Yalnız OWNERS (PATRON, SUPER_ADMIN) görür; aday listesi
+      `GET /api/v2/siparis-sahipleri`, tenant'ın aktif PATRON ve SATIS_SORUMLUSU'ları.
+      Seçilmezse sahip oluşturan kişidir (24'teki soru hâlâ açık).
+    - **Ekran:** `/v2` kabuğunda "Sifarişlər" sekmesi STAFF'a açık; form yalnız SALES'e,
+      diğerleri son 200 v2 siparişin listesini görür. Ekran kendi parçasında (`React.lazy`).
+      Mevcut sipariş tablosunda v2 siparişler "v2" rozetiyle ayrılır; rozet bayraktan
+      bağımsızdır, çünkü v2 sipariş ancak bayrak açıkken oluşabilir.

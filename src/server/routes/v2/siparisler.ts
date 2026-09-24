@@ -6,6 +6,7 @@ import {
   v2SiparisleriListele,
   v2SiparisOlustur,
 } from '../../services/v2/siparisStore';
+import { siparisSahipAdaylari, v2SiparisAyristir } from '../../services/v2/siparisAyristirma';
 
 /**
  * v2 siparişleri (A8). Oluşturma: SALES (patron, SUPER_ADMIN, satış); okuma: STAFF.
@@ -20,6 +21,25 @@ function hata(res: Response, error: unknown) {
   }
   return res.status(500).json({ basarili: false, hata: 'İşlem tamamlanamadı.' });
 }
+
+// A9: AI suggestion from one message (A1 rule: no customer data reaches the AI).
+// Nothing is written; the person reviews and then posts /siparisler.
+router.post('/siparisler/ayristir', async (req: Request, res: Response) => {
+  try {
+    res.json({ basarili: true, ...(await v2SiparisAyristir(req.tenantId, req.body)) });
+  } catch (error) {
+    hata(res, error);
+  }
+});
+
+// Owner picker: active PATRON / SATIS_SORUMLUSU users of the tenant (owners only).
+router.get('/siparis-sahipleri', async (req: Request, res: Response) => {
+  try {
+    res.json({ basarili: true, sahipler: await siparisSahipAdaylari(req.tenantId) });
+  } catch (error) {
+    hata(res, error);
+  }
+});
 
 router.post('/siparisler', async (req: Request, res: Response) => {
   try {

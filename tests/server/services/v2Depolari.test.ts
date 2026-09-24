@@ -66,6 +66,7 @@ import {
   v2SiparisleriListele,
   v2SiparisOlustur,
 } from '../../../src/server/services/v2/siparisStore';
+import { siparisSahipAdaylari } from '../../../src/server/services/v2/siparisAyristirma';
 
 const rate = (tenant: string, extra: Record<string, unknown> = {}) => ({
   id: `${tenant}-rate`,
@@ -289,5 +290,40 @@ describe('v2 order store on Supabase: one RPC per order, tenant-scoped reads (A8
       error: null,
     });
     await expect(v2SiparisleriListele('t-a')).rejects.toMatchObject({ status: 503 });
+  });
+});
+
+describe('v2 order owner picker on Supabase (A9)', () => {
+  it('lists only active order owners of the session tenant and drops foreign rows', async () => {
+    const user = (tenant: string, id: string, rol: string) => ({
+      id,
+      tenant_id: tenant,
+      ad_soyad: id,
+      rol,
+      durum: 'AKTIF',
+    });
+    db.answer = () => ({
+      data: [
+        user('t-a', 'patron-a', 'PATRON'),
+        user('t-a', 'satis-a', 'SATIS_SORUMLUSU'),
+        user('t-b', 'satis-b', 'SATIS_SORUMLUSU'),
+        user('t-a', 'kurye-a', 'BAKU_KURYE'),
+      ],
+      error: null,
+    });
+    const owners = await siparisSahipAdaylari('t-a');
+    expect(owners.map((o) => o.id)).toEqual(['patron-a', 'satis-a']);
+    expect(db.calls).toHaveLength(1);
+    expect(db.calls[0]).toMatchObject({ table: 'kullanicilar', op: 'select' });
+    expect(db.calls[0].filters).toEqual(
+      expect.arrayContaining([
+        ['tenant_id', 't-a'],
+        ['durum', 'AKTIF'],
+        ['rol:in', ['PATRON', 'SATIS_SORUMLUSU']],
+      ])
+    );
+
+    db.answer = () => ({ data: null, error: { code: 'XX000' } });
+    await expect(siparisSahipAdaylari('t-a')).rejects.toMatchObject({ status: 503 });
   });
 });

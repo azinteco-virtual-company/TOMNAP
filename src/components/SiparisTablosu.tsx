@@ -455,6 +455,14 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
                       <div className="min-w-0 flex-1">
                         <div className="font-bold text-slate-900 text-sm truncate flex items-center gap-1.5">
                           <span>{siparis.musteri_adi}</span>
+                          {siparis.model_surumu === 2 && (
+                            <span
+                              className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700"
+                              title="Sətirli sifariş (v2): məbləğlər sətirlərdən hesablanır"
+                            >
+                              v2
+                            </span>
+                          )}
                           {siparis.eksik_bilgiler && siparis.eksik_bilgiler.length > 0 && (
                             <span
                               className="w-2 h-2 rounded-full bg-rose-500 shrink-0"
@@ -615,7 +623,17 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
                       <tr key={siparis.id} className="hover:bg-slate-50/80 transition-colors group">
                         {/* 1. Müşteri */}
                         <td className="p-3">
-                          <div className="font-bold text-slate-900">{siparis.musteri_adi}</div>
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                            <span>{siparis.musteri_adi}</span>
+                            {siparis.model_surumu === 2 && (
+                              <span
+                                className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700"
+                                title="Sətirli sifariş (v2): məbləğlər sətirlərdən hesablanır"
+                              >
+                                v2
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             {siparis.instagram_kullanici_adi ? (
                               <span className="text-blue-600 font-medium text-[11px]">

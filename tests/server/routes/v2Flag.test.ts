@@ -8,6 +8,8 @@ type Agent = Awaited<ReturnType<typeof loginFixture>>['agent'];
 const METHODS = ['get', 'post', 'patch', 'delete'] as const;
 const PATHS = [
   '/api/v2/siparisler',
+  '/api/v2/siparisler/ayristir',
+  '/api/v2/siparis-sahipleri',
   '/api/v2',
   '/api/v2/',
   '/api/v2/durum',

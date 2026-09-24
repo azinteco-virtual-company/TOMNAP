@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, apiFetch } from '../../lib/apiClient';
 import { useAppStore } from '../../store/appStore';
@@ -6,19 +6,23 @@ import { rolGrubunda } from '../../shared/roller';
 import V2Kurlar from './V2Kurlar';
 import V2Ayarlar from './V2Ayarlar';
 
+// Sipariş girişi kendi parçasında: kabuk açılınca değil, sekme seçilince yüklenir.
+const SiparisGirisi = lazy(() => import('./SiparisGirisi'));
+
 type SunucuDurumu = 'yukleniyor' | 'acik' | 'kapali' | 'hata';
-type Sekme = 'kurlar' | 'ayarlar';
+type Sekme = 'siparisler' | 'kurlar' | 'ayarlar';
 
 /**
  * v2 kabuğu (VITE_FF_V2_FLOW). Ayrı bir parça olarak yüklenir; bayrak kapalıyken
  * derlemeye hiç girmez. Sekmeler sunucudaki allowlist ile aynı gruplardan açılır:
- * kurlar RATES, ayarlar OWNERS. Sonraki ekranlar (sipariş satırları vb.) buraya eklenir.
+ * siparişler STAFF (form yalnız SALES), kurlar RATES, ayarlar OWNERS.
  */
 export default function V2Kabuk() {
   const navigate = useNavigate();
   const aktifRol = useAppStore((state) => state.aktifRol);
   const [durum, setDurum] = useState<SunucuDurumu>('yukleniyor');
   const sekmeler: Array<{ id: Sekme; ad: string }> = [
+    ...(rolGrubunda(aktifRol, 'STAFF') ? [{ id: 'siparisler' as const, ad: 'Sifarişlər' }] : []),
     ...(rolGrubunda(aktifRol, 'RATES') ? [{ id: 'kurlar' as const, ad: 'Kurlar' }] : []),
     ...(rolGrubunda(aktifRol, 'OWNERS') ? [{ id: 'ayarlar' as const, ad: 'Ayarlar' }] : []),
   ];
@@ -81,6 +85,11 @@ export default function V2Kabuk() {
               </button>
             ))}
           </nav>
+        )}
+        {durum === 'acik' && aktif === 'siparisler' && (
+          <Suspense fallback={<p className="text-sm text-slate-400">Yüklənir…</p>}>
+            <SiparisGirisi />
+          </Suspense>
         )}
         {durum === 'acik' && aktif === 'kurlar' && <V2Kurlar />}
         {durum === 'acik' && aktif === 'ayarlar' && <V2Ayarlar />}

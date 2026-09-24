@@ -60,6 +60,8 @@ const rules: Rule[] = [
   ['GET', /^\/api\/v2\/ayarlar$/, OWNERS],
   ['PATCH', /^\/api\/v2\/ayarlar$/, OWNERS],
   ['POST', /^\/api\/v2\/siparisler$/, SALES],
+  ['POST', /^\/api\/v2\/siparisler\/ayristir$/, SALES],
+  ['GET', /^\/api\/v2\/siparis-sahipleri$/, OWNERS],
   ['GET', /^\/api\/v2\/siparisler(?:\/[^/]+)?$/, STAFF],
   ['GET', /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
   [
