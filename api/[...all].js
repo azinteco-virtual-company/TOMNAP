@@ -112,6 +112,8 @@ var EKIP_ROLLERI = [
   // Butik sahibi: finans, kurye ve sipariş tam kontrol; sistem kodları hariç
   "KANADA_SATINALMA",
   // Kanada satın alma fişleri, kargo belgeleri, kurye atama
+  "ABD_SATINALMA",
+  // ABD'de satın alma ve ABD deposunda kabul (K18); v1'de Kanada'nın eşi
   "SATIS_SORUMLUSU",
   // Görsel ve WhatsApp siparişi girer, onay bekleyenleri işler
   "BAKU_FINANS",
@@ -130,21 +132,27 @@ function ekipRoluMu(value) {
 }
 var OWNERS = [PLATFORM_ROLU, "PATRON"];
 var SALES = [...OWNERS, "SATIS_SORUMLUSU"];
-var STAFF = [...SALES, "KANADA_SATINALMA", "BAKU_FINANS"];
+var BUYERS = ["KANADA_SATINALMA", "ABD_SATINALMA"];
+var STAFF = [...SALES, ...BUYERS, "BAKU_FINANS"];
 var ROL_GRUPLARI = {
   /** Kurye dışındaki herkes. */
   STAFF,
   OWNERS,
   SALES,
-  PURCHASING: [...SALES, "KANADA_SATINALMA"],
+  BUYERS,
+  PURCHASING: [...SALES, ...BUYERS],
   FINANCE: [...SALES, "BAKU_FINANS"],
   /** AWB, kargo ve kurye ataması. */
-  SHIPPING: [...OWNERS, "KANADA_SATINALMA"],
+  SHIPPING: [...OWNERS, ...BUYERS],
   ALL: [...STAFF, "BAKU_KURYE"]
 };
+function rolGrubunda(role, grup) {
+  return ROL_GRUPLARI[grup].includes(role);
+}
 var VARSAYILAN_ROL_LIMITLERI = {
   PATRON: 1,
   KANADA_SATINALMA: 2,
+  ABD_SATINALMA: 2,
   SATIS_SORUMLUSU: 4,
   BAKU_FINANS: 2,
   BAKU_KURYE: 10
@@ -153,6 +161,7 @@ var PAKET_ROL_LIMITLERI = {
   BASLANGIC: {
     PATRON: 1,
     KANADA_SATINALMA: 1,
+    ABD_SATINALMA: 1,
     SATIS_SORUMLUSU: 1,
     BAKU_FINANS: 1,
     BAKU_KURYE: 1
@@ -160,6 +169,7 @@ var PAKET_ROL_LIMITLERI = {
   PRO: {
     PATRON: 1,
     KANADA_SATINALMA: 2,
+    ABD_SATINALMA: 2,
     SATIS_SORUMLUSU: 2,
     BAKU_FINANS: 2,
     BAKU_KURYE: 5
@@ -167,11 +177,19 @@ var PAKET_ROL_LIMITLERI = {
   ENTERPRISE: {
     PATRON: 2,
     KANADA_SATINALMA: 5,
+    ABD_SATINALMA: 5,
     SATIS_SORUMLUSU: 10,
     BAKU_FINANS: 5,
     BAKU_KURYE: 25
   }
 };
+var EKSIK_ANAHTAR_KOTASI = {
+  ABD_SATINALMA: VARSAYILAN_ROL_LIMITLERI.ABD_SATINALMA
+};
+function rolKotasi(limitler, rol) {
+  const kayitli = limitler?.[rol];
+  return kayitli === void 0 || kayitli === null ? EKSIK_ANAHTAR_KOTASI[rol] ?? 0 : Number(kayitli);
+}
 function ilkKullaniciSayilari() {
   const sayilar = Object.fromEntries(EKIP_ROLLERI.map((rol) => [rol, 0]));
   sayilar.PATRON = 1;
@@ -6952,7 +6970,7 @@ router3.patch("/siparisler/:id", async (req, res) => {
     if (!existing) return res.status(404).json({ basarili: false, hata: "Sipari\u015F bulunamad\u0131." });
     const formatted = formatlaSiparis(existing);
     const role = req.auth?.role;
-    const allowed = role === "BAKU_FINANS" ? financeFields : role === "KANADA_SATINALMA" ? purchaseFields : role === "SATIS_SORUMLUSU" ? salesFields : generalFields;
+    const allowed = role === "BAKU_FINANS" ? financeFields : rolGrubunda(role, "BUYERS") ? purchaseFields : role === "SATIS_SORUMLUSU" ? salesFields : generalFields;
     if (!role || role === "BAKU_KURYE")
       throw new PublicResourceError("Bu i\u015Flem i\xE7in yetkiniz yok.", 403);
     const updates = {};
@@ -7848,6 +7866,7 @@ function buildInviteEmail(params) {
   const link = `${baseUrl}/davet-qebul?token=${encodeURIComponent(params.token)}`;
   const rolAdlari = {
     KANADA_SATINALMA: "Kanada Sat\u0131nalma Meneceri",
+    ABD_SATINALMA: "ABD Sat\u0131nalma Meneceri",
     SATIS_SORUMLUSU: "Sat\u0131\u015F v\u0259 M\xFC\u015Ft\u0259ri Xidm\u0259tl\u0259ri",
     BAKU_FINANS: "Bak\u0131 Maliyy\u0259 / Kassa Sorumlusu",
     BAKU_KURYE: "Bak\u0131 Daxili \xC7atd\u0131r\u0131lma / Kuryer",
@@ -7946,7 +7965,7 @@ function available(invite, token) {
 }
 function capacity(firma, users, role) {
   if (firma.onayDurumu !== "AKTIF") throw new OnboardingError(403, "Firma aktiv deyil.");
-  const limit = Number(firma.rolLimitleri?.[role]);
+  const limit = ekipRoluMu(role) ? rolKotasi(firma.rolLimitleri, role) : Number.NaN;
   const count = users.filter(
     (user) => user.tenant_id === firma.id && user.rol === role && user.durum !== "PASIF"
   ).length;

@@ -15,7 +15,12 @@ import {
   User,
 } from 'lucide-react';
 import { FirmaTenant, KullaniciRolu } from '../types';
-import { VARSAYILAN_ROL_LIMITLERI, ilkKullaniciSayilari } from '../shared/roller';
+import {
+  VARSAYILAN_ROL_LIMITLERI,
+  ekipRoluMu,
+  ilkKullaniciSayilari,
+  rolKotasi,
+} from '../shared/roller';
 
 interface DavetOlusturModalProps {
   acik: boolean;
@@ -43,7 +48,8 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
 
   const aktifSayilar = seciliFirma.aktifKullaniciSayilari || ilkKullaniciSayilari();
 
-  const limit = (rolLimitleri as any)[seciliRol] || 5;
+  // Sunucudaki kota kontrolüyle aynı kural: eksik anahtar rolKotasi ile varsayılana düşer.
+  const limit = ekipRoluMu(seciliRol) ? rolKotasi(rolLimitleri, seciliRol) : 0;
   const movcud = (aktifSayilar as any)[seciliRol] || 0;
   const qalanYer = Math.max(0, limit - movcud);
 
@@ -177,6 +183,22 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
               >
                 <div>Kanada Kargo</div>
                 <div className="text-[10px] opacity-80 mt-0.5">AWB &amp; qəbzləri idarə edir</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSeciliRol('ABD_SATINALMA');
+                  setDavetUrl(null);
+                }}
+                className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                  seciliRol === 'ABD_SATINALMA'
+                    ? 'bg-indigo-600 border-indigo-500 text-white font-bold'
+                    : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <div>ABD Satınalma</div>
+                <div className="text-[10px] opacity-80 mt-0.5">ABD alışı və anbar qəbulu</div>
               </button>
 
               <button

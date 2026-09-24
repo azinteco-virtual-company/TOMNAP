@@ -104,6 +104,7 @@ export const DavetQebulSayfasi: React.FC = () => {
   const rolEtiketleri: Record<EkipRolu, string> = {
     PATRON: 'Butik Patronu (Yüksək İdarəçi)',
     KANADA_SATINALMA: 'Kanada Satınalma & Kargo Məsuliyyətlisi',
+    ABD_SATINALMA: 'ABD Satınalma & Anbar Məsuliyyətlisi',
     SATIS_SORUMLUSU: 'Satış & AI Sifariş Girişi',
     BAKU_FINANS: 'Bakı Maliyyə, Kassa & Qalıq Borc Məsuliyyətlisi',
     BAKU_KURYE: 'Bakı Sahə Kuryesi (Sürətli Çatdırılma)',

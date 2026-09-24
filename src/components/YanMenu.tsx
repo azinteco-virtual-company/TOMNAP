@@ -1030,7 +1030,9 @@ export const YanMenu: React.FC<YanMenuProps> = ({
                               ? 'bg-emerald-600 ring-emerald-400/50'
                               : aktifRol === 'KANADA_SATINALMA'
                                 ? 'bg-rose-600 ring-rose-400/50'
-                                : 'bg-sky-600 ring-sky-400/50'
+                                : aktifRol === 'ABD_SATINALMA'
+                                  ? 'bg-violet-600 ring-violet-400/50'
+                                  : 'bg-sky-600 ring-sky-400/50'
                     }`}
                   >
                     {aktifRol === 'SUPER_ADMIN'
@@ -1043,7 +1045,9 @@ export const YanMenu: React.FC<YanMenuProps> = ({
                             ? 'BF'
                             : aktifRol === 'KANADA_SATINALMA'
                               ? 'KS'
-                              : 'SS'}
+                              : aktifRol === 'ABD_SATINALMA'
+                                ? 'AS'
+                                : 'SS'}
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs text-white font-bold truncate">
@@ -1057,7 +1061,9 @@ export const YanMenu: React.FC<YanMenuProps> = ({
                               ? 'Bakı Maliyyə'
                               : aktifRol === 'KANADA_SATINALMA'
                                 ? 'Kanada Satınalma'
-                                : 'Satış Meneceri'}
+                                : aktifRol === 'ABD_SATINALMA'
+                                  ? 'ABD Satınalma'
+                                  : 'Satış Meneceri'}
                     </p>
                     <p className="text-[10px] text-slate-400 truncate">
                       {aktifRol === 'SUPER_ADMIN'

@@ -1,6 +1,6 @@
--- Rol kataloğu (A4): tomnap_gecerli_rol, davet ve kabul RPC'leri, up -> down -> up.
--- Run after baseline + all migrations, in ONE psql session. Test rows are
--- written inside transactions that are rolled back.
+-- Rol kataloğu (A4): tomnap_gecerli_rol, davet ve kabul RPC'leri.
+-- Run after baseline + all migrations (and again after rol-migration-roundtrip.sql).
+-- Test rows are written inside transactions that are rolled back.
 \set ON_ERROR_STOP 1
 
 -- 1. Contract and privileges of the catalog function.
@@ -19,47 +19,8 @@ DO $$ DECLARE r text; f record; BEGIN
   END IF;
 END $$;
 
--- 2. Up -> down -> up. Down is idempotent and restores the previous RPC
---    definitions with their grants; nothing else is dropped.
-BEGIN;
-\ir ../../supabase/rollbacks/20260924120000_rol_katalogu.down.sql
-COMMIT;
-BEGIN;
-\ir ../../supabase/rollbacks/20260924120000_rol_katalogu.down.sql
-COMMIT;
-DO $$ DECLARE fn text; BEGIN
-  IF to_regprocedure('public.tomnap_gecerli_rol(text)') IS NOT NULL THEN RAISE EXCEPTION 'Rollback left the catalog function'; END IF;
-  FOREACH fn IN ARRAY ARRAY['public.tomnap_create_invite(jsonb,jsonb)','public.tomnap_accept_invite(text,jsonb)'] LOOP
-    IF to_regprocedure(fn) IS NULL THEN RAISE EXCEPTION 'Rollback dropped %', fn; END IF;
-    IF position('tomnap_gecerli_rol' IN pg_get_functiondef(fn::regprocedure)) > 0
-       OR position('''PATRON'',''KANADA_SATINALMA''' IN pg_get_functiondef(fn::regprocedure)) = 0 THEN
-      RAISE EXCEPTION 'Rollback did not restore the previous definition of %', fn;
-    END IF;
-    IF has_function_privilege('anon', fn, 'EXECUTE') OR NOT has_function_privilege('service_role', fn, 'EXECUTE') THEN
-      RAISE EXCEPTION 'Rollback changed the privileges of %', fn;
-    END IF;
-  END LOOP;
-END $$;
-\ir ../../supabase/migrations/20260924120000_rol_katalogu.sql
-DO $$ DECLARE fn text; BEGIN
-  IF to_regprocedure('public.tomnap_gecerli_rol(text)') IS NULL
-     OR NOT has_function_privilege('service_role', 'public.tomnap_gecerli_rol(text)', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.tomnap_gecerli_rol(text)', 'EXECUTE') THEN
-    RAISE EXCEPTION 'Re-applied catalog function is incomplete';
-  END IF;
-  FOREACH fn IN ARRAY ARRAY['public.tomnap_create_invite(jsonb,jsonb)','public.tomnap_accept_invite(text,jsonb)'] LOOP
-    IF position('tomnap_gecerli_rol' IN pg_get_functiondef(fn::regprocedure)) = 0 THEN
-      RAISE EXCEPTION '% does not use the catalog', fn;
-    END IF;
-    IF has_function_privilege('anon', fn, 'EXECUTE') OR has_function_privilege('authenticated', fn, 'EXECUTE')
-       OR NOT has_function_privilege('service_role', fn, 'EXECUTE') THEN
-      RAISE EXCEPTION 'Re-applied migration changed the privileges of %', fn;
-    END IF;
-  END LOOP;
-END $$;
-
--- 3. Behaviour on the re-applied schema: an invalid role is rejected by the
---    invite and by the acceptance, and nothing is written.
+-- 2. An invalid role is rejected by the invite and by the acceptance, and
+--    nothing is written.
 BEGIN;
 SET LOCAL ROLE service_role;
 INSERT INTO public.firmalar(id, ad, onay_durumu, rol_limitleri) VALUES

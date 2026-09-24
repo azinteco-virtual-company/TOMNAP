@@ -105,6 +105,7 @@ export const SifreBelirleSayfasi: React.FC = () => {
   const rolEtiketleri: Record<EkipRolu, string> = {
     PATRON: 'Butik Patronu (Yüksək İdarəçi)',
     KANADA_SATINALMA: 'Kanada Satınalma & Kargo Məsuliyyətlisi',
+    ABD_SATINALMA: 'ABD Satınalma & Anbar Məsuliyyətlisi',
     SATIS_SORUMLUSU: 'Satış & AI Sifariş Girişi',
     BAKU_FINANS: 'Bakı Maliyyə & Kassa Məsuliyyətlisi',
     BAKU_KURYE: 'Bakı Daxili Kuryer',
