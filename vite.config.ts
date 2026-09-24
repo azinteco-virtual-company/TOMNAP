@@ -37,12 +37,15 @@ export default defineConfig(async ({ command }) => {
           'pwa-512x512.png',
           'pwa-maskable-512x512.png',
         ],
+        // The only web manifest: the build emits it and injects the single
+        // <link rel="manifest"> into index.html.
         manifest: {
           id: '/',
-          name: 'Kanada-Bakü Lojistik & Sipariş Yönetimi',
-          short_name: 'KanadaBaku',
+          name: 'TOMNAP — Global Cross-Border Commerce & Parcel Logistics Platform',
+          short_name: 'TOMNAP',
           description:
-            'Kanada-Bakü e-ticaret sipariş, kargo manifestosu, kurye ve tahsilat yönetim sistemi.',
+            'Global Cross-Border Commerce & Parcel Logistics Platform (Track, Order, Manage, Navigate, Automate, Parcel).',
+          lang: 'az',
           theme_color: '#0f172a',
           background_color: '#0f172a',
           display: 'standalone',

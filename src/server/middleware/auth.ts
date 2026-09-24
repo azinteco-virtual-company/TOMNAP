@@ -58,6 +58,8 @@ const rules: Rule[] = [
   ['GET', /^\/api\/kargo\/ayarlar$/, SHIPPING],
   ['POST', /^\/api\/kargo\/ayarlar$/, OWNERS],
   ['POST', /^\/api\/kargo\/(test|takip|senkronize-et|manifesto-yukle)$/, SHIPPING],
+  // Human-confirmed AWB matching (FF_AWB_REVIEW): same roles that may edit an order's AWB.
+  ['POST', /^\/api\/kargo\/manifesto-eslestirme\/(oneriler|onayla)$/, SHIPPING],
   ['GET', /^\/api\/proxy-gorsel$/, STAFF],
   ['GET', /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
   [
@@ -68,10 +70,11 @@ const rules: Rule[] = [
 ];
 
 function isPublic(req: Request): boolean {
+  // Express answers HEAD with the GET handler, so public reads accept both.
+  const read = req.method === 'GET' || req.method === 'HEAD';
   return (
-    (req.method === 'GET' && /^\/(?:api\/)?health$/.test(req.path)) ||
-    (req.method === 'GET' &&
-      /^\/api\/(auth\/token-kontrol|firmalar\/davet)\/[^/]+$/.test(req.path)) ||
+    (read && /^\/(?:api\/)?health$/.test(req.path)) ||
+    (read && /^\/api\/(auth\/token-kontrol|firmalar\/davet)\/[^/]+$/.test(req.path)) ||
     (req.method === 'POST' &&
       /^\/api\/(auth\/(giris|sifre-belirle)|firmalar\/(giris|kayit|davet\/katil))$/.test(req.path))
   );

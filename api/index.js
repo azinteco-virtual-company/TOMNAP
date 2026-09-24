@@ -18,6 +18,9 @@ var DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 var UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(DATA_DIR, "uploads");
 var FIRMALAR_DOSYA_YOLU = path.join(DATA_DIR, "firmalar.json");
 var KULLANICILAR_DOSYA_YOLU = path.join(DATA_DIR, "kullanicilar.json");
+function isAwbReviewEnabled() {
+  return process.env.FF_AWB_REVIEW === "true";
+}
 var RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 var EMAIL_FROM = process.env.EMAIL_FROM || "TOMNAP Platform <onboarding@resend.dev>";
 var APP_URL = process.env.APP_URL || (IS_PRODUCTION ? "https://tomnap.com" : `http://localhost:${PORT}`);
@@ -4180,6 +4183,8 @@ var rules = [
   ["GET", /^\/api\/kargo\/ayarlar$/, SHIPPING],
   ["POST", /^\/api\/kargo\/ayarlar$/, OWNERS],
   ["POST", /^\/api\/kargo\/(test|takip|senkronize-et|manifesto-yukle)$/, SHIPPING],
+  // Human-confirmed AWB matching (FF_AWB_REVIEW): same roles that may edit an order's AWB.
+  ["POST", /^\/api\/kargo\/manifesto-eslestirme\/(oneriler|onayla)$/, SHIPPING],
   ["GET", /^\/api\/proxy-gorsel$/, STAFF],
   ["GET", /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
   [
@@ -4189,7 +4194,8 @@ var rules = [
   ]
 ];
 function isPublic(req) {
-  return req.method === "GET" && /^\/(?:api\/)?health$/.test(req.path) || req.method === "GET" && /^\/api\/(auth\/token-kontrol|firmalar\/davet)\/[^/]+$/.test(req.path) || req.method === "POST" && /^\/api\/(auth\/(giris|sifre-belirle)|firmalar\/(giris|kayit|davet\/katil))$/.test(req.path);
+  const read4 = req.method === "GET" || req.method === "HEAD";
+  return read4 && /^\/(?:api\/)?health$/.test(req.path) || read4 && /^\/api\/(auth\/token-kontrol|firmalar\/davet)\/[^/]+$/.test(req.path) || req.method === "POST" && /^\/api\/(auth\/(giris|sifre-belirle)|firmalar\/(giris|kayit|davet\/katil))$/.test(req.path);
 }
 function equalToken(received, expected) {
   if (typeof received !== "string" || !/^[a-f0-9]{64}$/.test(received)) return false;
@@ -4767,7 +4773,7 @@ function compareKeys(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 var customerKey = (row) => `${row.tenant_id || ""}\0${row.id}`;
-function result(request, revision, total, items, hasMore, key) {
+function result(request, revision, total2, items, hasMore, key) {
   const nextCursor = hasMore ? Buffer.from(
     JSON.stringify({
       v: 1,
@@ -4780,7 +4786,7 @@ function result(request, revision, total, items, hasMore, key) {
   ).toString("base64url") : null;
   return {
     items,
-    pagination: { version: 1, total, hasMore, nextCursor, revision, pageSize: request.size }
+    pagination: { version: 1, total: total2, hasMore, nextCursor, revision, pageSize: request.size }
   };
 }
 function memoryPage(request, source, revision, key = (row) => String(row.id)) {
@@ -7335,13 +7341,13 @@ function aad(context, id) {
     throw new EncryptionError();
   return Buffer.from(JSON.stringify(["TOMNAP:cargo:v2", id, context.tenantId, context.provider]));
 }
-function sifreleMetin(text2, context) {
-  if (typeof text2 !== "string") throw new EncryptionError();
+function sifreleMetin(text3, context) {
+  if (typeof text3 !== "string") throw new EncryptionError();
   const { keys, active } = keyring();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", Buffer.from(keys[active], "hex"), iv);
   cipher.setAAD(aad(context, active));
-  const encrypted = Buffer.concat([cipher.update(text2, "utf8"), cipher.final()]);
+  const encrypted = Buffer.concat([cipher.update(text3, "utf8"), cipher.final()]);
   return `enc:v2:${active}:${iv.toString("hex")}:${cipher.getAuthTag().toString("hex")}:${encrypted.toString("hex")}`;
 }
 function cozMetin(envelope, context) {
@@ -7414,7 +7420,7 @@ function escapeHtml(value) {
   );
 }
 async function sendEmail(params) {
-  const { to, subject, html, text: text2 } = params;
+  const { to, subject, html, text: text3 } = params;
   console.log(`
 ================= [TOMNAP EMAIL SERVICE] =================`);
   console.log(`G\xD6ND\u018FR\u0130L\u0130R: ${(/* @__PURE__ */ new Date()).toISOString()}`);
@@ -7433,7 +7439,7 @@ async function sendEmail(params) {
           to: [to],
           subject,
           html,
-          text: text2 || subject
+          text: text3 || subject
         })
       });
       const resData = await response.json();
@@ -7512,7 +7518,7 @@ function buildActivationEmail(params) {
 </body>
 </html>
   `.trim();
-  const text2 = `
+  const text3 = `
 H\xF6rm\u0259tli ${params.adSoyad},
 
 "${params.butikAdi}" butikiniz \xFC\xE7\xFCn TOMNAP platformas\u0131nda qeydiyyat u\u011Furla tamamland\u0131.
@@ -7522,7 +7528,7 @@ ${link}
 Bu link 24 saat m\xFCdd\u0259tind\u0259 etibarl\u0131d\u0131r.
 TOMNAP D\u0259st\u0259k Komandas\u0131
   `.trim();
-  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text: text2 }, link };
+  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text: text3 }, link };
 }
 function buildInviteEmail(params) {
   const baseUrl = getApplicationUrl();
@@ -7582,7 +7588,7 @@ function buildInviteEmail(params) {
 </body>
 </html>
   `.trim();
-  const text2 = `
+  const text3 = `
 H\xF6rm\u0259tli ${params.adSoyad || "Komanda \xDCzv\xFC"},
 
 ${params.davetEden || "Butik r\u0259hb\u0259rliyi"} t\u0259r\u0259find\u0259n "${params.butikAdi}" butikinin idar\u0259etm\u0259 masas\u0131na ${rolAdi} olaraq d\u0259v\u0259t edildiniz.
@@ -7591,7 +7597,7 @@ ${link}
 
 TOMNAP D\u0259st\u0259k Komandas\u0131
   `.trim();
-  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text: text2 }, link };
+  return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text: text3 }, link };
 }
 
 // src/server/services/onboarding.ts
@@ -8840,6 +8846,7 @@ router8.post(
 var veritabani_default = router8;
 
 // src/server/routes/kargoEntegrasyon.ts
+import { createHash as createHash6 } from "node:crypto";
 import { Router as Router9 } from "express";
 
 // src/server/services/kargo/providers/aramex.ts
@@ -9643,6 +9650,542 @@ var KargoMerkezi = class {
 };
 var kargoMerkezi = new KargoMerkezi();
 
+// src/server/services/kargo/manifestMatching.ts
+var TESLIM_EDILDI = "TESLIM_EDILDI";
+var ZAYIF_ESLESME_ESIGI = 0.5;
+var ZAYIF_ADAY_SINIRI = 5;
+var AWB_DESENI = /^[A-Z0-9][A-Z0-9-]{3,39}$/;
+var YER_TUTUCU_ISIMLER = /* @__PURE__ */ new Set([
+  "m\xFC\u015Ft\u0259ri",
+  "m\xFC\u015Fteri",
+  "musteri",
+  "bilinmeyen m\xFC\u015Fteri",
+  "nam\u0259lum",
+  "customer",
+  "consignee",
+  "unknown",
+  "n a"
+]);
+function normalizeName(value) {
+  if (typeof value !== "string") return "";
+  const normalized = value.normalize("NFKC").toLowerCase().replace(/i̇/g, "i").normalize("NFC").replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim().replace(/\s+/g, " ");
+  return YER_TUTUCU_ISIMLER.has(normalized) ? "" : normalized;
+}
+function normalizePhone(value) {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  const raw = String(value).trim();
+  if (!raw || !/^[+\d\s().\-/]+$/.test(raw)) return "";
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.length === 10 && digits.startsWith("0")) digits = `994${digits.slice(1)}`;
+  else if (digits.length === 9 && !digits.startsWith("0")) digits = `994${digits}`;
+  return digits.length >= 10 && digits.length <= 15 ? digits : "";
+}
+function normalizeAwb(value) {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  return String(value).normalize("NFKC").replace(/\s+/g, "").toUpperCase();
+}
+function normalizeCode(value) {
+  const code = normalizeAwb(value);
+  return code.length >= 4 && code.length <= 100 ? code : "";
+}
+function sortedTokens(name) {
+  return name.split(" ").filter(Boolean).sort().join(" ");
+}
+function bigrams(value) {
+  const characters = Array.from(` ${value} `);
+  const result2 = /* @__PURE__ */ new Map();
+  for (let index = 0; index < characters.length - 1; index++) {
+    const gram = characters[index] + characters[index + 1];
+    result2.set(gram, (result2.get(gram) ?? 0) + 1);
+  }
+  return result2;
+}
+function total(grams) {
+  let sum = 0;
+  for (const count of grams.values()) sum += count;
+  return sum;
+}
+function dice(left, right) {
+  let shared = 0;
+  for (const [gram, count] of left) shared += Math.min(count, right.get(gram) ?? 0);
+  const size = total(left) + total(right);
+  return size === 0 ? 0 : Math.round(2 * shared / size * 1e3) / 1e3;
+}
+var KATLAMA_SEMALARI = ["PASAPORT", "BASIT"];
+var CEDILLA = "\u0327";
+var BREVE = "\u0306";
+var DIAERESIS = "\u0308";
+var KIRIL_LATIN = {
+  \u0430: "a",
+  \u0431: "b",
+  \u0432: "v",
+  \u0433: "g",
+  \u0434: "d",
+  \u0435: "e",
+  \u0436: "zh",
+  \u0437: "z",
+  \u0438: "i",
+  \u043A: "k",
+  \u043B: "l",
+  \u043C: "m",
+  \u043D: "n",
+  \u043E: "o",
+  \u043F: "p",
+  \u0440: "r",
+  \u0441: "s",
+  \u0442: "t",
+  \u0443: "u",
+  \u0444: "f",
+  \u0445: "kh",
+  \u0446: "ts",
+  \u0447: "ch",
+  \u0448: "sh",
+  \u0449: "shch",
+  \u044A: "",
+  \u044B: "y",
+  \u044C: "",
+  \u044D: "e",
+  \u044E: "yu",
+  \u044F: "ya",
+  \u04D9: "a",
+  \u0493: "gh",
+  \u049D: "g",
+  \u04BB: "h",
+  \u0458: "y",
+  \u04E9: "o",
+  \u04AF: "u",
+  \u04B9: "j",
+  \u0456: "i",
+  \u0454: "ye",
+  \u0491: "g"
+};
+function cyrillicToLatin(letter, marks) {
+  if (letter === "\u0438" && marks.includes(BREVE)) return "y";
+  if (letter === "\u0443" && marks.includes(BREVE)) return "u";
+  if (letter === "\u0435" && marks.includes(DIAERESIS)) return "yo";
+  if (letter === "\u0456" && marks.includes(DIAERESIS)) return "yi";
+  return Object.hasOwn(KIRIL_LATIN, letter) ? KIRIL_LATIN[letter] : null;
+}
+function foldUnit(letter, marks, scheme) {
+  const cyrillic = cyrillicToLatin(letter, marks);
+  if (cyrillic !== null) return cyrillic;
+  if (letter === "\u0259") return scheme === "PASAPORT" ? "a" : "e";
+  if (letter === "\u0131") return "i";
+  if (scheme === "BASIT") return letter;
+  if (letter === "s" && marks.includes(CEDILLA)) return "sh";
+  if (letter === "c" && marks.includes(CEDILLA)) return "ch";
+  if (letter === "g" && marks.includes(BREVE)) return "gh";
+  if (letter === "c") return "j";
+  if (letter === "q") return "g";
+  if (letter === "x") return "kh";
+  return letter;
+}
+function foldName(value, scheme) {
+  if (typeof value !== "string" || !normalizeName(value)) return "";
+  let folded = "";
+  for (const [, letter, marks] of value.normalize("NFKC").toLowerCase().normalize("NFKD").matchAll(/(\P{M})(\p{M}*)/gu))
+    folded += foldUnit(letter, marks, scheme);
+  return folded.replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/\s+/g, " ");
+}
+function nameGrams(value) {
+  return [
+    sortedTokens(normalizeName(value)),
+    ...KATLAMA_SEMALARI.map((scheme) => sortedTokens(foldName(value, scheme)))
+  ].map((form) => form ? bigrams(form) : null);
+}
+function bestScore(left, right) {
+  let best = 0;
+  left.forEach((grams, index) => {
+    const other = right[index];
+    if (grams && other) best = Math.max(best, dice(grams, other));
+  });
+  return best;
+}
+function nameSimilarity(left, right) {
+  if (!normalizeName(left) || !normalizeName(right)) return 0;
+  return bestScore(nameGrams(left), nameGrams(right));
+}
+function text2(value) {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
+}
+function toSiparisAdayi(row) {
+  if (!row || typeof row !== "object" || Array.isArray(row)) return null;
+  const record = row;
+  const id = typeof record.id === "string" ? record.id.trim() : "";
+  if (!id) return null;
+  return {
+    id,
+    musteriAdi: text2(record.musteri_adi),
+    telefon: text2(record.telefon_numarasi),
+    lojistikDurumu: text2(record.lojistik_durumu),
+    awb: normalizeAwb(record.uluslararasi_kargo_kodu),
+    awbGosterim: text2(record.uluslararasi_kargo_kodu),
+    kanadaTakipKodu: normalizeCode(record.kanada_takip_kodu)
+  };
+}
+function validWeight(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 && value <= 1e3 ? value : null;
+}
+function candidate(order, eslesmeTipi, guc, skor) {
+  return {
+    siparisId: order.id,
+    musteriAdi: order.musteriAdi,
+    telefon: order.telefon,
+    lojistikDurumu: order.lojistikDurumu,
+    eslesmeTipi,
+    guc,
+    skor
+  };
+}
+function push(map, key, value) {
+  const list = map.get(key);
+  if (list) list.push(value);
+  else map.set(key, [value]);
+}
+function eslesmeOnerileriOlustur(rows, orders) {
+  const byPhone = /* @__PURE__ */ new Map();
+  const byCode = /* @__PURE__ */ new Map();
+  const byAwb = /* @__PURE__ */ new Map();
+  const prepared = [];
+  for (const order of orders) {
+    const phone2 = normalizePhone(order.telefon);
+    if (phone2) push(byPhone, phone2, order);
+    const idCode = normalizeCode(order.id);
+    if (idCode) push(byCode, idCode, order);
+    if (order.kanadaTakipKodu && order.kanadaTakipKodu !== idCode)
+      push(byCode, order.kanadaTakipKodu, order);
+    if (order.awb) push(byAwb, order.awb, order);
+    prepared.push({
+      order,
+      grams: nameGrams(order.musteriAdi),
+      hasName: normalizeName(order.musteriAdi) !== "",
+      blocked: order.lojistikDurumu === TESLIM_EDILDI || order.awb !== ""
+    });
+  }
+  const awbCounts = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const awb = normalizeAwb(row.takipNo);
+    if (awb) awbCounts.set(awb, (awbCounts.get(awb) ?? 0) + 1);
+  }
+  const conflicts = [];
+  const suggestions = rows.map((row, index) => {
+    const satirNo = index + 1;
+    const takipNo = normalizeAwb(row.takipNo);
+    const base = {
+      satirNo,
+      takipNo,
+      aliciAdi: text2(row.aliciAdi),
+      telefon: text2(row.telefon),
+      agirlikKg: validWeight(row.agirlikKg),
+      referansNo: text2(row.referansNo),
+      durum: "ESLESME_YOK",
+      belirsizlikSebebi: null,
+      onerilenSiparisId: null,
+      bagliSiparisId: null,
+      adaylar: []
+    };
+    if (!AWB_DESENI.test(takipNo)) return { ...base, durum: "GECERSIZ_AWB" };
+    const holders = byAwb.get(takipNo) ?? [];
+    if (holders.length === 1) return { ...base, durum: "ZATEN_BAGLI", bagliSiparisId: holders[0].id };
+    if (holders.length > 1) {
+      for (const holder of holders)
+        conflicts.push({
+          satirNo,
+          takipNo,
+          siparisId: holder.id,
+          musteriAdi: holder.musteriAdi,
+          sebep: "AWB_BASKA_SIPARISTE",
+          mevcutAwb: holder.awbGosterim,
+          eslesmeTipi: null
+        });
+      return { ...base, durum: "CAKISMA" };
+    }
+    const strongTypes = /* @__PURE__ */ new Map();
+    const phone2 = normalizePhone(row.telefon);
+    for (const order of phone2 ? byPhone.get(phone2) ?? [] : []) strongTypes.set(order.id, "TELEFON");
+    const reference = normalizeCode(row.referansNo);
+    for (const order of reference ? byCode.get(reference) ?? [] : [])
+      if (!strongTypes.has(order.id)) strongTypes.set(order.id, "SIPARIS_KODU");
+    const strong = [];
+    let rowHasConflict = false;
+    for (const { order } of prepared) {
+      const type = strongTypes.get(order.id);
+      if (!type) continue;
+      const reason = order.lojistikDurumu === TESLIM_EDILDI ? "TESLIM_EDILDI" : order.awb ? "MEVCUT_AWB" : null;
+      if (reason) {
+        rowHasConflict = true;
+        conflicts.push({
+          satirNo,
+          takipNo,
+          siparisId: order.id,
+          musteriAdi: order.musteriAdi,
+          sebep: reason,
+          mevcutAwb: order.awbGosterim,
+          eslesmeTipi: type
+        });
+      } else strong.push(candidate(order, type, "GUCLU", 1));
+    }
+    const weak = [];
+    if (normalizeName(row.aliciAdi)) {
+      const rowGrams = nameGrams(row.aliciAdi);
+      for (const { order, grams, hasName, blocked } of prepared) {
+        if (blocked || !hasName || strongTypes.has(order.id)) continue;
+        const score = bestScore(rowGrams, grams);
+        if (score >= ZAYIF_ESLESME_ESIGI) weak.push(candidate(order, "ISIM", "ZAYIF", score));
+      }
+      weak.sort((a, b) => b.skor - a.skor || a.siparisId.localeCompare(b.siparisId));
+    }
+    const adaylar = [...strong, ...weak.slice(0, ZAYIF_ADAY_SINIRI)];
+    if (strong.length === 1) {
+      if ((awbCounts.get(takipNo) ?? 0) > 1)
+        return { ...base, adaylar, durum: "BELIRSIZ", belirsizlikSebebi: "MANIFESTTE_TEKRAR_AWB" };
+      return { ...base, adaylar, durum: "ONERILDI", onerilenSiparisId: strong[0].siparisId };
+    }
+    if (strong.length > 1)
+      return { ...base, adaylar, durum: "BELIRSIZ", belirsizlikSebebi: "COKLU_SIPARIS" };
+    if (weak.length > 0) return { ...base, adaylar, durum: "ZAYIF_ADAY" };
+    return { ...base, adaylar, durum: rowHasConflict ? "CAKISMA" : "ESLESME_YOK" };
+  });
+  const proposals = /* @__PURE__ */ new Map();
+  for (const row of suggestions)
+    if (row.onerilenSiparisId)
+      proposals.set(row.onerilenSiparisId, (proposals.get(row.onerilenSiparisId) ?? 0) + 1);
+  for (const row of suggestions) {
+    if (row.onerilenSiparisId && (proposals.get(row.onerilenSiparisId) ?? 0) > 1) {
+      row.onerilenSiparisId = null;
+      row.durum = "BELIRSIZ";
+      row.belirsizlikSebebi = "SIPARIS_BIRDEN_FAZLA_SATIRDA";
+    }
+  }
+  const ozet = {
+    toplamSatir: suggestions.length,
+    cakismaSayisi: conflicts.length,
+    ONERILDI: 0,
+    BELIRSIZ: 0,
+    ZAYIF_ADAY: 0,
+    ZATEN_BAGLI: 0,
+    CAKISMA: 0,
+    ESLESME_YOK: 0,
+    GECERSIZ_AWB: 0
+  };
+  for (const row of suggestions) ozet[row.durum]++;
+  return { satirlar: suggestions, cakismalar: conflicts, ozet };
+}
+
+// src/server/services/kargo/awbMatchStore.ts
+import { randomUUID as randomUUID7 } from "node:crypto";
+var MAX_ONAY = 500;
+var PAGE_SIZE = 1e3;
+var MATCH_COLUMNS = "id,tenant_id,musteri_adi,telefon_numarasi,lojistik_durumu,uluslararasi_kargo_kodu,kanada_takip_kodu";
+var PRE_FLIGHT_STATUSES = /* @__PURE__ */ new Set(["KANADA_SATINALIM_BEKLIYOR", "KANADA_DEPO"]);
+var ORDER_ID = /^[A-Za-z0-9_-]{1,100}$/;
+var memoryApprovals = [];
+function isRecord(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+function requireTenant(tenantId) {
+  if (typeof tenantId !== "string" || tenantId === "all" || !/^[a-zA-Z0-9_-]{1,100}$/.test(tenantId))
+    throw new PublicResourceError("Bir butik se\xE7ilmelidir.", 400);
+  return tenantId;
+}
+function memoryRows(tenantId) {
+  if (supabase && tenantId !== "demo_sandbox") return null;
+  const pool = tenantId === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+  return pool.filter(isRecord).filter((row) => row.tenant_id === tenantId);
+}
+async function eslesmeHavuzunuYukle(tenant2) {
+  const tenantId = requireTenant(tenant2);
+  const local = memoryRows(tenantId);
+  if (local) return local.map(toSiparisAdayi).filter((row) => row !== null);
+  const client2 = supabase;
+  if (!client2) throw new PublicResourceError("Sipari\u015Fler okunamad\u0131.", 503);
+  const orders = [];
+  let lastId = null;
+  for (; ; ) {
+    let query = client2.from("siparisler").select(MATCH_COLUMNS).eq("tenant_id", tenantId).order("id", { ascending: true }).limit(PAGE_SIZE);
+    if (lastId) query = query.gt("id", lastId);
+    const { data, error: error2 } = await query;
+    if (error2 || !Array.isArray(data)) throw new PublicResourceError("Sipari\u015Fler okunamad\u0131.", 503);
+    const rows = data;
+    for (const row of rows) {
+      const candidate2 = toSiparisAdayi(row);
+      if (candidate2) orders.push(candidate2);
+    }
+    if (orders.length > MAX_LIST_ITEMS)
+      throw new PublicResourceError(
+        "E\u015Fle\u015Ftirme i\xE7in 10000 sipari\u015F s\u0131n\u0131r\u0131 a\u015F\u0131ld\u0131; daralt\u0131lm\u0131\u015F bir i\u015Flem gerekir.",
+        413
+      );
+    if (rows.length < PAGE_SIZE) return orders;
+    const last = rows[rows.length - 1];
+    lastId = isRecord(last) && typeof last.id === "string" ? last.id : null;
+    if (!lastId) throw new PublicResourceError("Sipari\u015Fler okunamad\u0131.", 503);
+  }
+}
+function secimIstegiDogrula(body2) {
+  const items = isRecord(body2) ? body2.secimler : void 0;
+  if (!Array.isArray(items) || items.length === 0 || items.length > MAX_ONAY)
+    throw new PublicResourceError(`1-${MAX_ONAY} aras\u0131 e\u015Fle\u015Ftirme se\xE7imi g\xF6nderilmelidir.`, 400);
+  const rows = /* @__PURE__ */ new Set();
+  const orders = /* @__PURE__ */ new Set();
+  return items.map((item) => {
+    if (!isRecord(item) || typeof item.siparisId !== "string" || !ORDER_ID.test(item.siparisId))
+      throw new PublicResourceError("Ge\xE7ersiz sipari\u015F kimli\u011Fi.", 400);
+    const satirNo = item.satirNo;
+    if (typeof satirNo !== "number" || !Number.isInteger(satirNo) || satirNo < 1 || satirNo > 1e5)
+      throw new PublicResourceError("Ge\xE7ersiz manifest sat\u0131r\u0131.", 400);
+    if (rows.has(satirNo) || orders.has(item.siparisId))
+      throw new PublicResourceError(
+        "Ayn\u0131 sat\u0131r veya sipari\u015F birden fazla kez se\xE7ildi; belirsiz e\u015Fle\u015Ftirme onaylanamaz.",
+        400
+      );
+    rows.add(satirNo);
+    orders.add(item.siparisId);
+    return { satirNo, siparisId: item.siparisId };
+  });
+}
+function onayKalemleriniHazirla(rapor, secimler) {
+  const result2 = { kalemler: [], tekrarlar: [], reddedilenler: [] };
+  const awbs = /* @__PURE__ */ new Set();
+  for (const secim of secimler) {
+    const row = rapor.satirlar.find((candidate3) => candidate3.satirNo === secim.satirNo);
+    if (row?.durum === "ZATEN_BAGLI" && row.bagliSiparisId === secim.siparisId) {
+      result2.tekrarlar.push({ ...secim, takipNo: row.takipNo, tekrar: true });
+      continue;
+    }
+    const candidate2 = row?.adaylar.find((item) => item.siparisId === secim.siparisId);
+    if (!row || !candidate2) {
+      result2.reddedilenler.push({ ...secim, takipNo: row?.takipNo ?? "", sebep: "ONERI_GECERSIZ" });
+      continue;
+    }
+    if (awbs.has(row.takipNo))
+      throw new PublicResourceError(
+        "Ayn\u0131 AWB birden fazla sat\u0131rda se\xE7ildi; belirsiz e\u015Fle\u015Ftirme onaylanamaz.",
+        400
+      );
+    awbs.add(row.takipNo);
+    result2.kalemler.push({
+      satirNo: row.satirNo,
+      siparisId: candidate2.siparisId,
+      takipNo: row.takipNo,
+      agirlikKg: row.agirlikKg,
+      eslesmeTuru: candidate2.eslesmeTipi,
+      isimPuani: nameSimilarity(row.aliciAdi, candidate2.musteriAdi)
+    });
+  }
+  return result2;
+}
+function confirmInMemory(tenantId, userId, manifest, rows, items) {
+  const rejected = [];
+  const plan = [];
+  for (const item of items) {
+    const base = { satirNo: item.satirNo, siparisId: item.siparisId, takipNo: item.takipNo };
+    const row = rows.find((candidate2) => candidate2.id === item.siparisId);
+    if (!row) {
+      rejected.push({ ...base, sebep: "SIPARIS_BULUNAMADI" });
+      continue;
+    }
+    const current = normalizeAwb(row.uluslararasi_kargo_kodu);
+    if (current === item.takipNo) plan.push({ row, item, tekrar: true });
+    else if (row.lojistik_durumu === TESLIM_EDILDI) rejected.push({ ...base, sebep: "TESLIM_EDILDI" });
+    else if (current)
+      rejected.push({ ...base, sebep: "MEVCUT_AWB", mevcutAwb: String(row.uluslararasi_kargo_kodu) });
+    else if (rows.some(
+      (other) => other.id !== item.siparisId && normalizeAwb(other.uluslararasi_kargo_kodu) === item.takipNo
+    ))
+      rejected.push({ ...base, sebep: "AWB_BASKA_SIPARISTE" });
+    else plan.push({ row, item, tekrar: false });
+  }
+  if (rejected.length > 0) return { basarili: false, uygulananlar: [], reddedilenler: rejected };
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  for (const { row, item, tekrar } of plan) {
+    if (tekrar) continue;
+    row.uluslararasi_kargo_kodu = item.takipNo;
+    if (item.agirlikKg !== null) row.kargo_agirligi_kg = item.agirlikKg;
+    if (typeof row.lojistik_durumu === "string" && PRE_FLIGHT_STATUSES.has(row.lojistik_durumu))
+      row.lojistik_durumu = "ULUSLARARASI_KARGO";
+    row.guncellenme_tarihi = now;
+    memoryApprovals.push({
+      id: randomUUID7(),
+      tenantId,
+      siparisId: item.siparisId,
+      awb: item.takipNo,
+      manifestDosyaAdi: manifest.dosyaAdi,
+      manifestSha256: manifest.sha256,
+      manifestSatirNo: item.satirNo,
+      eslesmeTuru: item.eslesmeTuru,
+      isimPuani: Math.round(item.isimPuani * 1e3) / 1e3,
+      onaylayanKullaniciId: userId,
+      onayZamani: now
+    });
+  }
+  return {
+    basarili: true,
+    uygulananlar: plan.map(({ item, tekrar }) => ({
+      satirNo: item.satirNo,
+      siparisId: item.siparisId,
+      takipNo: item.takipNo,
+      tekrar
+    })),
+    reddedilenler: []
+  };
+}
+var REJECTION_REASONS = /* @__PURE__ */ new Set([
+  "SIPARIS_BULUNAMADI",
+  "TESLIM_EDILDI",
+  "MEVCUT_AWB",
+  "AWB_BASKA_SIPARISTE"
+]);
+function invalidResult() {
+  throw new PublicResourceError("AWB e\u015Fle\u015Ftirmeleri kaydedilemedi.", 503);
+}
+function parseRpcResult(data) {
+  if (!isRecord(data) || typeof data.basarili !== "boolean" || !Array.isArray(data.uygulananlar) || !Array.isArray(data.reddedilenler))
+    invalidResult();
+  const applied = data.uygulananlar;
+  const rejected = data.reddedilenler;
+  const base = (item) => {
+    if (!isRecord(item) || typeof item.satirNo !== "number" || typeof item.siparisId !== "string" || typeof item.takipNo !== "string")
+      invalidResult();
+    return { satirNo: item.satirNo, siparisId: item.siparisId, takipNo: item.takipNo };
+  };
+  return {
+    basarili: data.basarili,
+    uygulananlar: applied.map((item) => ({ ...base(item), tekrar: isRecord(item) && item.tekrar === true })),
+    reddedilenler: rejected.map((item) => {
+      const fields = base(item);
+      if (!isRecord(item) || typeof item.sebep !== "string" || !REJECTION_REASONS.has(item.sebep))
+        invalidResult();
+      return {
+        ...fields,
+        sebep: item.sebep,
+        ...typeof item.mevcutAwb === "string" ? { mevcutAwb: item.mevcutAwb } : {}
+      };
+    })
+  };
+}
+async function awbEslesmeleriniOnayla(tenant2, userId, manifest, items) {
+  const tenantId = requireTenant(tenant2);
+  if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
+  const local = memoryRows(tenantId);
+  if (local) return confirmInMemory(tenantId, userId, manifest, local, items);
+  const client2 = supabase;
+  if (!client2) invalidResult();
+  const { data, error: error2 } = await client2.rpc("tomnap_approve_awb_matches", {
+    p_tenant_id: tenantId,
+    p_user_id: userId,
+    p_manifest: manifest,
+    p_matches: items
+  });
+  if (error2?.code === "22023") throw new PublicResourceError("Ge\xE7ersiz e\u015Fle\u015Ftirme onay\u0131.", 400);
+  if (error2?.code === "PT403") throw new PublicResourceError("Bu i\u015Flem i\xE7in yetkiniz yok.", 403);
+  if (error2) invalidResult();
+  return parseRpcResult(data);
+}
+
 // src/server/routes/kargoEntegrasyon.ts
 var router9 = Router9();
 var status = (error2) => [400, 409, 503].includes(error2?.status) ? error2.status : 500;
@@ -9789,93 +10332,122 @@ router9.post("/kargo/senkronize-et", async (req, res) => {
     res.status(status(err)).json({ basarili: false, hata: err.message });
   }
 });
+var MAX_MANIFEST_SATIRI = 2e3;
+var ManifestYuklemeHatasi = class extends Error {
+  constructor(status2, message) {
+    super(message);
+    this.status = status2;
+  }
+};
+function requestTenant(req) {
+  const tenant2 = req.tenantId;
+  if (typeof tenant2 !== "string" || !tenant2 || tenant2 === "all")
+    throw new PublicResourceError("Butik se\xE7ilm\u0259lidir.", 400);
+  return tenant2;
+}
+function requestUser(req) {
+  const userId = req.auth?.userId;
+  if (typeof userId !== "string" || !userId) throw new PublicResourceError("Oturum gerekli.", 401);
+  return userId;
+}
+async function manifestiAyristir(body2, tenantId) {
+  const record = body2 && typeof body2 === "object" && !Array.isArray(body2) ? { ...body2 } : {};
+  const dosyaBase64 = record.dosya_base64;
+  if (!dosyaBase64)
+    throw new ManifestYuklemeHatasi(400, "Excel v\u0259 ya CSV fayl m\u0259zmunu (base64) t\u0259l\u0259b olunur.");
+  if (typeof dosyaBase64 !== "string" || dosyaBase64.length > 14 * 1024 * 1024)
+    throw new ManifestYuklemeHatasi(413, "Manifesto en fazla 10 MB olabilir.");
+  const dosyaAdi = (typeof record.dosya_adi === "string" ? record.dosya_adi : "").replace(/[\p{Cc}\p{Cf}]/gu, "").trim().slice(0, 255) || "manifest.xlsx";
+  const buffer = Buffer.from(dosyaBase64.replace(/^data:.*?;base64,/, ""), "base64");
+  const ayarlar = await kargoMerkezi.getAyarlar(tenantId);
+  const sonuc = await kargoMerkezi.getProvider(ayarlar.saglayici).manifestoAyristir(buffer, dosyaAdi);
+  return { sonuc, dosyaAdi, sha256: createHash6("sha256").update(buffer).digest("hex") };
+}
+async function manifestOnerileri(body2, tenantId) {
+  const manifest = await manifestiAyristir(body2, tenantId);
+  if (!manifest.sonuc.basarili)
+    throw new ManifestYuklemeHatasi(400, manifest.sonuc.hatalar?.[0] || "Manifest oxuna bilm\u0259di.");
+  if (manifest.sonuc.satirlar.length > MAX_MANIFEST_SATIRI)
+    throw new ManifestYuklemeHatasi(
+      413,
+      `Bir manifestd\u0259 \u0259n \xE7ox ${MAX_MANIFEST_SATIRI} s\u0259tir i\u015Fl\u0259n\u0259 bil\u0259r.`
+    );
+  const rapor = eslesmeOnerileriOlustur(manifest.sonuc.satirlar, await eslesmeHavuzunuYukle(tenantId));
+  return { manifest, rapor };
+}
+function sendError(res, error2) {
+  if (error2 instanceof ManifestYuklemeHatasi || error2 instanceof PublicResourceError || error2 instanceof CargoSettingsError) {
+    const code = [400, 401, 403, 404, 409, 413, 503].includes(error2.status) ? error2.status : 500;
+    return res.status(code).json({ basarili: false, hata: error2.message });
+  }
+  return res.status(500).json({ basarili: false, hata: "Kargo \u0259m\u0259liyyat\u0131 tamamlanmad\u0131." });
+}
+function awbReviewDisabled(res) {
+  if (isAwbReviewEnabled()) return false;
+  res.status(404).json({ basarili: false, hata: "Bu funksiya aktiv deyil." });
+  return true;
+}
 router9.post("/kargo/manifesto-yukle", async (req, res) => {
   try {
-    const {
-      dosya_base64,
-      dosya_adi = "manifest.xlsx",
-      tenantId = "kanada_shopper_baku",
-      otomatik_esle = true
-    } = req.body;
-    if (!dosya_base64) {
-      return res.status(400).json({ basarili: false, hata: "Excel v\u0259 ya CSV fayl m\u0259zmunu (base64) t\u0259l\u0259b olunur." });
-    }
-    if (typeof dosya_base64 !== "string" || dosya_base64.length > 14 * 1024 * 1024)
-      return res.status(413).json({ basarili: false, hata: "Manifesto en fazla 10 MB olabilir." });
-    const base64Data = dosya_base64.replace(/^data:.*?;base64,/, "");
-    const buffer = Buffer.from(base64Data, "base64");
-    const ayarlar = await kargoMerkezi.getAyarlar(tenantId);
-    const provider = kargoMerkezi.getProvider(ayarlar.saglayici);
-    const sonuc = await provider.manifestoAyristir(buffer, dosya_adi);
-    if (!sonuc.basarili) {
-      return res.status(400).json(sonuc);
-    }
-    let eslesenSayisi = 0;
-    const eslesmeler = [];
-    if (otomatik_esle && sonuc.satirlar.length > 0) {
-      const simdiIso = (/* @__PURE__ */ new Date()).toISOString();
-      let adaylar = siparislerVeritabani;
-      if (supabase) {
-        const { data, error: error2 } = await supabase.from("siparisler").select("*").eq("tenant_id", tenantId);
-        if (error2) return res.status(503).json({ basarili: false, hata: "Sipari\u015Fler okunamad\u0131." });
-        adaylar = data || [];
-      }
-      for (const satir of sonuc.satirlar) {
-        const aliciTemiz = satir.aliciAdi.toLowerCase().replace(/[^a-z0-9]/g, "");
-        const telTemiz = (satir.telefon || "").replace(/[^\d]/g, "").slice(-7);
-        const bulunan = adaylar.find((s) => {
-          if (s.tenant_id !== tenantId) {
-            return false;
-          }
-          if (telTemiz && (s.telefon_numarasi || "").replace(/[^\d]/g, "").includes(telTemiz)) {
-            return true;
-          }
-          const sMusteriTemiz = (s.musteri_adi || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-          if (aliciTemiz.length >= 4 && (sMusteriTemiz.includes(aliciTemiz) || aliciTemiz.includes(sMusteriTemiz))) {
-            return true;
-          }
-          return false;
-        });
-        if (bulunan) {
-          const changes = { uluslararasi_kargo_kodu: satir.takipNo };
-          if (satir.agirlikKg) changes.kargo_agirligi_kg = satir.agirlikKg;
-          if (["KANADA_SATINALIM_BEKLIYOR", "KANADA_DEPO"].includes(bulunan.lojistik_durumu))
-            changes.lojistik_durumu = "ULUSLARARASI_KARGO";
-          await updateCargoOrder(bulunan, changes);
-          bulunan.uluslararasi_kargo_kodu = satir.takipNo;
-          if (satir.agirlikKg) {
-            bulunan.kargo_agirligi_kg = satir.agirlikKg;
-          }
-          if (bulunan.lojistik_durumu === "KANADA_SATINALIM_BEKLIYOR" || bulunan.lojistik_durumu === "KANADA_DEPO") {
-            bulunan.lojistik_durumu = "ULUSLARARASI_KARGO";
-          }
-          bulunan.guncellenme_tarihi = simdiIso;
-          eslesenSayisi++;
-          eslesmeler.push({
-            siparisId: bulunan.id,
-            musteriAdi: bulunan.musteri_adi,
-            awbNo: satir.takipNo,
-            agirlikKg: satir.agirlikKg
-          });
-        }
-      }
-    }
+    const { sonuc } = await manifestiAyristir(req.body, requestTenant(req));
+    if (!sonuc.basarili) return res.status(400).json(sonuc);
     res.json({
       basarili: true,
-      mesaj: `Excel u\u011Furla oxundu: ${sonuc.toplamSatir} s\u0259tir tap\u0131ld\u0131, ${eslesenSayisi} sifari\u015Fl\u0259 AWB barkodu ba\u011Fland\u0131!`,
+      mesaj: `Excel u\u011Furla oxundu: ${sonuc.toplamSatir} s\u0259tir tap\u0131ld\u0131. AWB kodlar\u0131 sifari\u015Fl\u0259r\u0259 avtomatik yaz\u0131lm\u0131r; ba\u011Flamaq \xFC\xE7\xFCn e\u015Fl\u0259\u015Fdirm\u0259 t\u0259klifl\u0259rini t\u0259sdiql\u0259yin.`,
       ayristirma: sonuc,
-      eslesenSayisi,
-      eslesmeler
+      eslesenSayisi: 0,
+      eslesmeler: [],
+      eslesmeOnayiGerekli: true
     });
-  } catch (err) {
-    res.status(status(err)).json({ basarili: false, hata: err.message });
+  } catch (error2) {
+    sendError(res, error2);
+  }
+});
+router9.post("/kargo/manifesto-eslestirme/oneriler", async (req, res) => {
+  if (awbReviewDisabled(res)) return;
+  try {
+    const { manifest, rapor } = await manifestOnerileri(req.body, requestTenant(req));
+    res.json({ basarili: true, saglayici: manifest.sonuc.saglayici, ...rapor });
+  } catch (error2) {
+    sendError(res, error2);
+  }
+});
+router9.post("/kargo/manifesto-eslestirme/onayla", async (req, res) => {
+  if (awbReviewDisabled(res)) return;
+  try {
+    const tenantId = requestTenant(req);
+    const userId = requestUser(req);
+    const secimler = secimIstegiDogrula(req.body);
+    const { manifest, rapor } = await manifestOnerileri(req.body, tenantId);
+    const hazirlik = onayKalemleriniHazirla(rapor, secimler);
+    let sonuc;
+    if (hazirlik.reddedilenler.length > 0)
+      sonuc = { basarili: false, uygulananlar: [], reddedilenler: hazirlik.reddedilenler };
+    else if (hazirlik.kalemler.length === 0)
+      sonuc = { basarili: true, uygulananlar: hazirlik.tekrarlar, reddedilenler: [] };
+    else {
+      const yazilan = await awbEslesmeleriniOnayla(
+        tenantId,
+        userId,
+        { dosyaAdi: manifest.dosyaAdi, sha256: manifest.sha256 },
+        hazirlik.kalemler
+      );
+      sonuc = yazilan.basarili ? { ...yazilan, uygulananlar: [...hazirlik.tekrarlar, ...yazilan.uygulananlar] } : yazilan;
+    }
+    const yeni = sonuc.uygulananlar.filter((item) => !item.tekrar).length;
+    res.json({
+      ...sonuc,
+      mesaj: sonuc.basarili ? `${yeni} AWB kodu t\u0259sdiql\u0259n\u0259r\u0259k sifari\u015Fl\u0259r\u0259 yaz\u0131ld\u0131.` : "Se\xE7il\u0259n e\u015Fl\u0259\u015Fdirm\u0259l\u0259rin b\u0259zil\u0259ri t\u0259tbiq edil\u0259 bilm\u0259di; he\xE7 bir sifari\u015F d\u0259yi\u015Fdirilm\u0259di."
+    });
+  } catch (error2) {
+    sendError(res, error2);
   }
 });
 var kargoEntegrasyon_default = router9;
 
 // src/server/routes/auth.ts
 import { Router as Router10 } from "express";
-import { randomUUID as randomUUID7 } from "node:crypto";
+import { randomUUID as randomUUID8 } from "node:crypto";
 var router10 = Router10();
 function isUnexpired(value) {
   return typeof value === "string" && Date.parse(value) > Date.now();
@@ -9982,7 +10554,7 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
     if (typeof sifre !== "string" || sifre.length < 6 || sifre.length > 1024) {
       return res.status(400).json({ basarili: false, hata: "\u015Eifr\u0259 \u0259n az\u0131 6 simvoldan ibar\u0259t olmal\u0131d\u0131r." });
     }
-    if (adSoyad !== void 0 && (typeof adSoyad !== "string" || adSoyad.trim().length > 150) || telefon !== void 0 && (typeof telefon !== "string" || telefon.trim() && !normalizePhone(telefon.trim()))) {
+    if (adSoyad !== void 0 && (typeof adSoyad !== "string" || adSoyad.trim().length > 150) || telefon !== void 0 && (typeof telefon !== "string" || telefon.trim() && !normalizePhone2(telefon.trim()))) {
       return res.status(400).json({ basarili: false, hata: "Ad v\u0259 telefon m\u0259lumatlar\u0131n\u0131 yoxlay\u0131n." });
     }
     const cleanToken = token.trim();
@@ -10048,10 +10620,10 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
       return res.status(400).json({ basarili: false, hata: "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil." });
     }
     const newUser = {
-      id: "usr_" + randomUUID7(),
+      id: "usr_" + randomUUID8(),
       tenant_id: invite.tenantId,
       ad_soyad: typeof adSoyad === "string" && adSoyad.trim() ? adSoyad.trim() : invite.kullananKisi || "Komanda \xDCzv\xFC",
-      email: userEmail || `invite-${randomUUID7()}@tomnap.internal`,
+      email: userEmail || `invite-${randomUUID8()}@tomnap.internal`,
       telefon: userPhone,
       rol: invite.rol,
       sifre_hash: sifreHashle(sifre),
@@ -10086,16 +10658,16 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
     });
   }
 });
-function normalizePhone(value) {
+function normalizePhone2(value) {
   if (!/^[+\d\s().-]+$/.test(value)) return "";
   const digits = value.replace(/\D/g, "");
   return digits.length >= 7 && digits.length <= 15 ? digits : "";
 }
 async function findLoginUser(identifier) {
   const email = identifier.toLowerCase();
-  const phone2 = normalizePhone(identifier);
+  const phone2 = normalizePhone2(identifier);
   const emailMatches = (user) => user.email?.toLowerCase() === email;
-  const phoneMatches = (user) => !!phone2 && normalizePhone(user.telefon || "") === phone2;
+  const phoneMatches = (user) => !!phone2 && normalizePhone2(user.telefon || "") === phone2;
   if (!supabase) {
     const matches2 = kullanicilarVeritabani.filter(
       (user) => emailMatches(user) || phoneMatches(user)
@@ -10194,9 +10766,9 @@ router10.post("/auth/cikis", async (req, res) => {
 var auth_default = router10;
 
 // src/server/index.ts
-function createApp() {
+function createApp({ trustProxy = false } = {}) {
   const app2 = express();
-  app2.set("trust proxy", 1);
+  app2.set("trust proxy", trustProxy);
   app2.use(
     helmet({
       contentSecurityPolicy: false,
@@ -10255,16 +10827,13 @@ function createApp() {
 }
 
 // src/server/vercel.ts
-var app = createApp();
+var app = createApp({ trustProxy: 1 });
 function handler(req, res) {
   try {
     const originalUrl = req.url || "";
     const queryIndex = originalUrl.indexOf("?");
     const queryString = queryIndex !== -1 ? originalUrl.substring(queryIndex) : "";
-    const forwardedUri = req.headers?.["x-forwarded-uri"];
-    if (forwardedUri && typeof forwardedUri === "string" && (forwardedUri.startsWith("/api") || forwardedUri.startsWith("/uploads"))) {
-      req.url = forwardedUri;
-    } else if (req.url && !req.url.startsWith("/api") && !req.url.startsWith("/uploads")) {
+    if (req.url && !req.url.startsWith("/api") && !req.url.startsWith("/uploads")) {
       req.url = "/api" + (req.url.startsWith("/") ? req.url : "/" + req.url);
     }
     if (queryString && !req.url.includes("?")) {

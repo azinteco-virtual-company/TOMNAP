@@ -1,3 +1,6 @@
+# DESTEKLENMİYOR — yalnızca yerel deneme içindir; üretim dağıtım yolu değildir.
+# Üretim Vercel üzerinden yayınlanır (bkz. README "Dağıtım"). Bu dosyanın bakımı yapılmaz.
+
 version: '3.8'
 
 services:

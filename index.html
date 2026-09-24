@@ -24,7 +24,7 @@
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- The web manifest link is injected once by the build (VitePWA). -->
 
     <meta property="og:title" content="TOMNAP — Global Cross-Border Commerce & Parcel Logistics Platform" />
     <meta property="og:description" content="Global Cross-Border Commerce & Parcel Logistics Platform (Track, Order, Manage, Navigate, Automate, Parcel)." />
@@ -53,20 +53,22 @@
           // Ignore environment restrictions if descriptor is sealed
         }
       })();
-
-      // Suppress benign Vite WebSocket errors in iframe sandbox environment
-      (function () {
+    </script>
+    <script type="module">
+      // Suppress benign Vite WebSocket errors in iframe sandbox environment.
+      // Development only: production builds drop this block and keep console.error intact.
+      if (import.meta.env.DEV) {
         try {
-          var origError = console.error;
-          console.error = function () {
-            var first = arguments[0] ? String(arguments[0]) : '';
+          const origError = console.error;
+          console.error = function (...args) {
+            const first = args[0] ? String(args[0]) : '';
             if (first.indexOf('[vite]') !== -1) {
               return;
             }
-            return origError.apply(console, arguments);
+            return origError.apply(console, args);
           };
         } catch (e) {}
-      })();
+      }
     </script>
   </head>
   <body>

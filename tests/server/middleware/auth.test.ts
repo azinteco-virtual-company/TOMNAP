@@ -166,6 +166,27 @@ describe('CSRF protection, exact public paths, and role authorization', () => {
     expect((await request(app).post('/api/auth/giris/extra')).status).toBe(401);
   });
 
+  it('answers HEAD like GET on the public read routes, and on no other route', async () => {
+    for (const route of ['/api/health', '/health'])
+      expect((await request(app).head(route)).status).toBe(200);
+    // Public token checks reach their handler instead of stopping at 401.
+    for (const route of [
+      '/api/auth/token-kontrol/unknown-token',
+      '/api/firmalar/davet/unknown-token',
+    ]) {
+      const head = await request(app).head(route);
+      expect(head.status).not.toBe(401);
+      expect(head.status).toBe((await request(app).get(route)).status);
+    }
+    for (const route of [
+      '/api/siparisler',
+      '/api/sistem-durum',
+      '/api/auth/giris',
+      '/uploads/file.png',
+    ])
+      expect((await request(app).head(route)).status).toBe(401);
+  });
+
   it('allows password login publicly but rejects a cross-origin login request', async () => {
     const login = { email: 'patron@example.test', sifre: password };
     for (const origin of ['https://attacker.test', 'http://localhost.attacker.test', 'null']) {

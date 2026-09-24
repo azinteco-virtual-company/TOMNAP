@@ -243,3 +243,93 @@ _SSRF koruması ve private IP engellemesi mevcuttur._
 - Token veya davet kaydı kalıcı depoda okunamaz/yazılamazsa 503; eşzamanlı tüketim nedeniyle sıfır satır güncellenirse 409 döner.
 - Kök `/upload-gorsel` benzeri işlem rotaları kaldırıldı; `/api/` yolları kullanılmalıdır. `/uploads/:dosyaAdi` yalnız istenen dosyayı sunar; bulunamadığında 404 verir.
 - Görsel yükleme PNG/JPEG/WebP imzası ve 10 MiB çözülmüş gövde sınırı uygular. Uzak indirmeler her yönlendirmede genel IP doğrulaması ve DNS sabitlemesi yapar.
+
+## 23 Eylül 2026 — insan onaylı AWB eşleştirmesi (`FF_AWB_REVIEW`)
+
+Eski otomatik manifest eşleştirmesi, isim benzerliğiyle yanlış siparişlere AWB
+yazıyordu (ör. "Natalia Petrova" → "Əli", "John Smith" → Kiril isimli sipariş).
+Artık hiçbir manifest yüklemesi AWB yazmaz. Eşleştirme yalnız öneri üretir,
+yazma işlemi ayrı ve açık bir onayla yapılır.
+
+Bayrak: sunucuda `FF_AWB_REVIEW=true`, istemci derlemesinde `VITE_FF_AWB_REVIEW=true`
+(`FF_V2_FLOW`'dan bağımsız; production'da açık). Kapalıyken iki uç nokta 404 döner
+ve manifestten AWB atanamaz; `manifesto-yukle` yalnız ayrıştırır.
+
+Roller: `SUPER_ADMIN` (somut bir butik seçiliyken), `PATRON`, `KANADA_SATINALMA`.
+Bunlar bir siparişin AWB'sini düzenleyebilen rollerin aynısıdır.
+
+### `POST /api/kargo/manifesto-yukle` (davranış değişti)
+
+Manifesti yalnızca ayrıştırır. `otomatik_esle` uyumluluk için kabul edilir ama
+hiçbir şey yazmaz. Yanıt: `ayristirma`, `eslesenSayisi: 0`, `eslesmeler: []`,
+`eslesmeOnayiGerekli: true`.
+
+### `POST /api/kargo/manifesto-eslestirme/oneriler` (yalnız `FF_AWB_REVIEW=true`)
+
+Gövde: `{ dosya_base64, dosya_adi }` (en fazla 10 MB ve 2000 satır). Hiçbir kayıt
+değiştirilmez. Yanıt `satirlar[]`, `cakismalar[]` ve `ozet` alanlarını içerir.
+
+- **Güçlü eşleşme:** normalize telefonun tam eşleşmesi (`+994 55…`, `055…` ve `55…`
+  aynı sayılır, kısmi numara eşleşmez) ya da manifestteki referansın sipariş
+  kimliği veya `kanada_takip_kodu` ile tam eşleşmesi.
+- **Zayıf aday:** yalnız isim benzerliği (Unicode-duyarlı; ə, ş, ç, ğ, ı, ö, ü ve
+  Kiril korunur). Sørensen–Dice puanı en az 0,5 olmalı, satır başına en çok 5 aday
+  gösterilir. Zayıf adaylar asla önceden seçilmez. Normalize edilince boş kalan
+  (veya "Müştəri" gibi yer tutucu) isimler hiçbir şeyle eşleşmez. Puan, harfleri
+  koruyan biçim ile iki ASCII katlama şemasının en yükseğidir: Pasaport (Ə→A, Q→G,
+  X→KH, C→J, Ş→SH, Ç→CH, Ğ→GH, Ö→O, Ü→U, I/ı/İ→I) ve Basit (aksanlar atılır;
+  Ə→E, ı/İ→I; Q, X, C aynı kalır). Kiril adlar Latin'e çevrilir. Katlama yalnız
+  zayıf aday listesini genişletir; normalizasyonu, güçlü eşleşmeyi ve yazmayı
+  etkilemez.
+- `onerilenSiparisId` yalnız tek bir güçlü ve engelsiz aday varsa dolar. Bir satır
+  birden fazla siparişe eşleşiyorsa, aynı sipariş birden fazla satırda öneriliyorsa
+  ya da AWB manifestte tekrarlanıyorsa durum `BELIRSIZ` olur ve hiçbir aday seçilmez.
+- Satır durumları: `ONERILDI`, `BELIRSIZ`, `ZAYIF_ADAY`, `ZATEN_BAGLI`, `CAKISMA`,
+  `ESLESME_YOK`, `GECERSIZ_AWB`.
+- `cakismalar`: güçlü eşleşen ama teslim edilmiş (`TESLIM_EDILDI`) ya da zaten
+  AWB'si olan (`MEVCUT_AWB`) siparişler ile AWB'si başka siparişte duranlar
+  (`AWB_BASKA_SIPARISTE`). Bu siparişlere yazılmaz.
+
+### `POST /api/kargo/manifesto-eslestirme/onayla` (yalnız `FF_AWB_REVIEW=true`)
+
+Gövde: `{ dosya_base64, dosya_adi, secimler: [{ satirNo, siparisId }] }` (1–500
+seçim). Öneri ekranında kullanılan manifest dosyası tekrar gönderilir; sunucu
+önerileri yeniden hesaplar ve yalnız o satırın **güncel adaylarından** biri
+onaylanabilir. Aday olmayan seçim `ONERI_GECERSIZ` ile reddedilir. AWB, ağırlık,
+eşleşme türü ve isim puanı istemciden alınmaz; sunucu üretir. Aynı satır, aynı
+sipariş ya da aynı AWB iki kez seçilirse istek 400 döner. Yazma işlemi tek bir
+transactional RPC ile yapılır (`tomnap_approve_awb_matches`, tenant başına
+kilitli). Kurallar:
+
+- teslim edilmiş siparişe yazılmaz,
+- var olan bir AWB'nin üzerine yazılmaz,
+- tenant içinde başka bir siparişte duran AWB yazılmaz,
+- tek bir ret varsa **hiçbir** sipariş değişmez; yanıt `basarili: false` ve
+  `reddedilenler[].sebep` (`ONERI_GECERSIZ`, `SIPARIS_BULUNAMADI`, `TESLIM_EDILDI`,
+  `MEVCUT_AWB`, `AWB_BASKA_SIPARISTE`) olur,
+- aynı çiftin yeniden gönderilmesi idempotenttir (`tekrar: true`) ve yeni kayıt üretmez.
+
+Onaylanan siparişe AWB, varsa ağırlık (`ek_veriler.kargo_agirligi_kg`) yazılır.
+`KANADA_SATINALIM_BEKLIYOR`/`KANADA_DEPO` durumundaki sipariş `ULUSLARARASI_KARGO`
+durumuna geçer; diğer durumlar değişmez.
+
+**Onay kaydı:** yazılan her AWB için, siparişi güncelleyen RPC ile **aynı
+transaction'da** `awb_match_approvals` tablosuna bir satır eklenir: `tenant_id`,
+`siparis_id`, `awb`, `manifest_dosya_adi`, `manifest_sha256` (yüklenen dosyanın
+özeti), `manifest_satir_no`, `eslesme_turu` (`TELEFON`/`SIPARIS_KODU`/`ISIM`),
+`isim_puani`, `onaylayan_kullanici_id` (oturumdan) ve `onay_zamani`. RPC başarısız
+olursa satır da oluşmaz. Tablo yalnız eklemeye açıktır: UPDATE/DELETE/TRUNCATE
+`service_role` dahil tüm API rollerinden geri alınmıştır ve tablo sahibini de
+durduran tetikleyicilerle engellenir. RPC, onaylayan kullanıcının o butikte aktif
+ve AWB düzenleme yetkili olduğunu ayrıca doğrular (`PT403` → 403).
+
+Migration'lar: `supabase/migrations/20260923023659_awb_match_confirmation.sql` ve
+`supabase/migrations/20260923164650_awb_match_approvals.sql` (ilk RPC'nin yetkisini
+geri alır; kayıtsız yazma yolu kalmaz). Geri alma dosyaları `supabase/rollbacks/`
+altında; yalnız kendi migration'larının oluşturduğu nesneleri `DROP ... IF EXISTS`
+ile düşürür ve yeniden eskiye doğru, her biri tek transaction olarak uygulanır
+(`psql -1 -v ON_ERROR_STOP=1 -f <dosya>`). Up → down → up döngüsü
+`tests/sql/awb-migration-roundtrip.sql` ile CI'da sınanır. Geçmişte
+yanlış yazılmış olabilecek AWB'ler için salt okunur denetim:
+`npx tsx scripts/audit-awb-matches.ts --help`. Açık sorular:
+[OPEN_QUESTIONS.md](OPEN_QUESTIONS.md).

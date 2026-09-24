@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { lazy, Suspense, useState, useMemo } from 'react';
 import { Siparis } from '../types';
 import {
   FileText,
@@ -33,6 +33,10 @@ import { cleanPdfText, safePrintHtml } from '../utils/pdfHelpers';
 import { useAppStore } from '../store/appStore';
 import { fetchWithRetry } from '../lib/apiClient';
 import { KargoEntegrasyonModal } from './KargoEntegrasyonModal';
+import { AWB_REVIEW_ENABLED } from '../lib/featureFlags';
+
+// Manifest AWB review: a separate chunk, loaded only when VITE_FF_AWB_REVIEW is on.
+const ManifestEslestirmePaneli = lazy(() => import('./awb-eslestirme/ManifestEslestirmePaneli'));
 
 interface KargoManifestoSayfasiProps {
   siparisler: Siparis[];
@@ -76,6 +80,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
 
   // Kargo & Aramex Entegrasyon Durumları
   const { seciliFirmaId, siparisleriYukle } = useAppStore();
+  const [awbManifest, setAwbManifest] = useState<{ base64: string; ad: string } | null>(null);
   const [kargoModalAcik, setKargoModalAcik] = useState(false);
   const [kargoSenkronizeEdiliyor, setKargoSenkronizeEdiliyor] = useState(false);
   const [dispatchYukleniyor, setDispatchYukleniyor] = useState(false);
@@ -125,6 +130,11 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
     reader.onload = async () => {
       try {
         const base64 = (reader.result as string) || '';
+        if (AWB_REVIEW_ENABLED) {
+          // Nothing is written on upload; the user reviews and confirms suggestions.
+          setAwbManifest({ base64, ad: file.name });
+          return;
+        }
         const res = await fetchWithRetry('/api/kargo/manifesto-yukle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -984,6 +994,17 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+      )}
+
+      {AWB_REVIEW_ENABLED && awbManifest && (
+        <Suspense fallback={<div className="text-xs text-slate-500">Yüklənir...</div>}>
+          <ManifestEslestirmePaneli
+            dosyaBase64={awbManifest.base64}
+            dosyaAdi={awbManifest.ad}
+            onKapat={() => setAwbManifest(null)}
+            onOnaylandi={() => siparisleriYukle()}
+          />
+        </Suspense>
       )}
 
       {/* 2. Dörtlü Canlı İstatistik Kartları */}
