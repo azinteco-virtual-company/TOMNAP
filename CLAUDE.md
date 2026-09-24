@@ -50,8 +50,11 @@ GUARDRAIL — bu projedeki her görev için geçerli:
   değiştiyse paketi yeniden derle ve AYRI bir commit olarak ekle. Bu dosyalarda merge ya da
   rebase çakışması çıkarsa elle çözme: kaynakları birleştir, paketi yeniden derle.
 - main'e doğrudan commit atma; her prompt main'den açılan yeni bir dalda çalışsın.
-- Her maddeyi ayrı commit olarak at. Push'u yalnız ben açıkça istediğimde yap; main'i asla
-  push etme. git çalışmıyorsa dur ve bana söyle.
+- Her maddeyi ayrı commit olarak at. Dalları push edebilirsin. main'e DOĞRUDAN push yok;
+  main'e yalnız CI'ı yeşil bir PR, ben o görevde merge izni verdiysem, gh pr merge --merge
+  ile girer (squash yok). Merge öncesi dal main'in gerisindeyse main'i dala merge et ve
+  api/ paketini yeniden derle. Merge yayın değildir (vercel.json'da main deploy kapalı);
+  yayını yalnız ben yaparım. git çalışmıyorsa dur ve bana söyle.
 - Yeni kod TypeScript strict kurallarına uygun yazılsın (any ve ts-ignore yok).
 - Yeni istemci bileşenleri 400 satırı geçmesin; geçiyorsa böl. Yeni v2 ekranları
   React.lazy ile yüklensin; ilk yük paketine girmesin.
