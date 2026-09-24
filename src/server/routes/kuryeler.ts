@@ -12,7 +12,7 @@ import { ROL_GRUPLARI } from '../../shared/roller';
 
 const router = Router();
 const owners = new Set<string>(ROL_GRUPLARI.OWNERS);
-const operators = new Set<string>(ROL_GRUPLARI.SHIPPING);
+const operators = new Set<string>(ROL_GRUPLARI.COURIER_ASSIGN);
 function requireRole(req: Request, roles: Set<string>) {
   if (!req.auth || !roles.has(req.auth.role))
     throw new PublicResourceError('Bu işlem için yetkiniz yok.', 403);

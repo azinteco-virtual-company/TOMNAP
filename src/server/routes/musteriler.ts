@@ -15,17 +15,14 @@ import {
   demoSiparislerVeritabani,
 } from '../services/state';
 import { MusteriKaydi } from '../types';
+import {
+  MusteriIndeksi,
+  eslesir as matches,
+  satirTenanti as rowTenant,
+  siparisGecmisleri,
+} from '../services/musteriGecmisi';
 
 const router = Router();
-const rowTenant = (row: any): string => {
-  if (row.tenant_id) return row.tenant_id;
-  const legacy = Array.isArray(row.eksik_bilgiler)
-    ? row.eksik_bilgiler
-        .filter((item: any) => typeof item === 'string' && item.startsWith('META:tenant_id='))
-        .at(-1)
-    : undefined;
-  return legacy?.slice('META:tenant_id='.length) || 'kanada_shopper_baku';
-};
 const belongs = (row: any, tenant: string) => tenant === 'all' || rowTenant(row) === tenant;
 function tenantFor(req: Request, mutation = false): string {
   const tenant = (req as any).tenantId;
@@ -58,20 +55,6 @@ function localSnapshot(tenant: string) {
 const newestFirst = (a: any, b: any) =>
   (Date.parse(b.olusturma_tarihi) || 0) - (Date.parse(a.olusturma_tarihi) || 0) ||
   compareKeys(String(a.id), String(b.id));
-const phone = (value: any) => String(value || '').replace(/\s+/g, '');
-function matches(customer: any, order: any) {
-  if (rowTenant(customer) !== rowTenant(order)) return false;
-  return (
-    order.musteri_id === customer.id ||
-    (phone(customer.telefon) && phone(customer.telefon) === phone(order.telefon_numarasi)) ||
-    String(order.musteri_adi || '')
-      .toLowerCase()
-      .trim() ===
-      String(customer.ad_soyad || '')
-        .toLowerCase()
-        .trim()
-  );
-}
 const fail = (res: any, error: any) =>
   res.status(error.status || 503).json({
     basarili: false,
@@ -86,9 +69,11 @@ router.get('/musteriler', async (req, res) => {
     const customers = snapshot.customers;
     const orders = snapshot.orders.map(formatlaSiparis).sort(newestFirst);
     // Build missing customer cards only from orders already inside this authority scope.
+    // Indexed once per request (linear); see services/musteriGecmisi.ts.
+    const known = new MusteriIndeksi(customers);
     for (const order of orders) {
-      if (!order.musteri_adi || customers.some((c) => matches(c, order))) continue;
-      customers.push({
+      if (!order.musteri_adi || known.eslesenVar(order)) continue;
+      const card = {
         id: order.musteri_id || `order:${order.id}`,
         ad_soyad: order.musteri_adi,
         telefon: order.telefon_numarasi || '',
@@ -98,11 +83,15 @@ router.get('/musteriler', async (req, res) => {
         musteri_tipi: order.musteri_tipi || 'TANIMADIK',
         tenant_id: rowTenant(order),
         olusturma_tarihi: order.olusturma_tarihi,
-      });
+      };
+      customers.push(card);
+      known.ekle(card);
     }
+    // Histories keep the newest-first order of `orders`.
+    const histories = siparisGecmisleri(customers, orders);
     const enriched = customers
-      .map((customer) => {
-        const history = orders.filter((order) => matches(customer, order)).sort(newestFirst);
+      .map((customer, index) => {
+        const history = histories[index];
         const latest = history[0];
         return {
           ...customer,

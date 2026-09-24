@@ -44,7 +44,7 @@ export interface CourierTasks {
 export const canManageCouriers = (role: KullaniciRolu | null | undefined) =>
   rolGrubunda(role, 'OWNERS');
 export const canAssignCourier = (role: KullaniciRolu | null | undefined) =>
-  rolGrubunda(role, 'SHIPPING');
+  rolGrubunda(role, 'COURIER_ASSIGN');
 export const assignableCouriers = (couriers: CourierRecord[]) =>
   couriers.filter((courier) => courier.aktif && !!courier.kullanici_id);
 export const ordersForCourier = (orders: Siparis[], courierId: string) =>

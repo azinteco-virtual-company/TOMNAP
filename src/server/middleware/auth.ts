@@ -14,7 +14,8 @@ declare global {
 }
 
 const READ = new Set(['GET', 'HEAD', 'OPTIONS']);
-const { STAFF, OWNERS, SALES, PURCHASING, FINANCE, SHIPPING, RATES, ALL } = ROL_GRUPLARI;
+const { STAFF, OWNERS, SALES, PURCHASING, FINANCE, SHIPPING, COURIER_ASSIGN, RATES, ALL } =
+  ROL_GRUPLARI;
 
 type Rule = [string, RegExp, readonly string[]];
 // Explicit method + complete path allowlist. New routes are denied until reviewed.
@@ -41,9 +42,9 @@ const rules: Rule[] = [
   ['POST', /^\/api\/musteriler$/, SALES],
   ['GET', /^\/api\/inbox$/, SALES],
   ['POST', /^\/api\/(inbox\/[^/]+\/(onayla|reddet)|webhook\/siparis)$/, SALES],
-  ['GET', /^\/api\/kuryeler$/, [...SHIPPING, 'BAKU_FINANS']],
+  ['GET', /^\/api\/kuryeler$/, [...COURIER_ASSIGN, 'BAKU_FINANS']],
   ['POST', /^\/api\/kuryeler(?:\/[^/]+\/kullanici)?$/, OWNERS],
-  ['POST', /^\/api\/siparisler\/[^/]+\/kurye$/, SHIPPING],
+  ['POST', /^\/api\/siparisler\/[^/]+\/kurye$/, COURIER_ASSIGN],
   ['GET', /^\/api\/kurye\/gorevler$/, ['BAKU_KURYE']],
   ['POST', /^\/api\/kurye\/gorevler\/[^/]+\/teslim$/, ['BAKU_KURYE']],
   ['GET', /^\/api\/kargo\/ayarlar$/, SHIPPING],

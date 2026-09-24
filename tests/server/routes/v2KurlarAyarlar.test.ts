@@ -216,6 +216,37 @@ describe('v2 kurlar and ayarlar behaviour (A7)', () => {
     }
   });
 
+  it('shows the administrator the settings without the prim rate, which only the owner sets (K15)', async () => {
+    expect(
+      (await agents.PATRON.patch('/api/v2/ayarlar').send({ prim_orani_varsayilan: 0.07 })).status
+    ).toBe(200);
+    const scoped = `/api/v2/ayarlar?tenant_id=${TENANT}`;
+    const seen = await agents.SUPER_ADMIN.get(scoped);
+    expect(seen.status).toBe(200);
+    expect(seen.body.ayarlar).toHaveProperty('aylikBeyanSinirUsd');
+    expect(seen.body.ayarlar).not.toHaveProperty('primOraniVarsayilan');
+    expect(JSON.stringify(seen.body)).not.toContain('0.07');
+    for (const body of [
+      { prim_orani_varsayilan: 0.09 },
+      { prim_orani_varsayilan: 'x' },
+      { aylik_beyan_sinir_usd: 500, prim_orani_varsayilan: 0.09 },
+    ])
+      expect([body, (await agents.SUPER_ADMIN.patch(scoped).send(body)).status]).toEqual([
+        body,
+        403,
+      ]);
+    const other = await agents.SUPER_ADMIN.patch(scoped).send({ aylik_beyan_sinir_usd: 450 });
+    expect(other.status).toBe(200);
+    expect(other.body.ayarlar).not.toHaveProperty('primOraniVarsayilan');
+    expect(bellektekiAyarlar(TENANT)).toMatchObject({
+      aylikBeyanSinirUsd: 450,
+      primOraniVarsayilan: 0.07,
+    });
+    expect((await agents.PATRON.get('/api/v2/ayarlar')).body.ayarlar.primOraniVarsayilan).toBe(
+      0.07
+    );
+  });
+
   it('requires an administrator to select a concrete boutique', async () => {
     expect((await agents.SUPER_ADMIN.get('/api/v2/kurlar')).status).toBe(400);
     expect((await agents.SUPER_ADMIN.get('/api/v2/ayarlar')).status).toBe(400);

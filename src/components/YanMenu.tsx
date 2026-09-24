@@ -157,7 +157,7 @@ export const YanMenu: React.FC<YanMenuProps> = ({
   const canSeeKargoMerkezi = rolGrubunda(aktifRol, 'SHIPPING');
   const canSeeBakuTahsilat = rolGrubunda(aktifRol, 'OWNERS') || aktifRol === 'BAKU_FINANS';
   const canSeeInbox = rolGrubunda(aktifRol, 'SALES');
-  const canSeeKuryeMasasi = rolGrubunda(aktifRol, 'SHIPPING');
+  const canSeeKuryeMasasi = rolGrubunda(aktifRol, 'COURIER_ASSIGN');
   // Patron kesinlikle Sistem & Devir kodlarını GÖREMEZ!
   const canSeeSistemKodlar = aktifRol === 'SUPER_ADMIN';
 
