@@ -43,7 +43,7 @@ Bu planda "bu deseni izle" diye atıf yapılır, yeniden yazılmaz.
 | Sıra | PR                                            | Süre    | Bağımlılık |
 | ---- | --------------------------------------------- | ------- | ---------- |
 | A1   | AI isteminden müşteri rehberini çıkar         | 1–2 gün | —          |
-| A2   | Simüle kargo takibini siparişe yazma          | 1 gün   | —          |
+| A2   | Simülasyon korumasını testle sabitle          | 1 gün   | —          |
 | A3   | v1'de tahsilatın silinmesini kapat            | 1 gün   | —          |
 | A4   | Rol kataloğu: tek kaynak                      | 2 gün   | —          |
 | A5   | `ABD_SATINALMA` rolü                          | 1–2 gün | A4         |
@@ -73,13 +73,14 @@ A1–A3 birbirinden ve v2'den bağımsızdır; önce yapılmaları önerilir (bk
   - Telefonla eşleşen müşteri yine öneriliyor; eşleşme yoksa "yeni müşteri".
   - Rotanın izolasyon testi var.
 
-### A2 — Simüle kargo takibini siparişe yazma (Belge 1 KRİTİK 4)
+### A2 — Simülasyon korumasını testle sabitle (Belge 1 KRİTİK 4)
+
+Belge 1'in düzeltmesine göre simüle sonuçların siparişe yazılması yalnız canlı kodda var. Main'de PR #2'nin koruması bunu engelliyor, ama korumanın testi yok.
 
 - **Kapsam:**
-  - Aramex sağlayıcısı sonucun simüle olup olmadığını döndürür.
-  - `topluSenkronizeEt`, simüle sonucu hiçbir siparişe yazmaz; yalnız önizleme olarak döndürür.
-  - Not metnindeki "Canlı" ifadesi yalnız gerçek çağrıda kullanılır.
-  - Arayüzde simülasyon açıkça etiketlenir.
+  - Koruma değişmeden testle sabitlenir: simüle sonuç (kimliksiz Aramex, DHL, UPS) hiçbir siparişi değiştirmez; `LIVE` sonuç değiştirir.
+  - Koruma şu an düz bir `Error` atıyor ve rota 500 döndürüyor. Bunun yerine anlaşılır bir 409 dönmeli.
+  - Takip sonucunda simülasyon açıkça etiketlenir.
 - **Dosyalar:** `src/server/services/kargo/kargoMerkezi.ts` (84–160), `src/server/services/kargo/providers/aramex.ts` (118–133, 439+), `src/server/routes/kargoEntegrasyon.ts` (183), `src/components/KargoMerkeziSayfasi.tsx`, testler.
 - **Migration:** yok.
 - **Kabul ölçütleri:**
@@ -227,6 +228,6 @@ A1–A3 birbirinden ve v2'den bağımsızdır; önce yapılmaları önerilir (bk
   - `UPLOAD_STORAGE_BACKEND=supabase` ve özel bucket,
   - Production ortam değişkenleri,
   - `"main": false`'un ayrı bir commit ile kaldırılması.
-- **A1 ve A2 Deploy 1 ile ya da hemen ardından:** Gerçek müşteri verisi girmeden önce yayına alınmalı. Müşteri rehberinin Gemini'ye gitmesi ve simüle kargo durumlarının gerçek siparişlere yazılması, gerçek veride geri alınamaz zarar verir.
+- **A1 Deploy 1 ile ya da hemen ardından:** Gerçek müşteri verisi girmeden önce yayına alınmalı; müşteri rehberinin Gemini'ye gitmesi gerçek veride geri alınamaz. Simüle kargo durumlarının gerçek siparişe yazılması yalnız canlı kodda var; Deploy 1 bunu kendiliğinden kapatır, A2 de korumayı testle sabitler.
 - **4,5 MB sınırı:** RELEASE_READINESS'in 4. maddesi, fatura yüklemesi (Faz B) başlamadan önce kapanmalı. Faturalar doğrudan Storage'a yüklenmeli (K22).
 - **v2 migration'ları ayrı yayınlarda:** A4, A5 ve A7–A12, Deploy 1'den **sonra** ayrı yayınlarla, `FF_V2_FLOW` kapalıyken uygulanmalı. Bayrak ancak önizlemede kabul testlerinden sonra açılmalı. Her yayın DEPLOY_1'deki biçimi izlemeli: migration listesi, salt okunur kontrol, ortam değişkenleri, smoke test, geri alma.
