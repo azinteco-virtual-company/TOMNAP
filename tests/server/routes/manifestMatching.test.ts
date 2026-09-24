@@ -166,7 +166,8 @@ describe('Human-confirmed AWB matching endpoints (FF_AWB_REVIEW)', () => {
     const response = await owner
       .post('/api/kargo/manifesto-eslestirme/onayla')
       .send(confirmBody(manifest, [{ satirNo: 1, siparisId: 'target' }]));
-    expect(response.status).toBe(200);
+    // Diagnostics: a failing status also prints the response body.
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
     expect(response.body).toMatchObject({
       basarili: true,
       uygulananlar: [{ satirNo: 1, siparisId: 'target', takipNo: '37349392426', tekrar: false }],
@@ -194,6 +195,7 @@ describe('Human-confirmed AWB matching endpoints (FF_AWB_REVIEW)', () => {
     const retry = await owner
       .post('/api/kargo/manifesto-eslestirme/onayla')
       .send(confirmBody(manifest, [{ satirNo: 1, siparisId: 'target' }]));
+    expect(retry.status, JSON.stringify(retry.body)).toBe(200);
     expect(retry.body).toMatchObject({
       basarili: true,
       uygulananlar: [{ satirNo: 1, siparisId: 'target', tekrar: true }],
