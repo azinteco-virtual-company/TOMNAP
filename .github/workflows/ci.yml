@@ -117,8 +117,13 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/inbox-transactions.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/maintenance-transactions.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/onboarding-transactions.sql
-          # Role catalog: function contract, invite/accept checks, up -> down -> up.
+          # Role catalog (A4) and ABD_SATINALMA (A5); then the role migrations
+          # up -> down -> up, and the same tests again on the rebuilt schema.
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/rol-katalogu.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/abd-satinalma.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/rol-migration-roundtrip.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/rol-katalogu.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/abd-satinalma.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/cargo-settings.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/courier-access.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-upload-migrations.sql
