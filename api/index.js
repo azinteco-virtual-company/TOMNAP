@@ -4194,7 +4194,8 @@ var rules = [
   ]
 ];
 function isPublic(req) {
-  return req.method === "GET" && /^\/(?:api\/)?health$/.test(req.path) || req.method === "GET" && /^\/api\/(auth\/token-kontrol|firmalar\/davet)\/[^/]+$/.test(req.path) || req.method === "POST" && /^\/api\/(auth\/(giris|sifre-belirle)|firmalar\/(giris|kayit|davet\/katil))$/.test(req.path);
+  const read4 = req.method === "GET" || req.method === "HEAD";
+  return read4 && /^\/(?:api\/)?health$/.test(req.path) || read4 && /^\/api\/(auth\/token-kontrol|firmalar\/davet)\/[^/]+$/.test(req.path) || req.method === "POST" && /^\/api\/(auth\/(giris|sifre-belirle)|firmalar\/(giris|kayit|davet\/katil))$/.test(req.path);
 }
 function equalToken(received, expected) {
   if (typeof received !== "string" || !/^[a-f0-9]{64}$/.test(received)) return false;
