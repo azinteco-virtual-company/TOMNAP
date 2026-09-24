@@ -14,7 +14,7 @@ declare global {
 }
 
 const READ = new Set(['GET', 'HEAD', 'OPTIONS']);
-const { STAFF, OWNERS, SALES, PURCHASING, FINANCE, SHIPPING, ALL } = ROL_GRUPLARI;
+const { STAFF, OWNERS, SALES, PURCHASING, FINANCE, SHIPPING, RATES, ALL } = ROL_GRUPLARI;
 
 type Rule = [string, RegExp, readonly string[]];
 // Explicit method + complete path allowlist. New routes are denied until reviewed.
@@ -54,6 +54,10 @@ const rules: Rule[] = [
   ['GET', /^\/api\/proxy-gorsel$/, STAFF],
   // v2 (FF_V2_FLOW): kapı bayrak kapalıyken bu kurallara hiç ulaşılmadan 404 döner.
   ['GET', /^\/api\/v2\/durum$/, STAFF],
+  ['GET', /^\/api\/v2\/kurlar$/, RATES],
+  ['POST', /^\/api\/v2\/kurlar$/, RATES],
+  ['GET', /^\/api\/v2\/ayarlar$/, OWNERS],
+  ['PATCH', /^\/api\/v2\/ayarlar$/, OWNERS],
   ['GET', /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
   [
     'POST',
