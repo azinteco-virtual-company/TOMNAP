@@ -169,6 +169,8 @@ npm run format
 Üretim dağıtım yolu **Vercel**'dir: istemci statik olarak, Express API ise
 `api/index.js` serverless paketi olarak yayınlanır. `main` dalına push otomatik
 production deploy'u tetiklemez (`vercel.json` → `git.deploymentEnabled.main: false`).
+Canlıya çıkış listesi (commit'ler, migration'lar, ortam değişkenleri, smoke test,
+geri alma): [docs/DEPLOY_1.md](docs/DEPLOY_1.md).
 
 ### Docker (desteklenmiyor)
 
