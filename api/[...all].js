@@ -145,14 +145,21 @@ var ROL_GRUPLARI = {
   BUYERS,
   PURCHASING: [...SALES, ...BUYERS],
   FINANCE: [...SALES, "BAKU_FINANS"],
-  /** AWB, kargo ve kurye ataması. */
+  /** AWB ve uluslararası kargo. */
   SHIPPING: [...OWNERS, ...BUYERS],
+  /**
+   * Bakü kurye listesi ve ataması: Bakü dağıtımı Bakü ofisinin işi. ABD_SATINALMA
+   * yok (OPEN_QUESTIONS 22); KANADA_SATINALMA'nın mevcut yetkisi korunur.
+   */
+  COURIER_ASSIGN: [...OWNERS, "KANADA_SATINALMA"],
   /** Kur okuma ve girişi (v2 rol matrisi): sahipler, satın almacılar, Bakü finans. */
   RATES: [...OWNERS, ...BUYERS, "BAKU_FINANS"],
+  /** Maaş ve prim verisi, varsayılan prim oranı dahil: yalnız patron; SUPER_ADMIN değil (K15). */
+  PAYROLL: ["PATRON"],
   ALL: [...STAFF, "BAKU_KURYE"]
 };
-function rolGrubunda(role, grup) {
-  return ROL_GRUPLARI[grup].includes(role);
+function rolGrubunda(role, grup2) {
+  return ROL_GRUPLARI[grup2].includes(role);
 }
 var VARSAYILAN_ROL_LIMITLERI = {
   PATRON: 1,
@@ -4221,7 +4228,7 @@ function corsMiddleware() {
 
 // src/server/middleware/auth.ts
 var READ = /* @__PURE__ */ new Set(["GET", "HEAD", "OPTIONS"]);
-var { STAFF: STAFF2, OWNERS: OWNERS2, SALES: SALES2, PURCHASING, FINANCE, SHIPPING, RATES, ALL } = ROL_GRUPLARI;
+var { STAFF: STAFF2, OWNERS: OWNERS2, SALES: SALES2, PURCHASING, FINANCE, SHIPPING, COURIER_ASSIGN, RATES, ALL } = ROL_GRUPLARI;
 var rules = [
   ["GET", /^\/api\/auth\/oturum$/, ALL],
   ["POST", /^\/api\/auth\/cikis$/, ALL],
@@ -4245,9 +4252,9 @@ var rules = [
   ["POST", /^\/api\/musteriler$/, SALES2],
   ["GET", /^\/api\/inbox$/, SALES2],
   ["POST", /^\/api\/(inbox\/[^/]+\/(onayla|reddet)|webhook\/siparis)$/, SALES2],
-  ["GET", /^\/api\/kuryeler$/, [...SHIPPING, "BAKU_FINANS"]],
+  ["GET", /^\/api\/kuryeler$/, [...COURIER_ASSIGN, "BAKU_FINANS"]],
   ["POST", /^\/api\/kuryeler(?:\/[^/]+\/kullanici)?$/, OWNERS2],
-  ["POST", /^\/api\/siparisler\/[^/]+\/kurye$/, SHIPPING],
+  ["POST", /^\/api\/siparisler\/[^/]+\/kurye$/, COURIER_ASSIGN],
   ["GET", /^\/api\/kurye\/gorevler$/, ["BAKU_KURYE"]],
   ["POST", /^\/api\/kurye\/gorevler\/[^/]+\/teslim$/, ["BAKU_KURYE"]],
   ["GET", /^\/api\/kargo\/ayarlar$/, SHIPPING],
@@ -6247,8 +6254,8 @@ function eslesmeOnerileriOlustur(rows, orders) {
   const byAwb = /* @__PURE__ */ new Map();
   const prepared = [];
   for (const order of orders) {
-    const phone2 = normalizePhone(order.telefon);
-    if (phone2) push(byPhone, phone2, order);
+    const phone = normalizePhone(order.telefon);
+    if (phone) push(byPhone, phone, order);
     const idCode = normalizeCode(order.id);
     if (idCode) push(byCode, idCode, order);
     if (order.kanadaTakipKodu && order.kanadaTakipKodu !== idCode)
@@ -6300,8 +6307,8 @@ function eslesmeOnerileriOlustur(rows, orders) {
       return { ...base, durum: "CAKISMA" };
     }
     const strongTypes = /* @__PURE__ */ new Map();
-    const phone2 = normalizePhone(row.telefon);
-    for (const order of phone2 ? byPhone.get(phone2) ?? [] : []) strongTypes.set(order.id, "TELEFON");
+    const phone = normalizePhone(row.telefon);
+    for (const order of phone ? byPhone.get(phone) ?? [] : []) strongTypes.set(order.id, "TELEFON");
     const reference = normalizeCode(row.referansNo);
     for (const order of reference ? byCode.get(reference) ?? [] : [])
       if (!strongTypes.has(order.id)) strongTypes.set(order.id, "SIPARIS_KODU");
@@ -6379,8 +6386,8 @@ var aday = (customer, skor) => ({
   skor: Math.round(skor * 100) / 100
 });
 function musteriOner(customers, ipucu) {
-  const phone2 = normalizePhone(ipucu.telefon);
-  const samePhone = phone2 ? customers.filter((customer) => normalizePhone(customer.telefon) === phone2) : [];
+  const phone = normalizePhone(ipucu.telefon);
+  const samePhone = phone ? customers.filter((customer) => normalizePhone(customer.telefon) === phone) : [];
   const eslesen = samePhone.length === 1 ? samePhone[0] : null;
   const phoneCandidates = eslesen ? [] : samePhone.map((customer) => aday(customer, 1));
   const taken = new Set(samePhone.map((customer) => customer.id));
@@ -7138,13 +7145,78 @@ var siparisler_default = router3;
 // src/server/routes/musteriler.ts
 import { Router as Router4 } from "express";
 import { randomUUID as randomUUID2 } from "node:crypto";
-var router4 = Router4();
-var rowTenant2 = (row) => {
+
+// src/server/services/musteriGecmisi.ts
+function satirTenanti(row) {
   if (row.tenant_id) return row.tenant_id;
-  const legacy = Array.isArray(row.eksik_bilgiler) ? row.eksik_bilgiler.filter((item) => typeof item === "string" && item.startsWith("META:tenant_id=")).at(-1) : void 0;
+  const legacy = Array.isArray(row.eksik_bilgiler) ? row.eksik_bilgiler.filter(
+    (item) => typeof item === "string" && item.startsWith("META:tenant_id=")
+  ).at(-1) : void 0;
   return legacy?.slice("META:tenant_id=".length) || "kanada_shopper_baku";
+}
+var telefonAnahtari = (value) => String(value || "").replace(/\s+/g, "");
+var adAnahtari = (value) => String(value || "").toLowerCase().trim();
+function eslesir(customer, order) {
+  if (satirTenanti(customer) !== satirTenanti(order)) return false;
+  const telefon = telefonAnahtari(customer.telefon);
+  return order.musteri_id === customer.id || !!telefon && telefon === telefonAnahtari(order.telefon_numarasi) || adAnahtari(order.musteri_adi) === adAnahtari(customer.ad_soyad);
+}
+var esitlenebilir = (value) => value === value;
+function grup(map, key, yeni) {
+  let value = map.get(key);
+  if (value === void 0) map.set(key, value = yeni());
+  return value;
+}
+var MusteriIndeksi = class {
+  constructor(customers = []) {
+    this.tenantlar = /* @__PURE__ */ new Map();
+    for (const customer of customers) this.ekle(customer);
+  }
+  ekle(customer) {
+    const indeks = grup(this.tenantlar, satirTenanti(customer), () => ({
+      idler: /* @__PURE__ */ new Set(),
+      telefonlar: /* @__PURE__ */ new Set(),
+      adlar: /* @__PURE__ */ new Set()
+    }));
+    if (esitlenebilir(customer.id)) indeks.idler.add(customer.id);
+    const telefon = telefonAnahtari(customer.telefon);
+    if (telefon) indeks.telefonlar.add(telefon);
+    indeks.adlar.add(adAnahtari(customer.ad_soyad));
+  }
+  eslesenVar(order) {
+    const indeks = this.tenantlar.get(satirTenanti(order));
+    if (!indeks) return false;
+    return esitlenebilir(order.musteri_id) && indeks.idler.has(order.musteri_id) || indeks.telefonlar.has(telefonAnahtari(order.telefon_numarasi)) || indeks.adlar.has(adAnahtari(order.musteri_adi));
+  }
 };
-var belongs2 = (row, tenant2) => tenant2 === "all" || rowTenant2(row) === tenant2;
+function siparisGecmisleri(customers, orders) {
+  const tenantlar = /* @__PURE__ */ new Map();
+  orders.forEach((order, index) => {
+    const indeks = grup(tenantlar, satirTenanti(order), () => ({
+      idler: /* @__PURE__ */ new Map(),
+      telefonlar: /* @__PURE__ */ new Map(),
+      adlar: /* @__PURE__ */ new Map()
+    }));
+    if (esitlenebilir(order.musteri_id)) grup(indeks.idler, order.musteri_id, () => []).push(index);
+    grup(indeks.telefonlar, telefonAnahtari(order.telefon_numarasi), () => []).push(index);
+    grup(indeks.adlar, adAnahtari(order.musteri_adi), () => []).push(index);
+  });
+  return customers.map((customer) => {
+    const indeks = tenantlar.get(satirTenanti(customer));
+    if (!indeks) return [];
+    const bulunan = new Set(
+      esitlenebilir(customer.id) ? indeks.idler.get(customer.id) ?? [] : []
+    );
+    const telefon = telefonAnahtari(customer.telefon);
+    if (telefon) for (const index of indeks.telefonlar.get(telefon) ?? []) bulunan.add(index);
+    for (const index of indeks.adlar.get(adAnahtari(customer.ad_soyad)) ?? []) bulunan.add(index);
+    return [...bulunan].sort((a, b) => a - b).map((index) => orders[index]);
+  });
+}
+
+// src/server/routes/musteriler.ts
+var router4 = Router4();
+var belongs2 = (row, tenant2) => tenant2 === "all" || satirTenanti(row) === tenant2;
 function tenantFor2(req, mutation = false) {
   const tenant2 = req.tenantId;
   if (!tenant2 || mutation && tenant2 === "all")
@@ -7169,11 +7241,6 @@ function localSnapshot(tenant2) {
   };
 }
 var newestFirst = (a, b) => (Date.parse(b.olusturma_tarihi) || 0) - (Date.parse(a.olusturma_tarihi) || 0) || compareKeys(String(a.id), String(b.id));
-var phone = (value) => String(value || "").replace(/\s+/g, "");
-function matches(customer, order) {
-  if (rowTenant2(customer) !== rowTenant2(order)) return false;
-  return order.musteri_id === customer.id || phone(customer.telefon) && phone(customer.telefon) === phone(order.telefon_numarasi) || String(order.musteri_adi || "").toLowerCase().trim() === String(customer.ad_soyad || "").toLowerCase().trim();
-}
 var fail = (res, error2) => res.status(error2.status || 503).json({
   basarili: false,
   hata: error2.status ? error2.message : "M\xFC\u015Fteri verilerine eri\u015Filemedi."
@@ -7185,9 +7252,10 @@ router4.get("/musteriler", async (req, res) => {
     const snapshot = await customerSnapshot(request, () => localSnapshot(tenant2));
     const customers = snapshot.customers;
     const orders = snapshot.orders.map(formatlaSiparis).sort(newestFirst);
+    const known = new MusteriIndeksi(customers);
     for (const order of orders) {
-      if (!order.musteri_adi || customers.some((c) => matches(c, order))) continue;
-      customers.push({
+      if (!order.musteri_adi || known.eslesenVar(order)) continue;
+      const card = {
         id: order.musteri_id || `order:${order.id}`,
         ad_soyad: order.musteri_adi,
         telefon: order.telefon_numarasi || "",
@@ -7195,12 +7263,15 @@ router4.get("/musteriler", async (req, res) => {
         sehir: order.teslimat_sehri || "",
         adres: order.teslimat_adresi || "",
         musteri_tipi: order.musteri_tipi || "TANIMADIK",
-        tenant_id: rowTenant2(order),
+        tenant_id: satirTenanti(order),
         olusturma_tarihi: order.olusturma_tarihi
-      });
+      };
+      customers.push(card);
+      known.ekle(card);
     }
-    const enriched = customers.map((customer) => {
-      const history = orders.filter((order) => matches(customer, order)).sort(newestFirst);
+    const histories = siparisGecmisleri(customers, orders);
+    const enriched = customers.map((customer, index) => {
+      const history = histories[index];
       const latest = history[0];
       return {
         ...customer,
@@ -7243,13 +7314,13 @@ router4.get("/musteriler/:id/siparisler", async (req, res) => {
           id: req.params.id,
           ad_soyad: order.musteri_adi,
           telefon: order.telefon_numarasi,
-          tenant_id: rowTenant2(order)
+          tenant_id: satirTenanti(order)
         };
     }
     if (!customer) return res.status(404).json({ basarili: false, hata: "M\xFC\u015Fteri bulunamad\u0131." });
     const page = memoryPage(
       request,
-      orders.filter((o) => matches(customer, o)),
+      orders.filter((o) => eslesir(customer, o)),
       snapshot.revision
     );
     res.json({
@@ -7314,12 +7385,12 @@ import { Router as Router5 } from "express";
 import { randomUUID as randomUUID3, createHash as createHash4 } from "node:crypto";
 import { Type as Type2 } from "@google/genai";
 var router5 = Router5();
-var rowTenant3 = (row) => {
+var rowTenant2 = (row) => {
   if (row.tenant_id) return row.tenant_id;
   const legacy = Array.isArray(row.eksik_bilgiler) ? row.eksik_bilgiler.filter((item) => typeof item === "string" && item.startsWith("META:tenant_id=")).at(-1) : void 0;
   return legacy?.slice("META:tenant_id=".length) || "kanada_shopper_baku";
 };
-var belongs3 = (row, tenant2) => tenant2 === "all" || rowTenant3(row) === tenant2;
+var belongs3 = (row, tenant2) => tenant2 === "all" || rowTenant2(row) === tenant2;
 function tenantFor3(req, mutation = false) {
   const tenant2 = req.tenantId;
   if (!tenant2 || mutation && tenant2 === "all")
@@ -7334,7 +7405,7 @@ var inboxFailure = (res, error2) => res.status(error2 instanceof PublicResourceE
 var mappedInbox = (row) => ({
   ...row,
   gelis_tarihi: row.gelis_tarihi || row.olusturma_tarihi,
-  oneri_siparis: { ...row.oneri_siparis || {}, tenant_id: rowTenant3(row) }
+  oneri_siparis: { ...row.oneri_siparis || {}, tenant_id: rowTenant2(row) }
 });
 async function ownedInbox(tenant2, id) {
   if (dbActive2(tenant2)) {
@@ -7965,9 +8036,9 @@ async function onboardingRpc(name, args) {
 }
 function ensureUnique(users, user) {
   const email = user.email.trim().toLowerCase();
-  const phone2 = (user.telefon || "").replace(/\D/g, "");
+  const phone = (user.telefon || "").replace(/\D/g, "");
   if (users.some(
-    (existing) => existing.id !== user.id && (existing.email.trim().toLowerCase() === email || phone2 && (existing.telefon || "").replace(/\D/g, "") === phone2)
+    (existing) => existing.id !== user.id && (existing.email.trim().toLowerCase() === email || phone && (existing.telefon || "").replace(/\D/g, "") === phone)
   ))
     throw new OnboardingError(409, "Bu e-po\xE7t v\u0259 ya telefon art\u0131q qeydiyyatdad\u0131r.");
 }
@@ -8753,7 +8824,7 @@ async function deliverCourierTask(tenant2, userId, orderId, version2, recipient)
 // src/server/routes/kuryeler.ts
 var router7 = Router7();
 var owners = new Set(ROL_GRUPLARI.OWNERS);
-var operators = new Set(ROL_GRUPLARI.SHIPPING);
+var operators = new Set(ROL_GRUPLARI.COURIER_ASSIGN);
 function requireRole(req, roles) {
   if (!req.auth || !roles.has(req.auth.role))
     throw new PublicResourceError("Bu i\u015Flem i\xE7in yetkiniz yok.", 403);
@@ -10627,14 +10698,14 @@ function normalizePhone2(value) {
 }
 async function findLoginUser(identifier) {
   const email = identifier.toLowerCase();
-  const phone2 = normalizePhone2(identifier);
+  const phone = normalizePhone2(identifier);
   const emailMatches = (user) => user.email?.toLowerCase() === email;
-  const phoneMatches = (user) => !!phone2 && normalizePhone2(user.telefon || "") === phone2;
+  const phoneMatches = (user) => !!phone && normalizePhone2(user.telefon || "") === phone;
   if (!supabase) {
-    const matches2 = kullanicilarVeritabani.filter(
+    const matches = kullanicilarVeritabani.filter(
       (user) => emailMatches(user) || phoneMatches(user)
     );
-    return matches2.length === 1 ? { ...matches2[0] } : void 0;
+    return matches.length === 1 ? { ...matches[0] } : void 0;
   }
   if (email.includes("@") && email.length <= 254) {
     const escapedEmail = email.replace(/[\\%_]/g, (character) => `\\${character}`);
@@ -10642,12 +10713,12 @@ async function findLoginUser(identifier) {
     if (error2) throw error2;
     return data && emailMatches(data) ? data : void 0;
   }
-  if (phone2) {
-    const pattern = `%${phone2.split("").join("%")}%`;
+  if (phone) {
+    const pattern = `%${phone.split("").join("%")}%`;
     const { data, error: error2 } = await supabase.from("kullanicilar").select("*").ilike("telefon", pattern);
     if (error2) throw error2;
-    const matches2 = (data || []).filter(phoneMatches);
-    return matches2.length === 1 ? matches2[0] : void 0;
+    const matches = (data || []).filter(phoneMatches);
+    return matches.length === 1 ? matches[0] : void 0;
   }
   return void 0;
 }
@@ -11005,19 +11076,27 @@ router11.post("/kurlar", async (req, res) => {
     hata(res, error2);
   }
 });
+var primGorur = (req) => rolGrubunda(req.auth?.role, "PAYROLL");
+function gorunur(req, ayarlar) {
+  if (primGorur(req)) return ayarlar;
+  const { primOraniVarsayilan: _gizli, ...digerleri } = ayarlar;
+  return digerleri;
+}
 router11.get("/ayarlar", async (req, res) => {
   try {
-    res.json({ basarili: true, ayarlar: await ayarlariOku(req.tenantId) });
+    res.json({ basarili: true, ayarlar: gorunur(req, await ayarlariOku(req.tenantId)) });
   } catch (error2) {
     hata(res, error2);
   }
 });
 router11.patch("/ayarlar", async (req, res) => {
   try {
+    if (!primGorur(req) && Object.hasOwn(Object(req.body), "prim_orani_varsayilan"))
+      throw new PublicResourceError("Prim oran\u0131n\u0131 yaln\u0131z patron de\u011Fi\u015Ftirebilir.", 403);
     const degisiklik = ayarGuncellemesiniDogrula(req.body);
     res.json({
       basarili: true,
-      ayarlar: await ayarlariGuncelle(req.tenantId, kullanici(req), degisiklik)
+      ayarlar: gorunur(req, await ayarlariGuncelle(req.tenantId, kullanici(req), degisiklik))
     });
   } catch (error2) {
     hata(res, error2);
