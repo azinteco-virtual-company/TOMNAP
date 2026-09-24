@@ -10833,10 +10833,7 @@ function handler(req, res) {
     const originalUrl = req.url || "";
     const queryIndex = originalUrl.indexOf("?");
     const queryString = queryIndex !== -1 ? originalUrl.substring(queryIndex) : "";
-    const forwardedUri = req.headers?.["x-forwarded-uri"];
-    if (forwardedUri && typeof forwardedUri === "string" && (forwardedUri.startsWith("/api") || forwardedUri.startsWith("/uploads"))) {
-      req.url = forwardedUri;
-    } else if (req.url && !req.url.startsWith("/api") && !req.url.startsWith("/uploads")) {
+    if (req.url && !req.url.startsWith("/api") && !req.url.startsWith("/uploads")) {
       req.url = "/api" + (req.url.startsWith("/") ? req.url : "/" + req.url);
     }
     if (queryString && !req.url.includes("?")) {
