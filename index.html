@@ -53,20 +53,22 @@
           // Ignore environment restrictions if descriptor is sealed
         }
       })();
-
-      // Suppress benign Vite WebSocket errors in iframe sandbox environment
-      (function () {
+    </script>
+    <script type="module">
+      // Suppress benign Vite WebSocket errors in iframe sandbox environment.
+      // Development only: production builds drop this block and keep console.error intact.
+      if (import.meta.env.DEV) {
         try {
-          var origError = console.error;
-          console.error = function () {
-            var first = arguments[0] ? String(arguments[0]) : '';
+          const origError = console.error;
+          console.error = function (...args) {
+            const first = args[0] ? String(args[0]) : '';
             if (first.indexOf('[vite]') !== -1) {
               return;
             }
-            return origError.apply(console, arguments);
+            return origError.apply(console, args);
           };
         } catch (e) {}
-      })();
+      }
     </script>
   </head>
   <body>
