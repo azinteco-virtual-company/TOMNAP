@@ -102,6 +102,13 @@ describe('role catalog is the single source of roles (A4)', () => {
       ].map((match) => [match[1], Number(match[2])])
     );
     expect(defaults).toEqual(EKSIK_ANAHTAR_KOTASI);
+    const [creators, owners] = [
+      ...latestSqlDefinition('tomnap_v2_siparis_olustur').matchAll(/rol IN \(([^)]*)\)/g),
+    ].map((match) => quoted(match[1]));
+    expect([creators, owners]).toEqual([
+      [...ROL_GRUPLARI.SALES].sort(),
+      [...ROL_GRUPLARI.ORDER_OWNERS].sort(),
+    ]);
     const approvers = latestSqlDefinition('tomnap_approve_awb_matches').match(
       /u\.rol IN \(([^)]*)\)/
     );

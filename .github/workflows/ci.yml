@@ -132,6 +132,10 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/abd-satinalma.sql
           # Rates and v2 settings (A7): access, append-only, upsert, up -> down -> up.
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/kurlar-ve-v2-ayarlari.sql
+          # Order lines (A8): RPC, trigger, up -> down -> up; then the races, which
+          # commit v2 orders (so they run after the round trip).
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/siparis-satirlari.sql
+          node tests/sql/siparis-satirlari-concurrency.mjs
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/cargo-settings.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/courier-access.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-upload-migrations.sql

@@ -208,6 +208,28 @@ describe('order maintenance integrity', () => {
       ).status
     ).toBe(404);
   });
+  it('accepts the v1 values of the A8 columns and refuses v2 orders in a v1 backup', async () => {
+    const before = structuredClone(state.siparislerVeritabani);
+    for (const extra of [
+      { model_surumu: 2 },
+      { sahip_kullanici_id: 'owner' },
+      { model_surumu: 2, sahip_kullanici_id: 'owner' },
+    ]) {
+      const response = await request(app())
+        .post('/api/veritabani/yedek-yukle')
+        .send(restore([{ ...row(), ...extra }]));
+      expect([extra, response.status, response.body.hata]).toEqual([
+        extra,
+        400,
+        'v2 siparişleri bu yedekle yüklenemez.',
+      ]);
+    }
+    expect(state.siparislerVeritabani).toEqual(before);
+    const v1 = await request(app())
+      .post('/api/veritabani/yedek-yukle')
+      .send(restore([{ ...row(), model_surumu: 1, sahip_kullanici_id: null }]));
+    expect(v1.status).toBe(200);
+  });
   it('rejects unknown fields instead of silently losing their contents', async () => {
     const response = await request(app())
       .post('/api/veritabani/yedek-yukle')

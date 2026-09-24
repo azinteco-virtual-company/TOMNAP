@@ -9,6 +9,7 @@ import {
   type V2Ayarlari,
 } from '../../services/v2/ayarlar';
 import { rolGrubunda } from '../../../shared/roller';
+import siparislerRouter from './siparisler';
 
 /**
  * v2 akışı (FF_V2_FLOW). Kapı, oturum doğrulamasından ÖNCE bağlanır: bayrak
@@ -87,5 +88,8 @@ router.patch('/ayarlar', async (req, res) => {
     hata(res, error);
   }
 });
+
+// v2 siparişleri ve satırları (A8).
+router.use(siparislerRouter);
 
 export default router;

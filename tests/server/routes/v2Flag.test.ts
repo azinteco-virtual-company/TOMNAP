@@ -7,6 +7,7 @@ import { loginFixture } from '../helpers/session';
 type Agent = Awaited<ReturnType<typeof loginFixture>>['agent'];
 const METHODS = ['get', 'post', 'patch', 'delete'] as const;
 const PATHS = [
+  '/api/v2/siparisler',
   '/api/v2',
   '/api/v2/',
   '/api/v2/durum',
@@ -38,9 +39,15 @@ describe('FF_V2_FLOW gate (A6)', () => {
         for (const path of PATHS) {
           const anonymous = await request(app)[method](path).send({});
           const signedIn = await owner[method](path).send({});
-          for (const response of [anonymous, signedIn]) {
-            expect([method, path, response.status]).toEqual([method, path, 404]);
-            expect(response.body).toEqual(GATE_404);
+          for (const [who, response] of [
+            ['anonymous', anonymous],
+            ['signed in', signedIn],
+          ] as const) {
+            // Diagnostics: the report names the request and shows the raw answer.
+            const request = `${who} ${method.toUpperCase()} ${path}`;
+            const raw = `${response.status} ${JSON.stringify(response.headers)} ${response.text}`;
+            expect(response.status, `${request}: ${raw}`).toBe(404);
+            expect(response.body, `${request}: ${raw}`).toEqual(GATE_404);
           }
         }
       // The gate sits before authentication: not even the session was read.

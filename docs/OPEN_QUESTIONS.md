@@ -303,3 +303,30 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **Yabancı anahtar:** İki tabloda da yok. Böylece `firmalar`'a dokunulmuyor ve firma
       silme davranışı değişmiyor.
     - **Arayüz:** Bu bölümler yalnız `/v2` kabuğunda. `localStorage` kuru henüz yerinde.
+
+24. **v2 sipariş satırları ve sahibi (A8, varsayım).**
+    - **Müşteri bağı:** `siparisler`'e spec'teki gibi fiziksel bir `musteri_id` kolonu
+      eklenmedi. Bu adda bir kolon v1 satırlarında `null` olurdu. v1 okuma yolu üst
+      düzeydeki alanı `ek_veriler.musteri_id`'den öncelikli sayıyor; bu yüzden her
+      okumada bağ `null` ile ezilir, ilk v1 düzenlemesinde de `ek_veriler`'e `null`
+      yazılırdı. v2 siparişi müşteri bağını v1'le aynı yerde (`ek_veriler.musteri_id`)
+      tutuyor. Yeni kolonlar yalnız `model_surumu` ve `sahip_kullanici_id`.
+    - **Sahip:** Belirtilmezse oluşturan kişi olur (SUPER_ADMIN oluşturursa sahip de
+      SUPER_ADMIN'dir). PATRON ya da SUPER_ADMIN, tenant'ın aktif bir PATRON ya da
+      SATIS_SORUMLUSU'sunu sahip seçebilir. Satış sorumlusu yalnız kendi siparişinin
+      sahibi olabilir. RPC sahibin satırını `FOR SHARE` ile kilitliyor: eşzamanlı
+      pasifleştirme ya siparişi bekler ya da siparişi durdurur.
+    - **v1 ile birlikte yaşama:**
+      - Genel `PATCH /api/siparisler/:id`, v2 siparişte satırlardan türetilen ya da
+        yalnız RPC'lerle yazılan alanları (tutar, alınan, finans, lojistik, ürün
+        açıklaması, adet, beden, renk, ürünler) 409 ile reddediyor. Not ve adres gibi
+        alanlar değişebiliyor.
+      - AWB, kurye ve toplu kargo RPC'leri v2 siparişin lojistik durumunu değiştirmeye
+        devam ediyor (K20: RPC'lerle).
+      - v1 yedek geri yüklemesi v2 siparişini reddediyor; satırlar v1 yedeğine girmiyor.
+    - **Kapsam dışı:** Satır düzeltme ve iptal henüz yok; API rolünün satırlar üzerinde
+      UPDATE yetkisi de yok. v2 listesi en yeni 200 siparişi döndürüyor; sayfalama sonra.
+      Satış fiyatı AZN, `kaynak_ulke` (CA/US) zorunlu.
+    - **Geri alma:** v2 siparişi varken down dosyası çalışmayı reddediyor; aksi hâlde
+      satırlar sessizce silinirdi.
+    *Soru:* SUPER_ADMIN sipariş açtığında sahip seçmek zorunlu olsun mu? (Prim sahibe ait.)
