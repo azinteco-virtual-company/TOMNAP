@@ -6,18 +6,11 @@ import { DATA_DIR, IS_PRODUCTION, SUPABASE_URL } from '../config';
 import { kullanicilarVeritabani, firmalarVeritabani } from './state';
 import { supabase } from './supabase';
 import type { KullaniciKaydi } from '../types';
+import { gecerliRolMu } from '../../shared/roller';
 
 export const SESSION_COOKIE = 'tomnap_session';
 export const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const SESSION_FILE = path.join(DATA_DIR, 'oturumlar.json');
-const ROLES = new Set([
-  'SUPER_ADMIN',
-  'PATRON',
-  'KANADA_SATINALMA',
-  'SATIS_SORUMLUSU',
-  'BAKU_FINANS',
-  'BAKU_KURYE',
-]);
 const HEX_TOKEN = /^[a-f0-9]{64}$/;
 
 interface SessionRecord {
@@ -57,7 +50,7 @@ function validUser(user: KullaniciKaydi | undefined): user is KullaniciKaydi {
   return (
     !!user &&
     user.durum === 'AKTIF' &&
-    ROLES.has(user.rol) &&
+    gecerliRolMu(user.rol) &&
     typeof user.id === 'string' &&
     !!user.id &&
     typeof user.tenant_id === 'string' &&

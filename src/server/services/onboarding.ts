@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { getIdentitySnapshot, saveIdentitySnapshot } from './state';
 import type { DavetKaydi, FirmaTenantItem, KullaniciKaydi } from '../types';
+import { ekipRoluMu } from '../../shared/roller';
 
 export class OnboardingError extends Error {
   constructor(
@@ -44,9 +45,7 @@ function available(invite: DavetKaydi, token: string) {
     invite.token === token &&
     !invite.kullanildiMi &&
     Date.parse(invite.gecerlilikTarihi) > Date.now() &&
-    ['PATRON', 'KANADA_SATINALMA', 'SATIS_SORUMLUSU', 'BAKU_FINANS', 'BAKU_KURYE'].includes(
-      invite.rol
-    )
+    ekipRoluMu(invite.rol)
   );
 }
 

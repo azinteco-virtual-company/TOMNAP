@@ -1,4 +1,5 @@
 import { RESEND_API_KEY, EMAIL_FROM, APP_URL, IS_PRODUCTION } from '../config';
+import { ekipRoluMu, type EkipRolu } from '../../shared/roller';
 
 /** Use a trusted deployment URL for bearer links, never Host or forwarded headers. */
 export function getApplicationUrl(): string {
@@ -183,7 +184,7 @@ export function buildInviteEmail(params: InviteEmailParams) {
   const baseUrl = getApplicationUrl();
   const link = `${baseUrl}/davet-qebul?token=${encodeURIComponent(params.token)}`;
 
-  const rolAdlari: Record<string, string> = {
+  const rolAdlari: Record<EkipRolu, string> = {
     KANADA_SATINALMA: 'Kanada Satınalma Meneceri',
     SATIS_SORUMLUSU: 'Satış və Müştəri Xidmətləri',
     BAKU_FINANS: 'Bakı Maliyyə / Kassa Sorumlusu',
@@ -191,7 +192,7 @@ export function buildInviteEmail(params: InviteEmailParams) {
     PATRON: 'Həmtəsisçi / Patron',
   };
 
-  const rolAdi = rolAdlari[params.rol] || params.rol;
+  const rolAdi = ekipRoluMu(params.rol) ? rolAdlari[params.rol] : params.rol;
   const subject = `TOMNAP — "${params.butikAdi}" butik komandasına dəvət edildiniz (${rolAdi})`;
 
   const html = `

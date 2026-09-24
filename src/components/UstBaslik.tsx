@@ -19,6 +19,7 @@ import { DilSecici } from './DilSecici';
 import { FirmaSecici } from './FirmaSecici';
 import { PWAInstallButton } from './PWAInstallButton';
 import { useDil } from '../context/DilKonteksti';
+import { rolGrubunda } from '../shared/roller';
 
 interface UstBaslikProps {
   aktifSekme:
@@ -276,7 +277,7 @@ export const UstBaslik: React.FC<UstBaslikProps> = ({
         )}
 
         {/* Komanda Dəvət Linki Butonu */}
-        {onDavetModalAc && (aktifRol === 'SUPER_ADMIN' || aktifRol === 'PATRON') && (
+        {onDavetModalAc && rolGrubunda(aktifRol, 'OWNERS') && (
           <button
             type="button"
             id="btn-header-davet"

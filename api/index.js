@@ -105,6 +105,79 @@ function writeJsonAtomic(filename, value) {
   }
 }
 
+// src/shared/roller.ts
+var PLATFORM_ROLU = "SUPER_ADMIN";
+var EKIP_ROLLERI = [
+  "PATRON",
+  // Butik sahibi: finans, kurye ve sipariş tam kontrol; sistem kodları hariç
+  "KANADA_SATINALMA",
+  // Kanada satın alma fişleri, kargo belgeleri, kurye atama
+  "SATIS_SORUMLUSU",
+  // Görsel ve WhatsApp siparişi girer, onay bekleyenleri işler
+  "BAKU_FINANS",
+  // Bakü tahsilat, kasa ve kalan borç kapama
+  "BAKU_KURYE"
+  // Yalnız kendi kurye kaydına açıkça atanmış paketleri görür
+];
+var ROLLER = [PLATFORM_ROLU, ...EKIP_ROLLERI];
+var ROL_KUMESI = new Set(ROLLER);
+var EKIP_ROL_KUMESI = new Set(EKIP_ROLLERI);
+function gecerliRolMu(value) {
+  return typeof value === "string" && ROL_KUMESI.has(value);
+}
+function ekipRoluMu(value) {
+  return typeof value === "string" && EKIP_ROL_KUMESI.has(value);
+}
+var OWNERS = [PLATFORM_ROLU, "PATRON"];
+var SALES = [...OWNERS, "SATIS_SORUMLUSU"];
+var STAFF = [...SALES, "KANADA_SATINALMA", "BAKU_FINANS"];
+var ROL_GRUPLARI = {
+  /** Kurye dışındaki herkes. */
+  STAFF,
+  OWNERS,
+  SALES,
+  PURCHASING: [...SALES, "KANADA_SATINALMA"],
+  FINANCE: [...SALES, "BAKU_FINANS"],
+  /** AWB, kargo ve kurye ataması. */
+  SHIPPING: [...OWNERS, "KANADA_SATINALMA"],
+  ALL: [...STAFF, "BAKU_KURYE"]
+};
+var VARSAYILAN_ROL_LIMITLERI = {
+  PATRON: 1,
+  KANADA_SATINALMA: 2,
+  SATIS_SORUMLUSU: 4,
+  BAKU_FINANS: 2,
+  BAKU_KURYE: 10
+};
+var PAKET_ROL_LIMITLERI = {
+  BASLANGIC: {
+    PATRON: 1,
+    KANADA_SATINALMA: 1,
+    SATIS_SORUMLUSU: 1,
+    BAKU_FINANS: 1,
+    BAKU_KURYE: 1
+  },
+  PRO: {
+    PATRON: 1,
+    KANADA_SATINALMA: 2,
+    SATIS_SORUMLUSU: 2,
+    BAKU_FINANS: 2,
+    BAKU_KURYE: 5
+  },
+  ENTERPRISE: {
+    PATRON: 2,
+    KANADA_SATINALMA: 5,
+    SATIS_SORUMLUSU: 10,
+    BAKU_FINANS: 5,
+    BAKU_KURYE: 25
+  }
+};
+function ilkKullaniciSayilari() {
+  const sayilar = Object.fromEntries(EKIP_ROLLERI.map((rol) => [rol, 0]));
+  sayilar.PATRON = 1;
+  return sayilar;
+}
+
 // src/data/ornek-siparisler.ts
 var BASLANGIC_SIPARISLER = [
   {
@@ -3630,22 +3703,14 @@ var musterilerVeritabani = [
 var IDENTITY_DOSYA_YOLU = path3.join(DATA_DIR, "identity.json");
 var object = (value) => !!value && typeof value === "object" && !Array.isArray(value);
 var nonempty = (value) => typeof value === "string" && value.length > 0;
-var roles = /* @__PURE__ */ new Set([
-  "SUPER_ADMIN",
-  "PATRON",
-  "KANADA_SATINALMA",
-  "SATIS_SORUMLUSU",
-  "BAKU_FINANS",
-  "BAKU_KURYE"
-]);
 function companyRecord(value) {
   return object(value) && nonempty(value.id) && nonempty(value.ad) && typeof value.sehir === "string" && ["AZN", "CAD", "USD"].includes(String(value.varsayilanParaBirimi)) && typeof value.varsayilanKomisyonYuzdesi === "number" && Number.isFinite(value.varsayilanKomisyonYuzdesi) && typeof value.aciklama === "string";
 }
 function userRecord(value) {
-  return object(value) && nonempty(value.id) && nonempty(value.tenant_id) && typeof value.ad_soyad === "string" && typeof value.email === "string" && roles.has(String(value.rol)) && ["BEKLEMEDE_SIFRE", "AKTIF", "PASIF"].includes(String(value.durum)) && typeof value.olusturma_tarihi === "string";
+  return object(value) && nonempty(value.id) && nonempty(value.tenant_id) && typeof value.ad_soyad === "string" && typeof value.email === "string" && gecerliRolMu(value.rol) && ["BEKLEMEDE_SIFRE", "AKTIF", "PASIF"].includes(String(value.durum)) && typeof value.olusturma_tarihi === "string";
 }
 function inviteRecord(value) {
-  return object(value) && nonempty(value.token) && nonempty(value.tenantId) && typeof value.tenantAd === "string" && roles.has(String(value.rol)) && value.rol !== "SUPER_ADMIN" && typeof value.olusturanKisi === "string" && typeof value.olusturmaTarihi === "string" && typeof value.gecerlilikTarihi === "string" && typeof value.kullanildiMi === "boolean";
+  return object(value) && nonempty(value.token) && nonempty(value.tenantId) && typeof value.tenantAd === "string" && ekipRoluMu(value.rol) && typeof value.olusturanKisi === "string" && typeof value.olusturmaTarihi === "string" && typeof value.gecerlilikTarihi === "string" && typeof value.kullanildiMi === "boolean";
 }
 function records(value, valid, key) {
   return Array.isArray(value) && value.every(valid) && new Set(value.map((item) => item[key])).size === value.length;
@@ -3864,14 +3929,6 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 var SESSION_COOKIE = "tomnap_session";
 var SESSION_DURATION_MS = 8 * 60 * 60 * 1e3;
 var SESSION_FILE = path4.join(DATA_DIR, "oturumlar.json");
-var ROLES = /* @__PURE__ */ new Set([
-  "SUPER_ADMIN",
-  "PATRON",
-  "KANADA_SATINALMA",
-  "SATIS_SORUMLUSU",
-  "BAKU_FINANS",
-  "BAKU_KURYE"
-]);
 var HEX_TOKEN = /^[a-f0-9]{64}$/;
 function digest(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -3880,7 +3937,7 @@ function fingerprint(user) {
   return digest(JSON.stringify([user.id, user.sifre_hash, user.rol, user.tenant_id]));
 }
 function validUser(user) {
-  return !!user && user.durum === "AKTIF" && ROLES.has(user.rol) && typeof user.id === "string" && !!user.id && typeof user.tenant_id === "string" && !!user.tenant_id && (user.tenant_id !== "all" || user.rol === "SUPER_ADMIN") && typeof user.sifre_hash === "string" && /^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/.test(user.sifre_hash);
+  return !!user && user.durum === "AKTIF" && gecerliRolMu(user.rol) && typeof user.id === "string" && !!user.id && typeof user.tenant_id === "string" && !!user.tenant_id && (user.tenant_id !== "all" || user.rol === "SUPER_ADMIN") && typeof user.sifre_hash === "string" && /^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/.test(user.sifre_hash);
 }
 function assertStorageAvailable() {
   if (!supabase && (IS_PRODUCTION || SUPABASE_URL)) {
@@ -4141,18 +4198,12 @@ function corsMiddleware() {
 
 // src/server/middleware/auth.ts
 var READ = /* @__PURE__ */ new Set(["GET", "HEAD", "OPTIONS"]);
-var STAFF = ["SUPER_ADMIN", "PATRON", "KANADA_SATINALMA", "SATIS_SORUMLUSU", "BAKU_FINANS"];
-var OWNERS = ["SUPER_ADMIN", "PATRON"];
-var SALES = [...OWNERS, "SATIS_SORUMLUSU"];
-var PURCHASING = [...SALES, "KANADA_SATINALMA"];
-var FINANCE = [...SALES, "BAKU_FINANS"];
-var SHIPPING = [...OWNERS, "KANADA_SATINALMA"];
-var ALL = [...STAFF, "BAKU_KURYE"];
+var { STAFF: STAFF2, OWNERS: OWNERS2, SALES: SALES2, PURCHASING, FINANCE, SHIPPING, ALL } = ROL_GRUPLARI;
 var rules = [
   ["GET", /^\/api\/auth\/oturum$/, ALL],
   ["POST", /^\/api\/auth\/cikis$/, ALL],
-  ["GET", /^\/api\/firmalar$/, STAFF],
-  ["POST", /^\/api\/firmalar\/davet-olustur$/, OWNERS],
+  ["GET", /^\/api\/firmalar$/, STAFF2],
+  ["POST", /^\/api\/firmalar\/davet-olustur$/, OWNERS2],
   ["POST", /^\/api\/firmalar$/, ["SUPER_ADMIN"]],
   ["PATCH", /^\/api\/firmalar\/[^/]+\/onay$/, ["SUPER_ADMIN"]],
   ["DELETE", /^\/api\/firmalar\/[^/]+$/, ["SUPER_ADMIN"]],
@@ -4162,27 +4213,27 @@ var rules = [
     /^\/api\/(veritabani\/(temizle|demo-yukle|yedek-yukle)|ornek-verileri-yukle)$/,
     ["SUPER_ADMIN"]
   ],
-  ["GET", /^\/api\/siparisler$/, STAFF],
+  ["GET", /^\/api\/siparisler$/, STAFF2],
   ["POST", /^\/api\/(siparisler|ayristir-siparis)$/, PURCHASING],
-  ["PATCH", /^\/api\/siparisler\/[^/]+$/, STAFF],
-  ["DELETE", /^\/api\/siparisler\/[^/]+$/, SALES],
+  ["PATCH", /^\/api\/siparisler\/[^/]+$/, STAFF2],
+  ["DELETE", /^\/api\/siparisler\/[^/]+$/, SALES2],
   ["POST", /^\/api\/siparisler\/tumunu-uluslararasi-kargo-yap$/, SHIPPING],
   ["GET", /^\/api\/musteriler(?:\/[^/]+\/siparisler)?$/, FINANCE],
-  ["POST", /^\/api\/musteriler$/, SALES],
-  ["GET", /^\/api\/inbox$/, SALES],
-  ["POST", /^\/api\/(inbox\/[^/]+\/(onayla|reddet)|webhook\/siparis)$/, SALES],
+  ["POST", /^\/api\/musteriler$/, SALES2],
+  ["GET", /^\/api\/inbox$/, SALES2],
+  ["POST", /^\/api\/(inbox\/[^/]+\/(onayla|reddet)|webhook\/siparis)$/, SALES2],
   ["GET", /^\/api\/kuryeler$/, [...SHIPPING, "BAKU_FINANS"]],
-  ["POST", /^\/api\/kuryeler(?:\/[^/]+\/kullanici)?$/, OWNERS],
+  ["POST", /^\/api\/kuryeler(?:\/[^/]+\/kullanici)?$/, OWNERS2],
   ["POST", /^\/api\/siparisler\/[^/]+\/kurye$/, SHIPPING],
   ["GET", /^\/api\/kurye\/gorevler$/, ["BAKU_KURYE"]],
   ["POST", /^\/api\/kurye\/gorevler\/[^/]+\/teslim$/, ["BAKU_KURYE"]],
   ["GET", /^\/api\/kargo\/ayarlar$/, SHIPPING],
-  ["POST", /^\/api\/kargo\/ayarlar$/, OWNERS],
+  ["POST", /^\/api\/kargo\/ayarlar$/, OWNERS2],
   ["POST", /^\/api\/kargo\/(test|takip|senkronize-et|manifesto-yukle)$/, SHIPPING],
   // Human-confirmed AWB matching (FF_AWB_REVIEW): same roles that may edit an order's AWB.
   ["POST", /^\/api\/kargo\/manifesto-eslestirme\/(oneriler|onayla)$/, SHIPPING],
-  ["GET", /^\/api\/proxy-gorsel$/, STAFF],
-  ["GET", /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
+  ["GET", /^\/api\/proxy-gorsel$/, STAFF2],
+  ["GET", /^(?:\/api)?\/uploads\/[^/]+$/, STAFF2],
   [
     "POST",
     /^\/api\/(upload-gorsel|urun-katalog-gorseli-ara|gorselden-urun-ara|katalog-gorseli-kaydet|urun-orijinal-gorsele-don)$/,
@@ -4262,7 +4313,7 @@ function sessionAuth() {
       }
       const method = req.method === "HEAD" ? "GET" : req.method;
       if (!rules.some(
-        ([m, path9, roles2]) => m === method && path9.test(req.path) && roles2.includes(auth.role)
+        ([m, path9, roles]) => m === method && path9.test(req.path) && roles.includes(auth.role)
       )) {
         res.status(403).json({ basarili: false, hata: "Bu i\u015Flem i\xE7in yetkiniz yok." });
         return;
@@ -7802,7 +7853,7 @@ function buildInviteEmail(params) {
     BAKU_KURYE: "Bak\u0131 Daxili \xC7atd\u0131r\u0131lma / Kuryer",
     PATRON: "H\u0259mt\u0259sis\xE7i / Patron"
   };
-  const rolAdi = rolAdlari[params.rol] || params.rol;
+  const rolAdi = ekipRoluMu(params.rol) ? rolAdlari[params.rol] : params.rol;
   const subject = `TOMNAP \u2014 "${params.butikAdi}" butik komandas\u0131na d\u0259v\u0259t edildiniz (${rolAdi})`;
   const html = `
 <!DOCTYPE html>
@@ -7891,9 +7942,7 @@ function ensureUnique(users, user) {
     throw new OnboardingError(409, "Bu e-po\xE7t v\u0259 ya telefon art\u0131q qeydiyyatdad\u0131r.");
 }
 function available(invite, token) {
-  return invite.token === token && !invite.kullanildiMi && Date.parse(invite.gecerlilikTarihi) > Date.now() && ["PATRON", "KANADA_SATINALMA", "SATIS_SORUMLUSU", "BAKU_FINANS", "BAKU_KURYE"].includes(
-    invite.rol
-  );
+  return invite.token === token && !invite.kullanildiMi && Date.parse(invite.gecerlilikTarihi) > Date.now() && ekipRoluMu(invite.rol);
 }
 function capacity(firma, users, role) {
   if (firma.onayDurumu !== "AKTIF") throw new OnboardingError(403, "Firma aktiv deyil.");
@@ -8127,20 +8176,8 @@ router6.get("/firmalar", async (req, res) => {
           sahipEmail: d.sahip_email || "",
           sahipTelefon: d.sahip_telefon || "",
           menseiUlke: d.mensei_ulke || "CA",
-          rolLimitleri: d.rol_limitleri || {
-            PATRON: 1,
-            KANADA_SATINALMA: 2,
-            SATIS_SORUMLUSU: 4,
-            BAKU_FINANS: 2,
-            BAKU_KURYE: 10
-          },
-          aktifKullaniciSayilari: d.aktif_kullanici_sayilari || {
-            PATRON: 1,
-            KANADA_SATINALMA: 0,
-            SATIS_SORUMLUSU: 0,
-            BAKU_FINANS: 0,
-            BAKU_KURYE: 0
-          },
+          rolLimitleri: d.rol_limitleri || { ...VARSAYILAN_ROL_LIMITLERI },
+          aktifKullaniciSayilari: d.aktif_kullanici_sayilari || ilkKullaniciSayilari(),
           kayitTarihi: d.kayit_tarihi || (/* @__PURE__ */ new Date()).toISOString()
         }));
         return res.json({
@@ -8195,30 +8232,7 @@ router6.post("/firmalar/kayit", async (req, res) => {
     const slug = ad.toLowerCase().replace(/ə/g, "e").replace(/ı/g, "i").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ş/g, "s").replace(/ç/g, "c").replace(/ğ/g, "g").replace(/[^a-z0-9]/g, "_").slice(0, 60) + "_" + randomUUID5();
     const upper = String(paket || "PRO").toUpperCase();
     const normalPaket = upper === "ENTERPRISE" ? "ENTERPRISE" : upper === "BASLANGIC" ? "BASLANGIC" : "PRO";
-    let rolLimitleri = {
-      PATRON: 1,
-      KANADA_SATINALMA: 1,
-      SATIS_SORUMLUSU: 1,
-      BAKU_FINANS: 1,
-      BAKU_KURYE: 1
-    };
-    if (normalPaket === "PRO") {
-      rolLimitleri = {
-        PATRON: 1,
-        KANADA_SATINALMA: 2,
-        SATIS_SORUMLUSU: 2,
-        BAKU_FINANS: 2,
-        BAKU_KURYE: 5
-      };
-    } else if (normalPaket === "ENTERPRISE") {
-      rolLimitleri = {
-        PATRON: 2,
-        KANADA_SATINALMA: 5,
-        SATIS_SORUMLUSU: 10,
-        BAKU_FINANS: 5,
-        BAKU_KURYE: 25
-      };
-    }
+    const rolLimitleri = { ...PAKET_ROL_LIMITLERI[normalPaket] };
     const yeniFirma = {
       id: slug,
       ad,
@@ -8236,14 +8250,8 @@ router6.post("/firmalar/kayit", async (req, res) => {
       kayitTarihi: (/* @__PURE__ */ new Date()).toISOString(),
       menseiUlke,
       rolLimitleri,
-      aktifKullaniciSayilari: {
-        PATRON: 1,
-        // Sahib avtomatik ilk istifadəçidir
-        KANADA_SATINALMA: 0,
-        SATIS_SORUMLUSU: 0,
-        BAKU_FINANS: 0,
-        BAKU_KURYE: 0
-      }
+      // Sahib avtomatik ilk istifadəçidir
+      aktifKullaniciSayilari: ilkKullaniciSayilari()
     };
     const aktivasyonToken = tokenUret(32);
     const tokenGecerlilik = new Date(Date.now() + 24 * 60 * 60 * 1e3).toISOString();
@@ -8327,7 +8335,7 @@ router6.post("/firmalar/davet-olustur", async (req, res) => {
     if (!firma) {
       return res.status(404).json({ basarili: false, hata: "Butik tap\u0131lmad\u0131." });
     }
-    if (!["PATRON", "KANADA_SATINALMA", "SATIS_SORUMLUSU", "BAKU_FINANS", "BAKU_KURYE"].includes(rol)) {
+    if (!ekipRoluMu(rol)) {
       return res.status(400).json({ basarili: false, hata: "Etibars\u0131z komanda rolu." });
     }
     if (firma.onayDurumu && firma.onayDurumu !== "AKTIF")
@@ -8401,20 +8409,8 @@ router6.post("/firmalar", async (req, res) => {
       isDemo: false,
       onayDurumu: "AKTIF",
       paket: "PRO",
-      rolLimitleri: {
-        PATRON: 1,
-        KANADA_SATINALMA: 2,
-        SATIS_SORUMLUSU: 4,
-        BAKU_FINANS: 2,
-        BAKU_KURYE: 10
-      },
-      aktifKullaniciSayilari: {
-        PATRON: 1,
-        KANADA_SATINALMA: 0,
-        SATIS_SORUMLUSU: 0,
-        BAKU_FINANS: 0,
-        BAKU_KURYE: 0
-      }
+      rolLimitleri: { ...VARSAYILAN_ROL_LIMITLERI },
+      aktifKullaniciSayilari: ilkKullaniciSayilari()
     };
     if (supabase) {
       const { data, error: error2 } = await supabase.from("firmalar").insert({
@@ -8726,10 +8722,10 @@ async function deliverCourierTask(tenant2, userId, orderId, version2, recipient)
 
 // src/server/routes/kuryeler.ts
 var router7 = Router7();
-var owners = /* @__PURE__ */ new Set(["SUPER_ADMIN", "PATRON"]);
-var operators = /* @__PURE__ */ new Set([...owners, "KANADA_SATINALMA"]);
-function requireRole(req, roles2) {
-  if (!req.auth || !roles2.has(req.auth.role))
+var owners = new Set(ROL_GRUPLARI.OWNERS);
+var operators = new Set(ROL_GRUPLARI.SHIPPING);
+function requireRole(req, roles) {
+  if (!req.auth || !roles.has(req.auth.role))
     throw new PublicResourceError("Bu i\u015Flem i\xE7in yetkiniz yok.", 403);
   if (!req.tenantId || req.tenantId === "all")
     throw new PublicResourceError("Bir butik se\xE7ilmelidir.", 400);
@@ -10394,9 +10390,7 @@ function isPendingActivation(user, token) {
   return user.aktivasyon_token === token && user.durum === "BEKLEMEDE_SIFRE" && isUnexpired(user.token_gecerlilik);
 }
 function isAvailableInvite(invite, token) {
-  return invite.token === token && invite.kullanildiMi === false && ["PATRON", "KANADA_SATINALMA", "SATIS_SORUMLUSU", "BAKU_FINANS", "BAKU_KURYE"].includes(
-    invite.rol
-  ) && isUnexpired(invite.gecerlilikTarihi);
+  return invite.token === token && invite.kullanildiMi === false && ekipRoluMu(invite.rol) && isUnexpired(invite.gecerlilikTarihi);
 }
 async function findActivationUser(token) {
   if (!supabase) return kullanicilarVeritabani.find((user) => user.aktivasyon_token === token);

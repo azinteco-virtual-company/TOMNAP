@@ -8,10 +8,11 @@ import {
   courierTasks,
   deliverCourierTask,
 } from '../services/couriers';
+import { ROL_GRUPLARI } from '../../shared/roller';
 
 const router = Router();
-const owners = new Set(['SUPER_ADMIN', 'PATRON']);
-const operators = new Set([...owners, 'KANADA_SATINALMA']);
+const owners = new Set<string>(ROL_GRUPLARI.OWNERS);
+const operators = new Set<string>(ROL_GRUPLARI.SHIPPING);
 function requireRole(req: Request, roles: Set<string>) {
   if (!req.auth || !roles.has(req.auth.role))
     throw new PublicResourceError('Bu işlem için yetkiniz yok.', 403);

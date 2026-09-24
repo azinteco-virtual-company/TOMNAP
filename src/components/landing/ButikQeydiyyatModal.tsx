@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Sparkles, Building2, User, Phone, Mail, ArrowRight, Loader2 } from 'lucide-react';
 import { useDil } from '../../context/DilKonteksti';
 import { butikKaydet, type ButikKayitSonucu } from '../../lib/butikKayit';
+import { PAKET_ROL_LIMITLERI } from '../../shared/roller';
 
 interface ButikQeydiyyatModalProps {
   acik: boolean;
@@ -208,15 +209,19 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                 <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 pt-2 border-t border-slate-700/50">
                   <div>• 1 {isEn ? 'Owner' : 'Patron'}</div>
                   <div>
-                    • {kayitliButik?.rolLimitleri?.KANADA_SATINALMA || 2}{' '}
+                    •{' '}
+                    {kayitliButik?.rolLimitleri?.KANADA_SATINALMA ||
+                      PAKET_ROL_LIMITLERI.PRO.KANADA_SATINALMA}{' '}
                     {isEn ? 'Purchasing Agents' : 'Kanada Kargo'}
                   </div>
                   <div>
-                    • {kayitliButik?.rolLimitleri?.SATIS_SORUMLUSU || 2}{' '}
+                    •{' '}
+                    {kayitliButik?.rolLimitleri?.SATIS_SORUMLUSU ||
+                      PAKET_ROL_LIMITLERI.PRO.SATIS_SORUMLUSU}{' '}
                     {isEn ? 'Sales Reps' : 'Satış / AI Masası'}
                   </div>
                   <div>
-                    • {kayitliButik?.rolLimitleri?.BAKU_KURYE || 5}{' '}
+                    • {kayitliButik?.rolLimitleri?.BAKU_KURYE || PAKET_ROL_LIMITLERI.PRO.BAKU_KURYE}{' '}
                     {isEn ? 'Field Couriers' : 'Sahə Kuryesi'}
                   </div>
                 </div>

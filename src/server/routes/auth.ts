@@ -6,6 +6,7 @@ import { sifreHashle, sifreDogrula } from '../services/crypto';
 import { supabase } from '../services/supabase';
 import { DavetKaydi, KullaniciKaydi } from '../types';
 import { createSession, readSession, revokeSession } from '../services/sessions';
+import { ekipRoluMu } from '../../shared/roller';
 
 const router = Router();
 
@@ -25,9 +26,7 @@ function isAvailableInvite(invite: DavetKaydi, token: string): boolean {
   return (
     invite.token === token &&
     invite.kullanildiMi === false &&
-    ['PATRON', 'KANADA_SATINALMA', 'SATIS_SORUMLUSU', 'BAKU_FINANS', 'BAKU_KURYE'].includes(
-      invite.rol
-    ) &&
+    ekipRoluMu(invite.rol) &&
     isUnexpired(invite.gecerlilikTarihi)
   );
 }

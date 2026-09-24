@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { readSession, type AuthContext } from '../services/sessions';
 import { allowedOrigins } from './security';
+import { ROL_GRUPLARI } from '../../shared/roller';
 
 declare global {
   namespace Express {
@@ -13,15 +14,9 @@ declare global {
 }
 
 const READ = new Set(['GET', 'HEAD', 'OPTIONS']);
-const STAFF = ['SUPER_ADMIN', 'PATRON', 'KANADA_SATINALMA', 'SATIS_SORUMLUSU', 'BAKU_FINANS'];
-const OWNERS = ['SUPER_ADMIN', 'PATRON'];
-const SALES = [...OWNERS, 'SATIS_SORUMLUSU'];
-const PURCHASING = [...SALES, 'KANADA_SATINALMA'];
-const FINANCE = [...SALES, 'BAKU_FINANS'];
-const SHIPPING = [...OWNERS, 'KANADA_SATINALMA'];
-const ALL = [...STAFF, 'BAKU_KURYE'];
+const { STAFF, OWNERS, SALES, PURCHASING, FINANCE, SHIPPING, ALL } = ROL_GRUPLARI;
 
-type Rule = [string, RegExp, string[]];
+type Rule = [string, RegExp, readonly string[]];
 // Explicit method + complete path allowlist. New routes are denied until reviewed.
 const rules: Rule[] = [
   ['GET', /^\/api\/auth\/oturum$/, ALL],

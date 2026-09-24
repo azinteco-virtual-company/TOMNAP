@@ -15,6 +15,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { FirmaTenant } from '../types';
+import { VARSAYILAN_ROL_LIMITLERI } from '../shared/roller';
 
 interface TenantOnayMerkeziModalProps {
   acik: boolean;
@@ -267,28 +268,31 @@ export const TenantOnayMerkeziModal: React.FC<TenantOnayMerkeziModalProps> = ({
                     <span>
                       Patron:{' '}
                       <strong className="text-slate-200">
-                        {f.aktifKullaniciSayilari?.PATRON || 1} / {f.rolLimitleri?.PATRON || 1}
+                        {f.aktifKullaniciSayilari?.PATRON || 1} /{' '}
+                        {f.rolLimitleri?.PATRON || VARSAYILAN_ROL_LIMITLERI.PATRON}
                       </strong>
                     </span>
                     <span>
                       Kanada:{' '}
                       <strong className="text-slate-200">
                         {f.aktifKullaniciSayilari?.KANADA_SATINALMA || 0} /{' '}
-                        {f.rolLimitleri?.KANADA_SATINALMA || 2}
+                        {f.rolLimitleri?.KANADA_SATINALMA ||
+                          VARSAYILAN_ROL_LIMITLERI.KANADA_SATINALMA}
                       </strong>
                     </span>
                     <span>
                       Satış:{' '}
                       <strong className="text-slate-200">
                         {f.aktifKullaniciSayilari?.SATIS_SORUMLUSU || 0} /{' '}
-                        {f.rolLimitleri?.SATIS_SORUMLUSU || 4}
+                        {f.rolLimitleri?.SATIS_SORUMLUSU ||
+                          VARSAYILAN_ROL_LIMITLERI.SATIS_SORUMLUSU}
                       </strong>
                     </span>
                     <span>
                       Kurye:{' '}
                       <strong className="text-slate-200">
                         {f.aktifKullaniciSayilari?.BAKU_KURYE || 0} /{' '}
-                        {f.rolLimitleri?.BAKU_KURYE || 10}
+                        {f.rolLimitleri?.BAKU_KURYE || VARSAYILAN_ROL_LIMITLERI.BAKU_KURYE}
                       </strong>
                     </span>
                   </div>

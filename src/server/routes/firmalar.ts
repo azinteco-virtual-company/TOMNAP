@@ -18,6 +18,12 @@ import {
 import { registerBoutique, createInvite, OnboardingError } from '../services/onboarding';
 import { createEmailJob, tryDeliverOnboardingEmail } from '../services/onboardingOutbox';
 import { FirmaTenantItem, KullaniciKaydi } from '../types';
+import {
+  PAKET_ROL_LIMITLERI,
+  VARSAYILAN_ROL_LIMITLERI,
+  ekipRoluMu,
+  ilkKullaniciSayilari,
+} from '../../shared/roller';
 import { IS_PRODUCTION, RESEND_API_KEY } from '../config';
 
 const router = Router();
@@ -54,20 +60,8 @@ router.get('/firmalar', async (req, res) => {
           sahipEmail: d.sahip_email || '',
           sahipTelefon: d.sahip_telefon || '',
           menseiUlke: d.mensei_ulke || 'CA',
-          rolLimitleri: d.rol_limitleri || {
-            PATRON: 1,
-            KANADA_SATINALMA: 2,
-            SATIS_SORUMLUSU: 4,
-            BAKU_FINANS: 2,
-            BAKU_KURYE: 10,
-          },
-          aktifKullaniciSayilari: d.aktif_kullanici_sayilari || {
-            PATRON: 1,
-            KANADA_SATINALMA: 0,
-            SATIS_SORUMLUSU: 0,
-            BAKU_FINANS: 0,
-            BAKU_KURYE: 0,
-          },
+          rolLimitleri: d.rol_limitleri || { ...VARSAYILAN_ROL_LIMITLERI },
+          aktifKullaniciSayilari: d.aktif_kullanici_sayilari || ilkKullaniciSayilari(),
           kayitTarihi: d.kayit_tarihi || new Date().toISOString(),
         }));
         return res.json({
@@ -163,32 +157,8 @@ router.post('/firmalar/kayit', async (req, res) => {
     const normalPaket: 'BASLANGIC' | 'PRO' | 'ENTERPRISE' =
       upper === 'ENTERPRISE' ? 'ENTERPRISE' : upper === 'BASLANGIC' ? 'BASLANGIC' : 'PRO';
 
-    // Pakete görə rol limitləri (Solo Başlanğıc: 1-1-1-1-1, Pro: 1-2-4-2-10)
-    let rolLimitleri = {
-      PATRON: 1,
-      KANADA_SATINALMA: 1,
-      SATIS_SORUMLUSU: 1,
-      BAKU_FINANS: 1,
-      BAKU_KURYE: 1,
-    };
-
-    if (normalPaket === 'PRO') {
-      rolLimitleri = {
-        PATRON: 1,
-        KANADA_SATINALMA: 2,
-        SATIS_SORUMLUSU: 2,
-        BAKU_FINANS: 2,
-        BAKU_KURYE: 5,
-      };
-    } else if (normalPaket === 'ENTERPRISE') {
-      rolLimitleri = {
-        PATRON: 2,
-        KANADA_SATINALMA: 5,
-        SATIS_SORUMLUSU: 10,
-        BAKU_FINANS: 5,
-        BAKU_KURYE: 25,
-      };
-    }
+    // Pakete görə rol limitləri rol kataloqundan gəlir (src/shared/roller.ts).
+    const rolLimitleri = { ...PAKET_ROL_LIMITLERI[normalPaket] };
 
     const yeniFirma: FirmaTenantItem = {
       id: slug,
@@ -206,13 +176,8 @@ router.post('/firmalar/kayit', async (req, res) => {
       kayitTarihi: new Date().toISOString(),
       menseiUlke,
       rolLimitleri,
-      aktifKullaniciSayilari: {
-        PATRON: 1, // Sahib avtomatik ilk istifadəçidir
-        KANADA_SATINALMA: 0,
-        SATIS_SORUMLUSU: 0,
-        BAKU_FINANS: 0,
-        BAKU_KURYE: 0,
-      },
+      // Sahib avtomatik ilk istifadəçidir
+      aktifKullaniciSayilari: ilkKullaniciSayilari(),
     };
 
     // 1. Patron üçün İstifadəçi Qeydi və Şifrə Təyin Tokeni Yarat
@@ -325,9 +290,7 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
       return res.status(404).json({ basarili: false, hata: 'Butik tapılmadı.' });
     }
 
-    if (
-      !['PATRON', 'KANADA_SATINALMA', 'SATIS_SORUMLUSU', 'BAKU_FINANS', 'BAKU_KURYE'].includes(rol)
-    ) {
+    if (!ekipRoluMu(rol)) {
       return res.status(400).json({ basarili: false, hata: 'Etibarsız komanda rolu.' });
     }
 
@@ -444,20 +407,8 @@ router.post('/firmalar', async (req, res) => {
       isDemo: false,
       onayDurumu: 'AKTIF',
       paket: 'PRO',
-      rolLimitleri: {
-        PATRON: 1,
-        KANADA_SATINALMA: 2,
-        SATIS_SORUMLUSU: 4,
-        BAKU_FINANS: 2,
-        BAKU_KURYE: 10,
-      },
-      aktifKullaniciSayilari: {
-        PATRON: 1,
-        KANADA_SATINALMA: 0,
-        SATIS_SORUMLUSU: 0,
-        BAKU_FINANS: 0,
-        BAKU_KURYE: 0,
-      },
+      rolLimitleri: { ...VARSAYILAN_ROL_LIMITLERI },
+      aktifKullaniciSayilari: ilkKullaniciSayilari(),
     };
 
     if (supabase) {

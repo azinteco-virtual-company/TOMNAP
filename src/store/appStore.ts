@@ -1,6 +1,7 @@
 import { loadCompleteList, newestFirst } from '../lib/completeList';
 import { create } from 'zustand';
 import { Siparis, KullaniciRolu, FirmaTenant } from '../types';
+import { gecerliRolMu } from '../shared/roller';
 import {
   apiFetch,
   ApiError,
@@ -82,19 +83,11 @@ let restoration: Promise<void> | undefined;
 let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 
 function acceptSession(data: SessionPayload) {
-  const roles: KullaniciRolu[] = [
-    'SUPER_ADMIN',
-    'PATRON',
-    'KANADA_SATINALMA',
-    'SATIS_SORUMLUSU',
-    'BAKU_FINANS',
-    'BAKU_KURYE',
-  ];
   if (
     !data.basarili ||
     !data.kullanici?.id ||
     !data.kullanici.tenantId ||
-    !roles.includes(data.kullanici.rol) ||
+    !gecerliRolMu(data.kullanici.rol) ||
     !data.csrfToken ||
     !(Date.parse(data.expiresAt) > Date.now())
   )
