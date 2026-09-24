@@ -241,6 +241,22 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     (`kalan_toplam_borc`) müşteri listesinin parçası ve müşteriler testinde
     kapsanıyor.
 
+26. **Yerelde ara sıra düşen testlerin kök nedeni: port çakışması (varsayım).**
+    - **Belirti:** macOS'ta tam koşuda ara sıra bir istek boş gövdeli `404 text/html`
+      alıyordu (AWB onayı, `listPagination`, v2 kapısı). Tek başına koşunca geçiyordu.
+    - **Kök neden:** Supertest sunucusu `listen(0)` ile her adrese bağlanıyor. macOS bu
+      portu seçerken başka bir sürecin yalnız 127.0.0.1'de tuttuğu portu hesaba katmıyor.
+      Test 127.0.0.1:P'ye bağlanınca istek o sürece gidiyor. Olay anında `lsof`, portları
+      yerel bir IDE sürecinin tuttuğunu gösterdi. İzlenen 24.373 yanıttan 2'si testin
+      kendi sürecinden gelmedi. 20.000 `listen(0)`'dan 5'i böyle bir porta düştü; düzeltmeyle 0.
+    - **Düzeltme (yalnız testler, yalnız macOS):** `tests/setup.ts` porta bakmadan dinleyen
+      sunucuları `tests/helpers/loopbackPort.ts`'ten geçiriyor. Port 127.0.0.1'de başka bir
+      soket tarafından tutuluyorsa sunucu aynı anda başka porta taşınıyor. Zaman aşımı
+      değişmedi, uygulama kodu değişmedi. Linux bu çakışan bağlanmayı zaten reddediyor
+      (testi var); CI etkilenmiyordu.
+    - **Bilinen risk:** Yardımcı Node'un iç `_listen2` ve `_handle` alanlarını kullanıyor
+      (Node 22'de doğrulandı). Node bunları değiştirirse regresyon testi macOS'ta düşer.
+
 ## Faz A
 
 19. **AI ayrıştırmada müşteri eşleştirme (A1, varsayım).** Gemini'ye müşteri listesi
