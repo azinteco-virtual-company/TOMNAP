@@ -10766,9 +10766,9 @@ router10.post("/auth/cikis", async (req, res) => {
 var auth_default = router10;
 
 // src/server/index.ts
-function createApp() {
+function createApp({ trustProxy = false } = {}) {
   const app2 = express();
-  app2.set("trust proxy", 1);
+  app2.set("trust proxy", trustProxy);
   app2.use(
     helmet({
       contentSecurityPolicy: false,
@@ -10827,7 +10827,7 @@ function createApp() {
 }
 
 // src/server/vercel.ts
-var app = createApp();
+var app = createApp({ trustProxy: 1 });
 function handler(req, res) {
   try {
     const originalUrl = req.url || "";
