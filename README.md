@@ -37,14 +37,14 @@
 
 ## 🛠️ Teknoloji Yığını
 
-| Katman               | Teknolojiler                                                                                    |
-| -------------------- | ----------------------------------------------------------------------------------------------- |
-| **Frontend**         | React 19, TypeScript, React Router v7, Zustand, Tailwind CSS v4, Lucide Icons, Recharts, Motion |
-| **Backend**          | Node.js 22, Express, TypeScript, Helmet, Express-Rate-Limit                                     |
-| **Yapay Zeka**       | Google Gemini 2.5 Flash (`@google/genai`)                                                       |
-| **Veritabanı**       | Supabase (PostgreSQL/özel Storage); yerel geliştirme belleği/dosyaları                          |
-| **Test & Kalite**    | Vitest, Supertest, Playwright/Chromium, Prettier, TypeScript (strict henüz kapalı)              |
-| **DevOps & Dağıtım** | Docker (Multi-stage build), Docker Compose, GitHub Actions CI/CD                                |
+| Katman               | Teknolojiler                                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Frontend**         | React 19, TypeScript, React Router v7, Zustand, Tailwind CSS v4, Lucide Icons, Recharts, Motion                 |
+| **Backend**          | Node.js 22, Express, TypeScript, Helmet, Express-Rate-Limit                                                     |
+| **Yapay Zeka**       | Google Gemini 2.5 Flash (`@google/genai`)                                                                       |
+| **Veritabanı**       | Supabase (PostgreSQL/özel Storage); yerel geliştirme belleği/dosyaları                                          |
+| **Test & Kalite**    | Vitest, Supertest, Playwright/Chromium, Prettier, TypeScript (strict henüz kapalı)                              |
+| **DevOps & Dağıtım** | Vercel (statik istemci + Express serverless), GitHub Actions CI/CD; Docker yalnız yerel deneme (desteklenmiyor) |
 
 ---
 
@@ -76,8 +76,8 @@ TOMNAP/
 ├── tests/                     # Vitest birim ve entegrasyon testleri
 │   ├── client/                # Frontend Zustand testleri
 │   └── server/                # Middleware, servis, rota ve logger testleri
-├── Dockerfile                 # Multi-stage production container
-├── docker-compose.yml         # Konteyner orkestrasyonu
+├── Dockerfile                 # Yalnız yerel deneme konteyneri (desteklenmiyor)
+├── docker-compose.yml         # Yalnız yerel deneme (desteklenmiyor, üretim yolu değil)
 ├── server.ts                  # Geriye uyumlu sunucu başlatıcı
 └── package.json
 ```
@@ -164,26 +164,16 @@ npm run format
 
 ---
 
-## 🐳 Docker ile Dağıtım
+## 🚀 Dağıtım
 
-### Docker Compose ile Tek Komutta Çalıştırma:
+Üretim dağıtım yolu **Vercel**'dir: istemci statik olarak, Express API ise
+`api/index.js` serverless paketi olarak yayınlanır. `main` dalına push otomatik
+production deploy'u tetiklemez (`vercel.json` → `git.deploymentEnabled.main: false`).
 
-```bash
-docker-compose up -d --build
-```
+### Docker (desteklenmiyor)
 
-Konteyner otomatik olarak:
-
-1. Multi-stage build ile frontend ve backend'i derler.
-2. Sağlık kontrolünü (`/api/sistem-durum`) 30 saniyede bir icra eder.
-3. Güvenlik gereği izole `node` kullanıcısı ile çalışır.
-4. `3000` portundan servise açılır.
-
-Logları izlemek için:
-
-```bash
-docker-compose logs -f
-```
+`Dockerfile` ve `docker-compose.yml` yalnızca yerel deneme içindir; bakımı
+yapılmaz ve üretimde kullanılmamalıdır.
 
 ---
 
