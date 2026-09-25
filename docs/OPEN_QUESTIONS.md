@@ -18,9 +18,10 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
    fonksiyonun EXECUTE yetkisini tüm API rollerinden (`service_role` dahil) geri
    alır. Fonksiyon katalogda kalır ve onaylar kapalı hale gelir. Yeniden
    etkinleştirmek için ileri migration tekrar çalıştırılır (`CREATE OR REPLACE`
-   + `GRANT`).
-   *Soru:* Sadece bu işte oluşturulan yeni nesneler için `DROP FUNCTION`'a izin
-   var mı, yoksa REVOKE tabanlı geri alma yeterli mi?
+   - `GRANT`).
+     _Soru:_ Sadece bu işte oluşturulan yeni nesneler için `DROP FUNCTION`'a izin
+     var mı, yoksa REVOKE tabanlı geri alma yeterli mi?
+
 2. ✅ **Karar verildi (23 Eylül 2026):** Yalnız eklemeye açık `awb_match_approvals`
    tablosu eklendi (`20260923164650_awb_match_approvals.sql`). Kayıt, AWB'yi yazan
    `tomnap_approve_awb_matches` ile aynı transaction'da oluşur. Uygulama notları:
@@ -44,12 +45,13 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
    **Köken kaydı yok. Kod yok.** Kimin hangi manifest satırını hangi siparişe
    onayladığı ayrıca saklanmıyor; yalnız siparişin AWB'si ve `ek_veriler`
    güncelleniyor.
-   *Soru:* Yeni bir `awb_eslestirme_kayitlari` tablosu (RLS FORCE, yalnız
+   _Soru:_ Yeni bir `awb_eslestirme_kayitlari` tablosu (RLS FORCE, yalnız
    `service_role`) eklensin mi? İleride aynı soruya (bu AWB nasıl yazıldı?)
    kesin cevap verebilmenin tek yolu bu.
-3. **AWB tekilliği tenant içinde.** Aynı AWB başka bir butikte kayıtlıysa bu
+
+3. ✅ **Onaylandı (25 Eylül 2026): şimdiki davranış kalıyor.** **AWB tekilliği tenant içinde.** Aynı AWB başka bir butikte kayıtlıysa bu
    onayı engellemiyor. Engellemek, bir butiğe başka butiğin verisini sızdırırdı.
-   *Soru:* Bu sınır doğru mu?
+   _Soru:_ Bu sınır doğru mu?
 
 ## Eşleştirme kuralları
 
@@ -68,32 +70,34 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
    ı, ö, ü, Kiril). Bu yüzden ASCII yazılmış bir manifest adı düşük puan alıyor:
    `Konul Isag` ~ `Könül İsaq` = 0,455, eşiğin (0,5) altında, yani aday
    gösterilmiyor. Güçlü eşleşme (telefon/kod) bundan etkilenmiyor.
-   *Soru:* Manifestlerde adlar ASCII mi geliyor? Öyleyse, normalizasyonu
+   _Soru:_ Manifestlerde adlar ASCII mi geliyor? Öyleyse, normalizasyonu
    değiştirmeden yalnız zayıf aday puanı için ayrı bir transliterasyon
    karşılaştırması eklensin mi?
+
 5. ✅ **Karar verildi (23 Eylül 2026):** Eşik 0,5 olarak kalıyor.
 
    **Zayıf aday eşiği 0,5 ve satır başına 5 aday.** Aynı ad farklı soyadı
    (`Aynur Mammadova` ~ `Aynur Həsənova` = 0,58) zayıf aday olarak görünür ama
    asla önceden seçilmez.
-   *Soru:* Eşik uygun mu?
+   _Soru:_ Eşik uygun mu?
+
 6. **Telefon normalizasyonu Azerbaycan numaralarını varsayıyor.** `0XX…`
    (10 hane) ve 9 haneli numaralar `994…` biçimine tamamlanır. Diğer ülkeler tam
    hane dizisiyle karşılaştırılır. İçinde metin olan değerler (ör. `Tel: 055…`)
    güçlü kanıt sayılmaz.
-   *Soru:* Başka ülke formatları gerekiyor mu?
-7. **"Mevcut sipariş kodu"** şöyle yorumlandı: manifestin Reference/Ref/Order No
+   _Soru:_ Başka ülke formatları gerekiyor mu?
+7. ✅ **Onaylandı (25 Eylül 2026): şimdiki davranış kalıyor.** **"Mevcut sipariş kodu"** şöyle yorumlandı: manifestin Reference/Ref/Order No
    sütununun sipariş kimliği veya `kanada_takip_kodu` ile büyük/küçük harf
    duyarsız tam eşleşmesi (en az 4 karakter). `kanada_takip_kodu` rastgele 4
    haneli olduğu için çakışabilir; çakışırsa satır `BELIRSIZ` olur.
-   *Soru:* Kullanılması gereken başka bir kod (fatura no vb.) var mı?
-8. **Çakışma listesi yalnız güçlü kanıtla dolar.** Teslim edilmiş ya da AWB'si olan
+   _Soru:_ Kullanılması gereken başka bir kod (fatura no vb.) var mı?
+8. ✅ **Onaylandı (25 Eylül 2026): şimdiki davranış kalıyor.** **Çakışma listesi yalnız güçlü kanıtla dolar.** Teslim edilmiş ya da AWB'si olan
    bir sipariş sadece isim benzerliğiyle eşleşiyorsa gürültü yaratmamak için hiç
    gösterilmez.
-   *Soru:* Bu siparişler de görünsün mü?
-9. **Onay hep-ya-hiç.** Seçilen çiftlerden biri reddedilirse hiçbiri yazılmaz;
+   _Soru:_ Bu siparişler de görünsün mü?
+9. ✅ **Onaylandı (25 Eylül 2026): şimdiki davranış kalıyor.** **Onay hep-ya-hiç.** Seçilen çiftlerden biri reddedilirse hiçbiri yazılmaz;
    yanıt 200 döner, `basarili: false` ve ret sebepleri listelenir.
-   *Soru:* Geçerli olanların uygulanıp yalnız reddedilenlerin bildirildiği kısmi
+   _Soru:_ Geçerli olanların uygulanıp yalnız reddedilenlerin bildirildiği kısmi
    onay mı tercih edilir?
 
 ## Yayın ve arayüz
@@ -106,8 +110,11 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     **Flag kapalıyken** manifest yükleme yalnız ayrıştırır. Manifestten AWB
     bağlamak flag açılana kadar mümkün değil; tek tek sipariş düzenleme hâlâ
     çalışıyor.
-    *Soru:* Deploy sonrası `FF_V2_FLOW` ve `VITE_FF_V2_FLOW` hemen açılacak mı?
-11. **Manifest ayrıştırıcısında gözlenen iki hata. Kod yok, kapsam dışı.**
+    ✅ **Karar (25 Eylül 2026):** `FF_V2_FLOW` ve `VITE_FF_V2_FLOW` yayında önce **yalnız Preview**
+    ortamında açılır. Production için karar proje sahibinin; o zamana kadar Production'da
+    boş kalırlar ([DEPLOY_1.md](DEPLOY_1.md) (c) ve (d2)).
+
+11. **Karar (25 Eylül 2026): yayından sonra, durak 4 işiyle birlikte düzeltilecek.** **Manifest ayrıştırıcısında gözlenen iki hata. Kod yok, kapsam dışı.**
     - Başlık tespiti `includes` kullanıyor; `ad` anahtar kelimesi `address`
       başlığıyla da eşleşir. `Address` sütunu `Consignee`'den önce gelirse alıcı
       adı yerine adres okunabilir.
@@ -117,7 +124,8 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
 
     İnsan onayı sayesinde bu hatalar artık otomatik yazmaya dönüşmüyor ama
     öneri kalitesini düşürüyorlar.
-    *Soru:* Ayrı bir görev olarak düzeltilsin mi?
+    _Soru:_ Ayrı bir görev olarak düzeltilsin mi?
+
 12. ✅ **Karar verildi (24 Eylül 2026):** Ortam izolasyonu testi
     `tests/server/environmentIsolation.test.ts` adını aldı; içeriği değişmedi.
     Tenant izolasyonu ortak yardımcı `tests/server/helpers/tenantIsolation.ts` ile
@@ -126,11 +134,11 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     Kritik beş rota grubu `tests/server/tenantIsolation.test.ts` dosyasında;
     `awbMatchIsolation.test.ts` de aynı yardımcıyı kullanıyor. Faz A–D'deki
     izolasyon testleri bu yardımcıyı kullanacak.
-13. **`@types/react` projede yok.** React 19 kendi tiplerini taşımadığı için JSX
+13. **Bekliyor (25 Eylül 2026).** **`@types/react` projede yok.** React 19 kendi tiplerini taşımadığı için JSX
     strict modda denetlenemiyor. Yeni bileşenler strict kontrolden yalnız bu
     ortam uyarılarıyla (TS7026/TS7016) geçiyor; mevcut bileşenlerde de aynı durum
     var.
-    *Soru:* `@types/react` ve `@types/react-dom` devDependency olarak eklensin
+    _Soru:_ `@types/react` ve `@types/react-dom` devDependency olarak eklensin
     mi? (Mevcut bileşenlerde yeni tip hataları ortaya çıkabilir.)
 
     **Ölçüm (24 Eylül 2026):** Kurulu React 19.3.0 için `@types/react` ve
@@ -139,15 +147,15 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
 
     Dosya bazında:
 
-    | Dosya | Hata |
-    | --- | --- |
-    | `src/components/OnayBekleyenlerSayfasi.tsx` | 14 |
-    | `src/components/SiparisTablosu.tsx` | 7 |
-    | `src/components/KargoManifestoSayfasi.tsx` | 6 |
-    | `src/components/UrunGorselleriGalerisi.tsx` | 5 |
-    | `src/components/SiparisDetayModal.tsx` | 5 |
-    | `src/components/UstBaslik.tsx` | 1 |
-    | `src/components/GorselAramaLensModal.tsx` | 1 |
+    | Dosya                                       | Hata |
+    | ------------------------------------------- | ---- |
+    | `src/components/OnayBekleyenlerSayfasi.tsx` | 14   |
+    | `src/components/SiparisTablosu.tsx`         | 7    |
+    | `src/components/KargoManifestoSayfasi.tsx`  | 6    |
+    | `src/components/UrunGorselleriGalerisi.tsx` | 5    |
+    | `src/components/SiparisDetayModal.tsx`      | 5    |
+    | `src/components/UstBaslik.tsx`              | 1    |
+    | `src/components/GorselAramaLensModal.tsx`   | 1    |
 
     Türler: TS2339 32, TS2551 3, TS2353 2, TS2367 1, TS2322 1.
 
@@ -179,9 +187,9 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
 
     Kesin karşılaştırma için orijinal manifest dosyaları `--manifest` ile
     verilmeli.
-    *Soru:* Geçmiş manifest dosyaları elinizde mi?
+    _Soru:_ Geçmiş manifest dosyaları elinizde mi?
 
-15. **İlk gerçek butik manifest özelliğini kullanmadan önce cevaplanacak.**
+15. **Bekliyor (25 Eylül 2026).** **İlk gerçek butik manifest özelliğini kullanmadan önce cevaplanacak.**
     ✅ **Karar verildi (23 Eylül 2026):** Denetimde telefon isimden önce gelir.
     Manifest satırında ve siparişte okunabilir telefon varsa ikisi de normalize
     edilip karşılaştırılır. Numaralar farklıysa, ad aynı ya da katlanmış yazımı
@@ -190,12 +198,12 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     7 haneyi kabul ediyordu; bu hatalar da bu bulguyla görünür olur. Bir tarafta
     telefon yoksa ya da telefon metin içeriyorsa ("yoxdur") karşılaştırma yapılmaz.
     Yabancı numaralar ülke koduyla olduğu gibi karşılaştırılır (bkz. 6).
-    *Varsayım:* Aramex manifestindeki telefon alıcının kendi telefonudur.
-    *Soru:* Manifestlerde butiğin ya da aracının ortak telefonu yazıyorsa her
+    _Varsayım:_ Aramex manifestindeki telefon alıcının kendi telefonudur.
+    _Soru:_ Manifestlerde butiğin ya da aracının ortak telefonu yazıyorsa her
     satır YÜKSEK çıkar. İlk çalıştırmada aynı telefonun çok sayıda farklı alıcıda
     tekrar edip etmediğine bakılmalı. Böyle bir durum var mı?
 
-16. **Karar: ertelendi (23 Eylül 2026).** Veritabanında yalnız demo veri var; tekrar eden
+16. **Bekliyor (25 Eylül 2026); karar: ertelendi (23 Eylül 2026).** Veritabanında yalnız demo veri var; tekrar eden
     müşteri ayrımı gerçek veri gelirse yeniden değerlendirilecek.
 
     **Adaş (`BELIRSIZ_ADAS`) kuralı ve "aynı dönem".** Varsayımlar:
@@ -220,7 +228,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **Önem ve liste sınırı:** Önem ORTA; bu bir belirsizlik, kanıt değil. Bulgu
       başına en çok 20 adaş listelenir; `adasSayisi` hepsini sayar.
 
-    *Soru:* Varsayılan pencere sınırsız mı kalsın, yoksa bir gün sayısı mı
+    _Soru:_ Varsayılan pencere sınırsız mı kalsın, yoksa bir gün sayısı mı
     olsun (ör. 60)? Aynı telefonlu adaşlar, yani tekrar eden müşteriler, ayrı
     bir türe ya da daha düşük öneme ayrılsın mı?
 
@@ -241,7 +249,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     (`kalan_toplam_borc`) müşteri listesinin parçası ve müşteriler testinde
     kapsanıyor.
 
-26. ✅ **Onaylandı (25 Eylül 2026):** **Yerelde ara sıra düşen testlerin kök nedeni: port çakışması.**
+19. ✅ **Onaylandı (25 Eylül 2026):** **Yerelde ara sıra düşen testlerin kök nedeni: port çakışması.**
     - **Belirti:** macOS'ta tam koşuda ara sıra bir istek boş gövdeli `404 text/html`
       alıyordu (AWB onayı, `listPagination`, v2 kapısı). Tek başına koşunca geçiyordu.
     - **Kök neden:** Supertest sunucusu `listen(0)` ile her adrese bağlanıyor. macOS bu
@@ -259,7 +267,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
 
 ## Faz A
 
-19. **AI ayrıştırmada müşteri eşleştirme (A1, varsayım).** Gemini'ye müşteri listesi
+19. ✅ **Onaylandı (25 Eylül 2026): şimdiki davranış kalıyor.** **AI ayrıştırmada müşteri eşleştirme (A1).** Gemini'ye müşteri listesi
     gitmiyor; eşleştirme ayrıştırmadan sonra sunucuda yapılıyor:
     - **Telefon:** Tenant'ta normalize telefonu **tek** bir müşteriyle tam eşleşirse sipariş o
       müşteriye bağlanır. Ad kayıtlı ada düzeltilir ve eksik adres ile şehir karttan dolar;
@@ -267,16 +275,17 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **Ad:** Benzerlik yalnız `musteri_adaylari` olarak döner, hiçbir zaman otomatik
       bağlanmaz. Ad adayı varsa yeni müşteri kartı da açılmaz; sipariş bağsız kalır.
     - **Arayüz:** Adaylar arasından seçim yapılan arayüz henüz yok; A9'da eklenecek.
-    *Soru:* Ad adayı varken de yeni kart açılması mı tercih edilir?
+      _Soru:_ Ad adayı varken de yeni kart açılması mı tercih edilir?
 
-20. **Tahsilatın azaltılması (A3, varsayım).** Kaydedilmiş `alinan_tutar` yalnız
+20. ✅ **Karar (25 Eylül 2026):** **Tahsilatın azaltılması (A3).** Kaydedilmiş `alinan_tutar` yalnız
     **PATRON** tarafından azaltılabilir. `SUPER_ADMIN` dahil diğer roller 403 alır.
     - **Gerekçe:** Patron 5-500 karakterlik bir gerekçe vermek zorunda. Değişiklik
       siparişin `islem_gecmisi`'ne `TAHSILAT_AZALTILDI` olarak yazılır.
     - **Arayüz:** Tablodaki "BEKLIYOR" seçimi diğer rollere kapalı; patronda gerekçe
       tarayıcı istemiyle soruluyor. Ödeme defteri (A10) gelince düzeltme ters kayıtla
       yapılacak (K16).
-    *Soru:* SUPER_ADMIN'in de düzeltebilmesi gerekir mi?
+      **Karar:** SUPER_ADMIN tahsilatı azaltamaz, yalnız PATRON. Gerekçe 24 ve 28 ile aynı:
+      platform yöneticisi ekip üyesi değil. Şimdiki davranış zaten bu.
 
 21. ✅ **Onaylandı (24 Eylül 2026):** **Rol kataloğunun SQL karşılığı (A4).** `tomnap_gecerli_rol(text)` yalnız
     davetle verilebilen ekip rolleri için `true` döner; `SUPER_ADMIN` platform rolü
@@ -367,7 +376,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       Mevcut sipariş tablosunda v2 siparişler "v2" rozetiyle ayrılır; rozet bayraktan
       bağımsızdır, çünkü v2 sipariş ancak bayrak açıkken oluşabilir.
 
-27. **Yedek geri yüklemede sonradan eklenen sunucu kolonları (varsayım).**
+26. ✅ **Onaylandı (25 Eylül 2026):** **Yedek geri yüklemede sonradan eklenen sunucu kolonları.**
     - **Hata:** Veritabanı modunda dışa aktarılan yedek kurye kolonlarını
       (`kurye_atama_surumu`, `kurye_teslim_kullanici_id`, `kurye_teslim_alan`) da
       taşıyordu; geri yükleme bunları "desteklenmeyen alan" sayıp reddediyordu. Bellek
@@ -383,9 +392,12 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       gidiş-dönüş testi yeni kolonun geri yazılmasını ya da gerekçeyle dışarıda
       bırakılmasını istiyor.
 
-28. **Ödeme defteri (A10, varsayım).**
-    - **Kim yazar:** PATRON, SUPER_ADMIN (tenant iş verisinde PATRON gibi) ve BAKU_FINANS
-      (`FINANCE` grubu). SATIS_SORUMLUSU yalnız kaynağı `BUTIK` olan tahsilatı yazar ve
+27. ✅ **Karar (25 Eylül 2026):** **Ödeme defteri (A10).** SUPER_ADMIN kısmı değişti (aşağıda).
+    - **Kim yazar:** PATRON ve BAKU_FINANS (`PAYMENT_WRITE` grubu). **SUPER_ADMIN yazamaz**
+      (karar 25 Eylül 2026): defterde parayı alan kaydı yapandır. SUPER_ADMIN kayıt yapsaydı butiğin
+      parasını platform yöneticisi almış görünürdü, oysa SUPER_ADMIN ekip üyesi değil (24).
+      SUPER_ADMIN defteri okur; ödeme kaydı ve ters kayıt RPC'de (`20260925140000`), sunucuda
+      ve arayüzde kapalı. SATIS_SORUMLUSU yalnız kaynağı `BUTIK` olan tahsilatı yazar ve
       yalnız kendi yazdığı butik tahsilatını ters kayıtla düzeltir. Parayı alan
       (`alan_kullanici_id`) her zaman kaydı yapan kişidir; başkası adına kayıt yok.
     - **Kaynak:** Bu uç yalnız `BUTIK` ve `ONLINE` yazar. `TESLIMAT` kurye akışından gelir
@@ -404,17 +416,20 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       kapalıyken ödeme yazılamadığı için mevcut akışlarda bir şey değişmiyor. Down dosyası
       ödeme varken çalışmayı reddediyor.
     - **Okuma ve ekran:** Defteri STAFF okuyabilir (sipariş listesindeki `alinan_tutar` ile
-      aynı görünürlük). "Kassa" sekmesi yalnız `FINANCE` rollerine açık.
+      aynı görünürlük). "Kassa" sekmesi `FINANCE` rollerine açık; SUPER_ADMIN orada yalnız
+      okur (ödeme formu ve ters kayıt düğmesi görünmez).
 
-29. **Kurye nakdi ve kasa teslimi (A11, varsayım).**
+28. ✅ **Onaylandı (25 Eylül 2026):** **Kurye nakdi ve kasa teslimi (A11).** Tam tutarlı teslim, kolon adı
+    ve `demo_sandbox` 503 onaylandı; SUPER_ADMIN kısmı değişti.
     - **Kurye tahsilatı:** Yalnız `BAKU_KURYE`, yalnız aktif kurye kaydına bağlı olduğu ve
       kendisine atanmış bir v2 siparişte, sipariş teslimattayken (`BAKU_DAGITIM_ARKADAS`)
       ya da kendisi teslim ettiyse (`TESLIM_EDILDI`) yazar. Yöntem yalnız `NAKIT`, tutar en
       çok kalan tutar (kurye fazla tahsilat yazamaz). Parayı alan ve kaydı yapan kuryedir.
-    - **Kasa teslimi:** Kasa (PATRON, BAKU_FINANS; SUPER_ADMIN PATRON gibi, yeni `KASA`
-      grubu) bir kuryenin açık nakit tahsilatlarından seçtiklerini teslim alır. Tutar,
+    - **Kasa teslimi:** Kasa (PATRON, BAKU_FINANS; `KASA_WRITE` grubu) bir kuryenin açık nakit tahsilatlarından seçtiklerini teslim alır. Tutar,
       seçilenlerin toplamına eşit olmalı; böylece teslim hiçbir zaman bakiyeyi aşmaz. Kısmi
       tutar (ör. eksik para) desteklenmiyor; eksik için PATRON ters kayıt yazar.
+    - **SUPER_ADMIN (karar 25 Eylül 2026):** Kurye bakiyelerini ve kaçaklar panosunu okur (`KASA`
+      grubu); kasa teslimi alamaz, kurye nakdi yazamaz.
     - **Tablo adı:** Spec `kurye_id` diyordu. Zimmet kullanıcıya yazıldığı için kolon
       `kurye_kullanici_id` (kullanıcı kimliği) oldu.
     - **Defterde tek değişiklik:** `odemeler` append-only kalıyor. Tek istisna: açık bir
@@ -428,7 +443,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **Demo alanı:** `demo_sandbox` Supabase'e bağlıyken kurye kayıtları veritabanında,
       siparişleri bellekte olduğu için kurye nakdi orada çalışmıyor (503).
 
-30. **Kaçaklar panosu v0: Q4 ve Q5 (A12, varsayım).**
+29. ✅ **Onaylandı (25 Eylül 2026):** **Kaçaklar panosu v0: Q4 ve Q5 (A12).**
     - **Q4:** Faz A'da ürün birimi olmadığı için "bütün birimler teslim edildi" yerine
       siparişin `lojistik_durumu = TESLIM_EDILDI` kullanılıyor; "ödenmedi" = `kalan_tutar > 0`
       (v2'de defterden türetilir). Yaş teslim tarihinden sayılıyor; tarih yoksa son
@@ -441,7 +456,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **Kim görür:** PATRON, SUPER_ADMIN, BAKU_FINANS (`KASA` grubu; rol matrisinde Q4 ve
       Q5'i görenler). Diğer sorgular (Q1–Q3, Q6–Q8) Faz B–D'de.
 
-31. **v2 sipariş girişinde ekran görüntüsünden öneri (A9b, seçim).**
+30. ✅ **Onaylandı (25 Eylül 2026):** **v2 sipariş girişinde ekran görüntüsünden öneri (A9b).**
     - **Seçim: istemcide küçültme, imzalı URL değil.** Görsel tarayıcıda en çok 1600 px uzun
       kenara ve ~0,8 MB JPEG'e küçültülüyor; en çok 3 görsel, base64 ile toplam ~3,2 MB. Bu,
       Vercel'in 4,5 MB gövde sınırının altında kalıyor. Sunucu her görseli ayrıca sınırlıyor
@@ -453,3 +468,16 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       "Görsel & WhatsApp" akışından farklı olarak); test bunu yükleme klasörüyle doğruluyor.
     - **A1 kuralı:** AI'a yalnız mesaj ve görseller gidiyor; müşteri eşleştirmesi yine
       sunucuda. Öneri hiçbir şey yazmıyor; kayıt formun onayıyla oluyor.
+
+31. **SUPER_ADMIN'in para yazma yetkisinin kapsamı (varsayım).**
+    - **Kapsam:** Karar v2 defterine uygulandı: ödeme kaydı, ters kayıt, kasa teslimi.
+      Kurye nakdini zaten yalnız `BAKU_KURYE` yazabiliyordu. Kurlar ve ayarlar aynı kaldı.
+    - **Nasıl:** Rol kataloğuna iki yazma grubu eklendi, ikisinde de SUPER_ADMIN yok:
+      `PAYMENT_WRITE` (PATRON, SATIS_SORUMLUSU, BAKU_FINANS) ve `KASA_WRITE` (PATRON,
+      BAKU_FINANS). Okuma grupları (`STAFF`, `FINANCE`, `KASA`) aynı kaldı.
+    - **RPC:** Yazanın butiğin kendi kullanıcısı olması gerekiyor. Daha önce SUPER_ADMIN
+      her butikte yazabiliyordu; bu artık hiçbir butikte, kendi kayıtlı olduğu butikte bile
+      mümkün değil.
+    - **v1 dokunulmadı:** v1 siparişte `alinan_tutar`'ı artırmak (genel `PATCH`) SUPER_ADMIN
+      için açık kalıyor. v1'de "parayı alan" alanı yok, karar defter gerekçesine dayanıyor.
+      Azaltma zaten yalnız PATRON'da (20). v1'de de kapatılması istenirse ayrı küçük bir iş.
