@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../../lib/apiClient';
+import { useAppStore } from '../../store/appStore';
+import { rolGrubunda } from '../../shared/roller';
 import OdemeDefteri from './OdemeDefteri';
+import KuryeBakiyeleri from './KuryeBakiyeleri';
 import { azn } from './odemeFormu';
 
 interface KasaSiparisi {
@@ -19,10 +22,14 @@ const FINANS_ADI: Record<string, string> = {
 };
 
 /**
- * Kasa (A10): v2 siparişleri ve seçilenin ödeme defteri. Kurye nakdi ve kasa
- * teslimi A11'de buraya eklenir.
+ * Kasa (A10, A11): v2 siparişleri ve seçilenin ödeme defteri; KASA rollerine kurye
+ * bakiyeleri ve kasa teslimi.
  */
 export default function V2Kasa() {
+  const kasa = rolGrubunda(
+    useAppStore((state) => state.aktifRol),
+    'KASA'
+  );
   const [siparisler, setSiparisler] = useState<KasaSiparisi[] | null>(null);
   const [secili, setSecili] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
@@ -91,6 +98,7 @@ export default function V2Kasa() {
           </tbody>
         </table>
       )}
+      {kasa && <KuryeBakiyeleri />}
       {secili && (
         // A new order starts with a fresh form and closed reversal inputs.
         <React.Fragment key={secili}>
