@@ -109,20 +109,20 @@ describe('role catalog is the single source of roles (A4)', () => {
       [...ROL_GRUPLARI.SALES].sort(),
       [...ROL_GRUPLARI.ORDER_OWNERS].sort(),
     ]);
-    // Payment ledger (A10): both RPCs accept exactly the FINANCE group.
+    // Payment ledger (A10): both RPCs accept exactly PAYMENT_WRITE (no SUPER_ADMIN).
     for (const name of ['tomnap_v2_odeme_kaydet', 'tomnap_v2_odeme_ters_kayit'])
       expect(
         [...latestSqlDefinition(name).matchAll(/rol IN \(([^)]*)\)/g)].map((match) =>
           quoted(match[1])
         ),
         name
-      ).toEqual([[...ROL_GRUPLARI.FINANCE].sort()]);
-    // Cash desk (A11): hand-over receivers are exactly the KASA group.
+      ).toEqual([[...ROL_GRUPLARI.PAYMENT_WRITE].sort()]);
+    // Cash desk (A11): hand-over receivers are exactly KASA_WRITE (no SUPER_ADMIN).
     expect(
       [...latestSqlDefinition('tomnap_v2_kasa_teslimi').matchAll(/rol IN \(([^)]*)\)/g)].map(
         (match) => quoted(match[1])
       )
-    ).toEqual([[...ROL_GRUPLARI.KASA].sort()]);
+    ).toEqual([[...ROL_GRUPLARI.KASA_WRITE].sort()]);
     const approvers = latestSqlDefinition('tomnap_approve_awb_matches').match(
       /u\.rol IN \(([^)]*)\)/
     );

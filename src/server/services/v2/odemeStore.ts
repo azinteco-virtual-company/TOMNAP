@@ -7,7 +7,7 @@ import {
   kullanicilarVeritabani,
   siparislerVeritabani,
 } from '../state';
-import { PLATFORM_ROLU, rolGrubunda } from '../../../shared/roller';
+import { rolGrubunda } from '../../../shared/roller';
 import { v2GovdesiniAyikla, v2Tenant } from './ortak';
 
 /**
@@ -208,8 +208,9 @@ function bellekYetkilisi(tenantId: string, userId: string) {
     (k) =>
       k.id === userId &&
       k.durum === 'AKTIF' &&
-      rolGrubunda(k.rol, 'FINANCE') &&
-      (k.tenant_id === tenantId || k.rol === PLATFORM_ROLU)
+      // Same as the RPC: a user of this boutique; a platform admin never writes money.
+      rolGrubunda(k.rol, 'PAYMENT_WRITE') &&
+      k.tenant_id === tenantId
   );
   const firma = firmalarVeritabani.find((f) => f.id === tenantId);
   if (!u || !firma || (firma.onayDurumu && firma.onayDurumu !== 'AKTIF'))

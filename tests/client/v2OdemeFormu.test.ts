@@ -38,7 +38,7 @@ describe('v2 payment ledger form (A10)', () => {
       ].map((rol) => [rol, odemeYazabilir(rol as never), kaynakSecenekleri(rol as never)])
     ).toEqual([
       ['PATRON', true, ['BUTIK', 'ONLINE']],
-      ['SUPER_ADMIN', true, ['BUTIK', 'ONLINE']],
+      ['SUPER_ADMIN', false, []],
       ['BAKU_FINANS', true, ['BUTIK', 'ONLINE']],
       ['SATIS_SORUMLUSU', true, ['BUTIK']],
       ['KANADA_SATINALMA', false, []],

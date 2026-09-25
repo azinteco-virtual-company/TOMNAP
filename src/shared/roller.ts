@@ -58,8 +58,19 @@ export const ROL_GRUPLARI = {
    * yok (OPEN_QUESTIONS 22); KANADA_SATINALMA'nın mevcut yetkisi korunur.
    */
   COURIER_ASSIGN: [...OWNERS, 'KANADA_SATINALMA'],
-  /** Kasa teslimi alma ve kurye bakiyeleri (v2 rol matrisi, K17): sahipler ve Bakü finans. */
+  /**
+   * Kasa ve kaçaklar panosunu okuma (kurye bakiyeleri, Q4, Q5): sahipler ve Bakü finans.
+   * SUPER_ADMIN okur ama yazmaz (KASA_WRITE).
+   */
   KASA: [...OWNERS, 'BAKU_FINANS'],
+  /**
+   * Para yazma (25 Eylül 2026 kararı): defterde "parayı alan = kaydı yapan" ve SUPER_ADMIN
+   * ekip üyesi değil (OPEN_QUESTIONS 24). Bu yüzden iki yazma grubunda SUPER_ADMIN yok.
+   * Ödeme kaydı ve ters kayıt; satış yalnız butikte (RPC daraltır).
+   */
+  PAYMENT_WRITE: ['PATRON', 'SATIS_SORUMLUSU', 'BAKU_FINANS'],
+  /** Kasa teslimi alma. */
+  KASA_WRITE: ['PATRON', 'BAKU_FINANS'],
   /** Kur okuma ve girişi (v2 rol matrisi): sahipler, satın almacılar, Bakü finans. */
   RATES: [...OWNERS, ...BUYERS, 'BAKU_FINANS'],
   /** Sipariş sahibi olabilecek roller (primi sahibe ait); oluşturan her zaman kendisi olabilir. */

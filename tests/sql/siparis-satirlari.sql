@@ -147,6 +147,7 @@ ROLLBACK;
 -- 3. Up -> down -> up (no v2 order is committed at this point). Newer migrations
 -- that replace the order RPC roll back first and are re-applied last.
 BEGIN;
+\ir ../../supabase/rollbacks/20260925140000_para_yazma_yetkisi.down.sql
 \ir ../../supabase/rollbacks/20260925120000_kasa_teslimleri.down.sql
 \ir ../../supabase/rollbacks/20260925110000_odemeler.down.sql
 \ir ../../supabase/rollbacks/20260925100000_siparis_sahibi_kurali.down.sql
@@ -182,3 +183,4 @@ END $$;
 \ir ../../supabase/migrations/20260925100000_siparis_sahibi_kurali.sql
 \ir ../../supabase/migrations/20260925110000_odemeler.sql
 \ir ../../supabase/migrations/20260925120000_kasa_teslimleri.sql
+\ir ../../supabase/migrations/20260925140000_para_yazma_yetkisi.sql

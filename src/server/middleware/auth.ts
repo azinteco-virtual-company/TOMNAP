@@ -14,8 +14,20 @@ declare global {
 }
 
 const READ = new Set(['GET', 'HEAD', 'OPTIONS']);
-const { STAFF, OWNERS, SALES, PURCHASING, FINANCE, SHIPPING, COURIER_ASSIGN, RATES, KASA, ALL } =
-  ROL_GRUPLARI;
+const {
+  STAFF,
+  OWNERS,
+  SALES,
+  PURCHASING,
+  FINANCE,
+  SHIPPING,
+  COURIER_ASSIGN,
+  RATES,
+  KASA,
+  PAYMENT_WRITE,
+  KASA_WRITE,
+  ALL,
+} = ROL_GRUPLARI;
 
 type Rule = [string, RegExp, readonly string[]];
 // Explicit method + complete path allowlist. New routes are denied until reviewed.
@@ -63,15 +75,17 @@ const rules: Rule[] = [
   ['POST', /^\/api\/v2\/siparisler\/ayristir$/, SALES],
   ['GET', /^\/api\/v2\/siparis-sahipleri$/, OWNERS],
   ['GET', /^\/api\/v2\/siparisler(?:\/[^/]+)?$/, STAFF],
-  // Payment ledger (A10): FINANCE writes (the RPC narrows sales to the boutique); STAFF reads.
-  ['POST', /^\/api\/v2\/odemeler$/, FINANCE],
-  ['POST', /^\/api\/v2\/odemeler\/[^/]+\/ters-kayit$/, FINANCE],
+  // Payment ledger (A10): PAYMENT_WRITE writes (no SUPER_ADMIN; the RPC narrows sales to
+  // the boutique); STAFF, SUPER_ADMIN included, reads.
+  ['POST', /^\/api\/v2\/odemeler$/, PAYMENT_WRITE],
+  ['POST', /^\/api\/v2\/odemeler\/[^/]+\/ters-kayit$/, PAYMENT_WRITE],
   ['GET', /^\/api\/v2\/siparisler\/[^/]+\/odemeler$/, STAFF],
-  // Courier cash and the cash desk (A11, K17): couriers their own cash; KASA takes it over.
+  // Courier cash and the cash desk (A11, K17): couriers their own cash; KASA reads balances,
+  // KASA_WRITE (no SUPER_ADMIN) takes the cash over.
   ['GET', /^\/api\/v2\/kurye\/nakit$/, ['BAKU_KURYE']],
   ['POST', /^\/api\/v2\/kurye\/tahsilat$/, ['BAKU_KURYE']],
   ['GET', /^\/api\/v2\/kasa\/kurye-bakiyeleri$/, KASA],
-  ['POST', /^\/api\/v2\/kasa\/teslimler$/, KASA],
+  ['POST', /^\/api\/v2\/kasa\/teslimler$/, KASA_WRITE],
   // Leak board v0 (A12): Q4 and Q5 are money leaks; role matrix readers = KASA.
   ['GET', /^\/api\/v2\/kacaklar$/, KASA],
   ['GET', /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],

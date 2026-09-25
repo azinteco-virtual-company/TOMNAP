@@ -152,8 +152,19 @@ var ROL_GRUPLARI = {
    * yok (OPEN_QUESTIONS 22); KANADA_SATINALMA'nın mevcut yetkisi korunur.
    */
   COURIER_ASSIGN: [...OWNERS, "KANADA_SATINALMA"],
-  /** Kasa teslimi alma ve kurye bakiyeleri (v2 rol matrisi, K17): sahipler ve Bakü finans. */
+  /**
+   * Kasa ve kaçaklar panosunu okuma (kurye bakiyeleri, Q4, Q5): sahipler ve Bakü finans.
+   * SUPER_ADMIN okur ama yazmaz (KASA_WRITE).
+   */
   KASA: [...OWNERS, "BAKU_FINANS"],
+  /**
+   * Para yazma (25 Eylül 2026 kararı): defterde "parayı alan = kaydı yapan" ve SUPER_ADMIN
+   * ekip üyesi değil (OPEN_QUESTIONS 24). Bu yüzden iki yazma grubunda SUPER_ADMIN yok.
+   * Ödeme kaydı ve ters kayıt; satış yalnız butikte (RPC daraltır).
+   */
+  PAYMENT_WRITE: ["PATRON", "SATIS_SORUMLUSU", "BAKU_FINANS"],
+  /** Kasa teslimi alma. */
+  KASA_WRITE: ["PATRON", "BAKU_FINANS"],
   /** Kur okuma ve girişi (v2 rol matrisi): sahipler, satın almacılar, Bakü finans. */
   RATES: [...OWNERS, ...BUYERS, "BAKU_FINANS"],
   /** Sipariş sahibi olabilecek roller (primi sahibe ait); oluşturan her zaman kendisi olabilir. */
@@ -4232,7 +4243,20 @@ function corsMiddleware() {
 
 // src/server/middleware/auth.ts
 var READ = /* @__PURE__ */ new Set(["GET", "HEAD", "OPTIONS"]);
-var { STAFF: STAFF2, OWNERS: OWNERS2, SALES: SALES2, PURCHASING, FINANCE, SHIPPING, COURIER_ASSIGN, RATES, KASA, ALL } = ROL_GRUPLARI;
+var {
+  STAFF: STAFF2,
+  OWNERS: OWNERS2,
+  SALES: SALES2,
+  PURCHASING,
+  FINANCE,
+  SHIPPING,
+  COURIER_ASSIGN,
+  RATES,
+  KASA,
+  PAYMENT_WRITE,
+  KASA_WRITE,
+  ALL
+} = ROL_GRUPLARI;
 var rules = [
   ["GET", /^\/api\/auth\/oturum$/, ALL],
   ["POST", /^\/api\/auth\/cikis$/, ALL],
@@ -4277,15 +4301,17 @@ var rules = [
   ["POST", /^\/api\/v2\/siparisler\/ayristir$/, SALES2],
   ["GET", /^\/api\/v2\/siparis-sahipleri$/, OWNERS2],
   ["GET", /^\/api\/v2\/siparisler(?:\/[^/]+)?$/, STAFF2],
-  // Payment ledger (A10): FINANCE writes (the RPC narrows sales to the boutique); STAFF reads.
-  ["POST", /^\/api\/v2\/odemeler$/, FINANCE],
-  ["POST", /^\/api\/v2\/odemeler\/[^/]+\/ters-kayit$/, FINANCE],
+  // Payment ledger (A10): PAYMENT_WRITE writes (no SUPER_ADMIN; the RPC narrows sales to
+  // the boutique); STAFF, SUPER_ADMIN included, reads.
+  ["POST", /^\/api\/v2\/odemeler$/, PAYMENT_WRITE],
+  ["POST", /^\/api\/v2\/odemeler\/[^/]+\/ters-kayit$/, PAYMENT_WRITE],
   ["GET", /^\/api\/v2\/siparisler\/[^/]+\/odemeler$/, STAFF2],
-  // Courier cash and the cash desk (A11, K17): couriers their own cash; KASA takes it over.
+  // Courier cash and the cash desk (A11, K17): couriers their own cash; KASA reads balances,
+  // KASA_WRITE (no SUPER_ADMIN) takes the cash over.
   ["GET", /^\/api\/v2\/kurye\/nakit$/, ["BAKU_KURYE"]],
   ["POST", /^\/api\/v2\/kurye\/tahsilat$/, ["BAKU_KURYE"]],
   ["GET", /^\/api\/v2\/kasa\/kurye-bakiyeleri$/, KASA],
-  ["POST", /^\/api\/v2\/kasa\/teslimler$/, KASA],
+  ["POST", /^\/api\/v2\/kasa\/teslimler$/, KASA_WRITE],
   // Leak board v0 (A12): Q4 and Q5 are money leaks; role matrix readers = KASA.
   ["GET", /^\/api\/v2\/kacaklar$/, KASA],
   ["GET", /^(?:\/api)?\/uploads\/[^/]+$/, STAFF2],
@@ -6542,7 +6568,8 @@ function bellekSiparisi(tenantId, siparisId) {
 }
 function bellekYetkilisi(tenantId, userId) {
   const u = kullanicilarVeritabani.find(
-    (k) => k.id === userId && k.durum === "AKTIF" && rolGrubunda(k.rol, "FINANCE") && (k.tenant_id === tenantId || k.rol === PLATFORM_ROLU)
+    (k) => k.id === userId && k.durum === "AKTIF" && // Same as the RPC: a user of this boutique; a platform admin never writes money.
+    rolGrubunda(k.rol, "PAYMENT_WRITE") && k.tenant_id === tenantId
   );
   const firma = firmalarVeritabani.find((f) => f.id === tenantId);
   if (!u || !firma || firma.onayDurumu && firma.onayDurumu !== "AKTIF")
@@ -12305,7 +12332,7 @@ async function kasaTeslimAl(tenant2, userId, girdi) {
   if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
   if (bellekModu3(tenantId)) {
     const alan = kullanicilarVeritabani.find(
-      (k) => k.id === userId && k.durum === "AKTIF" && rolGrubunda(k.rol, "KASA") && (k.tenant_id === tenantId || k.rol === PLATFORM_ROLU)
+      (k) => k.id === userId && k.durum === "AKTIF" && rolGrubunda(k.rol, "KASA_WRITE") && k.tenant_id === tenantId
     );
     if (!alan || !aktifFirma(tenantId)) rpcHatasi3({ code: "PT403" });
     if (!kullanicilarVeritabani.some(
