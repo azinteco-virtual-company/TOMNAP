@@ -17,6 +17,7 @@ const PATHS = [
   '/api/v2/kurye/tahsilat',
   '/api/v2/kasa/kurye-bakiyeleri',
   '/api/v2/kasa/teslimler',
+  '/api/v2/kacaklar',
   '/api/v2',
   '/api/v2/',
   '/api/v2/durum',
