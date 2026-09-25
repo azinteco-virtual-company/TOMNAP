@@ -63,6 +63,10 @@ const rules: Rule[] = [
   ['POST', /^\/api\/v2\/siparisler\/ayristir$/, SALES],
   ['GET', /^\/api\/v2\/siparis-sahipleri$/, OWNERS],
   ['GET', /^\/api\/v2\/siparisler(?:\/[^/]+)?$/, STAFF],
+  // Payment ledger (A10): FINANCE writes (the RPC narrows sales to the boutique); STAFF reads.
+  ['POST', /^\/api\/v2\/odemeler$/, FINANCE],
+  ['POST', /^\/api\/v2\/odemeler\/[^/]+\/ters-kayit$/, FINANCE],
+  ['GET', /^\/api\/v2\/siparisler\/[^/]+\/odemeler$/, STAFF],
   ['GET', /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
   [
     'POST',
