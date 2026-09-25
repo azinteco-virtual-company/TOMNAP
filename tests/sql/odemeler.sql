@@ -102,7 +102,7 @@ BEGIN
   PERFORM pg_temp.od_expect(pg_temp.od_pay('od-a', 'od-patron-a', a, '{"tutar_azn":30,"yontem":"NAKIT","kaynak":"BUTIK"}'), 'ok:30.00:KISMI_ODEME', 'first payment');
   SELECT id INTO p30 FROM public.odemeler WHERE tenant_id = 'od-a' AND tutar_azn = 30;
   PERFORM pg_temp.od_expect(pg_temp.od_pay('od-a', 'od-finans-a', a, '{"tutar_azn":70,"yontem":"KART","kaynak":"ONLINE"}'), 'ok:100.00:ODENDI', 'full payment');
-  PERFORM pg_temp.od_expect(pg_temp.od_pay('od-a', 'od-admin', a, '{"tutar_azn":10.5,"yontem":"HAVALE","kaynak":"ONLINE"}'), 'ok:110.50:ODENDI', 'overpayment by admin');
+  PERFORM pg_temp.od_expect(pg_temp.od_pay('od-a', 'od-patron-a', a, '{"tutar_azn":10.5,"yontem":"HAVALE","kaynak":"ONLINE"}'), 'ok:110.50:ODENDI', 'overpayment');
   PERFORM pg_temp.od_expect(pg_temp.od_pay('od-a', 'od-sales-a', a, '{"tutar_azn":5,"yontem":"NAKIT","kaynak":"BUTIK","aciklama":"Butik"}'), 'ok:115.50:ODENDI', 'sales in the boutique');
   SELECT id INTO p5 FROM public.odemeler WHERE tenant_id = 'od-a' AND tutar_azn = 5;
   IF (SELECT kalan_tutar FROM public.siparisler WHERE id = a::uuid) <> -15.50 THEN RAISE EXCEPTION 'kalan_tutar did not follow'; END IF;
@@ -129,6 +129,8 @@ BEGIN
       ('od-a', 'od-patron-a', a, '{"tutar_azn":1,"yontem":"KRIPTO","kaynak":"BUTIK"}', '23514'),
       ('od-a', 'od-patron-a', a, '{"tutar_azn":1,"kaynak":"BUTIK"}', '23502'),
       ('od-a', 'od-patron-a', a, '{"tutar_azn":1,"yontem":"NAKIT","kaynak":"BUTIK","alma_zamani":"2999-01-01T00:00:00Z"}', '22023'),
+      -- A platform admin reads but never records the boutique's money (O-24, 20260925140000).
+      ('od-a', 'od-admin', a, '{"tutar_azn":1,"yontem":"NAKIT","kaynak":"BUTIK"}', 'PT403'),
       ('all', 'od-admin', a, '{"tutar_azn":1,"yontem":"NAKIT","kaynak":"BUTIK"}', '22023')) AS t(ten, uid, ord, body, want) LOOP
     PERFORM pg_temp.od_expect(pg_temp.od_pay(c.ten, c.uid, c.ord, c.body), c.want, c.uid || ' ' || c.body);
   END LOOP;
@@ -213,6 +215,7 @@ ROLLBACK;
 -- payments exist is checked in odemeler-concurrency.mjs, after payments are committed.
 -- Newer migrations built on the ledger (A11) roll back first and are re-applied last.
 BEGIN;
+\ir ../../supabase/rollbacks/20260925140000_para_yazma_yetkisi.down.sql
 \ir ../../supabase/rollbacks/20260925120000_kasa_teslimleri.down.sql
 \ir ../../supabase/rollbacks/20260925110000_odemeler.down.sql
 COMMIT;
@@ -243,3 +246,4 @@ DO $$ BEGIN
   END IF;
 END $$;
 \ir ../../supabase/migrations/20260925120000_kasa_teslimleri.sql
+\ir ../../supabase/migrations/20260925140000_para_yazma_yetkisi.sql

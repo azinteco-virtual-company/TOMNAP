@@ -146,6 +146,8 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/kasa-teslimleri.sql
           # Leak board v0 (A12): Q4, Q5 read-only and tenant-filtered; down -> up.
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/kacaklar.sql
+          # Money writes (20260925140000): SUPER_ADMIN records no payment, reversal or hand-over.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/para-yazma-yetkisi.sql
           node tests/sql/siparis-satirlari-concurrency.mjs
           node tests/sql/odemeler-concurrency.mjs
           node tests/sql/kasa-concurrency.mjs

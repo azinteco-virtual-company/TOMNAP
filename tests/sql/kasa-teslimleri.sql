@@ -165,7 +165,8 @@ BEGIN
   END IF;
   PERFORM pg_temp.ks_expect(pg_temp.ks_handover('ks-a', 'ks-finans-a', 'ks-kurye1', ARRAY[p40, p60], 100), 'ok:100.00', 'hand-over');
   PERFORM pg_temp.ks_expect(pg_temp.ks_handover('ks-a', 'ks-patron-a', 'ks-kurye1', ARRAY[p40, p60], 100), 'PT409', 'second hand-over');
-  PERFORM pg_temp.ks_expect(pg_temp.ks_handover('ks-a', 'ks-admin', 'ks-kurye2', ARRAY[p50], 50), 'ok:50.00', 'admin takes courier 2');
+  PERFORM pg_temp.ks_expect(pg_temp.ks_handover('ks-a', 'ks-admin', 'ks-kurye2', ARRAY[p50], 50), 'PT403', 'a platform admin never takes cash');
+  PERFORM pg_temp.ks_expect(pg_temp.ks_handover('ks-a', 'ks-patron-a', 'ks-kurye2', ARRAY[p50], 50), 'ok:50.00', 'patron takes courier 2');
   PERFORM pg_temp.ks_expect(pg_temp.ks_balance('ks-kurye1')::text, '0.00', 'courier 1 after hand-over');
   PERFORM pg_temp.ks_expect(pg_temp.ks_balance('ks-kurye2')::text, '0.00', 'courier 2 after hand-over');
 
@@ -223,7 +224,9 @@ ROLLBACK;
 
 -- 3. Down -> down -> up (no hand-over is committed at this point). The refusal while
 -- hand-overs exist is checked in kasa-concurrency.mjs.
+-- Newer migrations built on the cash desk roll back first and are re-applied last.
 BEGIN;
+\ir ../../supabase/rollbacks/20260925140000_para_yazma_yetkisi.down.sql
 \ir ../../supabase/rollbacks/20260925120000_kasa_teslimleri.down.sql
 COMMIT;
 BEGIN;
@@ -255,3 +258,4 @@ DO $$ BEGIN
     RAISE EXCEPTION 'Re-applied hand-over migration is incomplete';
   END IF;
 END $$;
+\ir ../../supabase/migrations/20260925140000_para_yazma_yetkisi.sql
