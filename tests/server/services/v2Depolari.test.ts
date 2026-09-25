@@ -236,6 +236,7 @@ describe('v2 order store on Supabase: one RPC per order, tenant-scoped reads (A8
     for (const [code, status] of [
       ['PT403', 403],
       ['PT409', 409],
+      ['22023', 400],
       ['23514', 400],
       ['22003', 400],
       ['XX000', 503],

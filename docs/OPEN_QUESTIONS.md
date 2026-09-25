@@ -241,7 +241,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     (`kalan_toplam_borc`) müşteri listesinin parçası ve müşteriler testinde
     kapsanıyor.
 
-26. **Yerelde ara sıra düşen testlerin kök nedeni: port çakışması (varsayım).**
+26. ✅ **Onaylandı (25 Eylül 2026):** **Yerelde ara sıra düşen testlerin kök nedeni: port çakışması.**
     - **Belirti:** macOS'ta tam koşuda ara sıra bir istek boş gövdeli `404 text/html`
       alıyordu (AWB onayı, `listPagination`, v2 kapısı). Tek başına koşunca geçiyordu.
     - **Kök neden:** Supertest sunucusu `listen(0)` ile her adrese bağlanıyor. macOS bu
@@ -320,16 +320,17 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       silme davranışı değişmiyor.
     - **Arayüz:** Bu bölümler yalnız `/v2` kabuğunda. `localStorage` kuru henüz yerinde.
 
-24. **v2 sipariş satırları ve sahibi (A8, varsayım).**
+24. ✅ **Karar (25 Eylül 2026):** **v2 sipariş satırları ve sahibi (A8).**
     - **Müşteri bağı:** `siparisler`'e spec'teki gibi fiziksel bir `musteri_id` kolonu
       eklenmedi. Bu adda bir kolon v1 satırlarında `null` olurdu. v1 okuma yolu üst
       düzeydeki alanı `ek_veriler.musteri_id`'den öncelikli sayıyor; bu yüzden her
       okumada bağ `null` ile ezilir, ilk v1 düzenlemesinde de `ek_veriler`'e `null`
       yazılırdı. v2 siparişi müşteri bağını v1'le aynı yerde (`ek_veriler.musteri_id`)
       tutuyor. Yeni kolonlar yalnız `model_surumu` ve `sahip_kullanici_id`.
-    - **Sahip:** Belirtilmezse oluşturan kişi olur (SUPER_ADMIN oluşturursa sahip de
-      SUPER_ADMIN'dir). PATRON ya da SUPER_ADMIN, tenant'ın aktif bir PATRON ya da
-      SATIS_SORUMLUSU'sunu sahip seçebilir. Satış sorumlusu yalnız kendi siparişinin
+    - **Sahip:** Belirtilmezse oluşturan kişi olur. PATRON ya da SUPER_ADMIN, tenant'ın
+      aktif bir PATRON ya da SATIS_SORUMLUSU'sunu sahip seçebilir. **Karar:** SUPER_ADMIN
+      ekip üyesi değil, prim alamaz; sipariş açarsa sahibi seçmek zorunda ve hiçbir zaman
+      sahip olamaz (migration `20260925100000_siparis_sahibi_kurali`, sunucu ve form). Satış sorumlusu yalnız kendi siparişinin
       sahibi olabilir. RPC sahibin satırını `FOR SHARE` ile kilitliyor: eşzamanlı
       pasifleştirme ya siparişi bekler ya da siparişi durdurur.
     - **v1 ile birlikte yaşama:**
@@ -345,9 +346,8 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       Satış fiyatı AZN, `kaynak_ulke` (CA/US) zorunlu.
     - **Geri alma:** v2 siparişi varken down dosyası çalışmayı reddediyor; aksi hâlde
       satırlar sessizce silinirdi.
-    *Soru:* SUPER_ADMIN sipariş açtığında sahip seçmek zorunlu olsun mu? (Prim sahibe ait.)
 
-25. **v2 sipariş girişi ve AI satır önerisi (A9, varsayım).**
+25. ✅ **Onaylandı (25 Eylül 2026):** **v2 sipariş girişi ve AI satır önerisi (A9).**
     - **Ayrı uç:** Spec AI şemasını `src/server/routes/siparisler.ts`'e koyuyordu. v1
       `/api/ayristir-siparis` ayrıştırıp hemen kaydettiği için ona dokunulmadı. Yeni
       `POST /api/v2/siparisler/ayristir` (SALES, AI hız sınırı) yalnız öneri döndürür,
@@ -361,8 +361,24 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       gönderilmez (0 AZN bilerek yazılabilir).
     - **Sahip seçimi:** Yalnız OWNERS (PATRON, SUPER_ADMIN) görür; aday listesi
       `GET /api/v2/siparis-sahipleri`, tenant'ın aktif PATRON ve SATIS_SORUMLUSU'ları.
-      Seçilmezse sahip oluşturan kişidir (24'teki soru hâlâ açık).
+      Seçilmezse sahip oluşturan kişidir; SUPER_ADMIN'in seçmesi zorunlu (24).
     - **Ekran:** `/v2` kabuğunda "Sifarişlər" sekmesi STAFF'a açık; form yalnız SALES'e,
       diğerleri son 200 v2 siparişin listesini görür. Ekran kendi parçasında (`React.lazy`).
       Mevcut sipariş tablosunda v2 siparişler "v2" rozetiyle ayrılır; rozet bayraktan
       bağımsızdır, çünkü v2 sipariş ancak bayrak açıkken oluşabilir.
+
+27. **Yedek geri yüklemede sonradan eklenen sunucu kolonları (varsayım).**
+    - **Hata:** Veritabanı modunda dışa aktarılan yedek kurye kolonlarını
+      (`kurye_atama_surumu`, `kurye_teslim_kullanici_id`, `kurye_teslim_alan`) da
+      taşıyordu; geri yükleme bunları "desteklenmeyen alan" sayıp reddediyordu. Bellek
+      modunda da teslim edilmiş siparişler için aynısı oluyordu.
+    - **Düzeltme:** Teslim eden kullanıcı ve teslim alan kişi geri yazılıyor. Teslim eden
+      kullanıcı hedef firmanın kullanıcısı olmalı (veritabanında tenant filtreli sorgu);
+      değilse yükleme hiçbir şey yazmadan 404 ile duruyor.
+    - **Varsayım:** `kurye_atama_surumu` bir sürüm sayacı, geri yazılmıyor: var olan
+      sipariş kendi sürümünü korur, yeni sipariş varsayılanı (0) alır. Geri yükleme sayacı
+      artırmıyor; geri yüklemeden önce açılmış bir kurye atama ekranı bir kez daha yazabilir.
+    - **Koruma:** `tests/fixtures/siparisler-kolonlari.json` gerçek kolon listesini tutuyor.
+      Bir migration `siparisler`'e kolon eklerse SQL testi düşüyor; liste güncellenince
+      gidiş-dönüş testi yeni kolonun geri yazılmasını ya da gerekçeyle dışarıda
+      bırakılmasını istiyor.

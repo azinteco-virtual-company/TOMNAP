@@ -113,6 +113,20 @@ describe('v2 order form (A9)', () => {
     });
   });
 
+  it('makes a platform admin pick the owner (O-24)', () => {
+    const form = oneridenForm(oneri, 'mesaj');
+    form.satirlar[1].fiyat = '20';
+    expect(formdanIstek(form, { sahipZorunlu: true }).hatalar).toEqual([
+      'Sifarişin sahibini seçin.',
+    ]);
+    form.sahipKullaniciId = 'satis-1';
+    expect(formdanIstek(form, { sahipZorunlu: true })).toMatchObject({
+      hatalar: [],
+      govde: { sahip_kullanici_id: 'satis-1' },
+    });
+    expect(formdanIstek({ ...form, sahipKullaniciId: null }).hatalar).toEqual([]);
+  });
+
   it('lists every problem before anything is sent', () => {
     const form = { ...bosForm(), satirlar: [{ ...bosSatir(), adet: '0', fiyat: '1,005' }] };
     expect(formdanIstek(form).hatalar).toEqual([
