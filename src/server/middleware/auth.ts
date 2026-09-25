@@ -72,6 +72,8 @@ const rules: Rule[] = [
   ['POST', /^\/api\/v2\/kurye\/tahsilat$/, ['BAKU_KURYE']],
   ['GET', /^\/api\/v2\/kasa\/kurye-bakiyeleri$/, KASA],
   ['POST', /^\/api\/v2\/kasa\/teslimler$/, KASA],
+  // Leak board v0 (A12): Q4 and Q5 are money leaks; role matrix readers = KASA.
+  ['GET', /^\/api\/v2\/kacaklar$/, KASA],
   ['GET', /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
   [
     'POST',

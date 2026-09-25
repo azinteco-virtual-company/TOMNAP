@@ -81,6 +81,7 @@ import {
   kuryeTahsilatGirdisi,
   kuryeTahsilatiKaydet,
 } from '../../../src/server/services/v2/kasaStore';
+import { kacaklariOku } from '../../../src/server/services/v2/kacakStore';
 
 const rate = (tenant: string, extra: Record<string, unknown> = {}) => ({
   id: `${tenant}-rate`,
@@ -629,5 +630,51 @@ describe('v2 cash desk on Supabase: RPCs with the session tenant and user only (
       db.rpcAnswer = () => ({ data: null, error: { code } });
       await expect(kuryeBakiyeleri('t-a')).rejects.toMatchObject({ status });
     }
+  });
+});
+
+describe('v2 leak board on Supabase: two read-only RPCs with the session tenant (A12)', () => {
+  it('asks both queries for the session tenant with the thresholds and maps the rows', async () => {
+    const rpcAnswers: Record<string, unknown> = {
+      tomnap_v2_kacak_q4: [
+        {
+          id: ORDER,
+          musteri_adi: 'A',
+          model_surumu: 2,
+          toplam_tutar: '100.00',
+          alinan_tutar: '40.00',
+          kalan_tutar: '60.00',
+          teslim_tarihi: 't',
+          baku_kurye_adi: null,
+          yas_gun: 3,
+        },
+      ],
+      tomnap_v2_kacak_q5: [
+        {
+          kurye_kullanici_id: 'k-1',
+          ad_soyad: 'K',
+          bakiye: '30.00',
+          acik_tahsilat_sayisi: 1,
+          en_eski_tahsilat: 't',
+          bekleme_saat: 30,
+        },
+      ],
+    };
+    // The fake records the call before answering: answer by the latest RPC name.
+    db.rpcAnswer = () => ({ data: rpcAnswers[db.rpcs[db.rpcs.length - 1].name], error: null });
+    const result = await kacaklariOku('t-a', { q4Gun: 2, q5Saat: 12 });
+    expect(db.rpcs.map((r) => [r.name, r.args])).toEqual([
+      ['tomnap_v2_kacak_q4', { p_tenant_id: 't-a', p_min_gun: 2 }],
+      ['tomnap_v2_kacak_q5', { p_tenant_id: 't-a', p_min_saat: 12 }],
+    ]);
+    expect(result.q4[0]).toMatchObject({ id: ORDER, kalanTutar: 60, yasGun: 3 });
+    expect(result.q5[0]).toMatchObject({ kuryeKullaniciId: 'k-1', bakiye: 30 });
+    expect(db.calls).toEqual([]);
+  });
+
+  it('refuses the all-tenant scope and reports failures without data', async () => {
+    await expect(kacaklariOku('all')).rejects.toMatchObject({ status: 400 });
+    db.rpcAnswer = () => ({ data: null, error: { code: 'XX000' } });
+    await expect(kacaklariOku('t-a')).rejects.toMatchObject({ status: 503 });
   });
 });

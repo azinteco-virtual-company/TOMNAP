@@ -12,6 +12,7 @@ import { rolGrubunda } from '../../../shared/roller';
 import siparislerRouter from './siparisler';
 import odemelerRouter from './odemeler';
 import kasaRouter from './kasa';
+import kacaklarRouter from './kacaklar';
 
 /**
  * v2 akışı (FF_V2_FLOW). Kapı, oturum doğrulamasından ÖNCE bağlanır: bayrak
@@ -95,5 +96,6 @@ router.patch('/ayarlar', async (req, res) => {
 router.use(siparislerRouter);
 router.use(odemelerRouter);
 router.use(kasaRouter);
+router.use(kacaklarRouter);
 
 export default router;

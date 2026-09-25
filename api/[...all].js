@@ -4286,6 +4286,8 @@ var rules = [
   ["POST", /^\/api\/v2\/kurye\/tahsilat$/, ["BAKU_KURYE"]],
   ["GET", /^\/api\/v2\/kasa\/kurye-bakiyeleri$/, KASA],
   ["POST", /^\/api\/v2\/kasa\/teslimler$/, KASA],
+  // Leak board v0 (A12): Q4 and Q5 are money leaks; role matrix readers = KASA.
+  ["GET", /^\/api\/v2\/kacaklar$/, KASA],
   ["GET", /^(?:\/api)?\/uploads\/[^/]+$/, STAFF2],
   [
     "POST",
@@ -11218,7 +11220,7 @@ router10.post("/auth/cikis", async (req, res) => {
 var auth_default = router10;
 
 // src/server/routes/v2/index.ts
-import { Router as Router14 } from "express";
+import { Router as Router15 } from "express";
 
 // src/server/services/v2/kurlar.ts
 import { randomUUID as randomUUID10 } from "node:crypto";
@@ -11286,15 +11288,15 @@ async function kurEkle(tenant2, userId, girdi) {
   if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
   const client2 = supabase;
   if (!client2) {
-    const kayit6 = {
+    const kayit7 = {
       ...girdi,
       id: randomUUID10(),
       tenantId,
       girenKullaniciId: userId,
       olusturmaZamani: (/* @__PURE__ */ new Date()).toISOString()
     };
-    bellek.push(kayit6);
-    return { ...kayit6 };
+    bellek.push(kayit7);
+    return { ...kayit7 };
   }
   const { data, error: error2 } = await client2.from("kurlar").insert({
     tenant_id: tenantId,
@@ -11305,20 +11307,20 @@ async function kurEkle(tenant2, userId, girdi) {
     giren_kullanici_id: userId
   }).select(COLUMNS).single();
   if (error2 || !data) throw new PublicResourceError("Kur kaydedilemedi.", 503);
-  const kayit5 = satirdan(data);
-  if (kayit5.tenantId !== tenantId) throw new PublicResourceError("Kur kaydedilemedi.", 503);
-  return kayit5;
+  const kayit6 = satirdan(data);
+  if (kayit6.tenantId !== tenantId) throw new PublicResourceError("Kur kaydedilemedi.", 503);
+  return kayit6;
 }
 var yenidenEskiye = (a, b) => b.olusturmaZamani.localeCompare(a.olusturmaZamani) || b.id.localeCompare(a.id);
 async function kurlariListele(tenant2) {
   const tenantId = v2Tenant(tenant2);
   const client2 = supabase;
   if (!client2) {
-    const kurlar2 = bellek.filter((kayit5) => kayit5.tenantId === tenantId).sort(yenidenEskiye).map((kayit5) => ({ ...kayit5 }));
+    const kurlar2 = bellek.filter((kayit6) => kayit6.tenantId === tenantId).sort(yenidenEskiye).map((kayit6) => ({ ...kayit6 }));
     const guncel2 = Object.fromEntries(
       KUR_PARA_BIRIMLERI.map((para) => [
         para,
-        kurlar2.find((kayit5) => kayit5.paraBirimi === para) ?? null
+        kurlar2.find((kayit6) => kayit6.paraBirimi === para) ?? null
       ])
     );
     return { guncel: guncel2, kurlar: kurlar2.slice(0, KUR_LISTE_SINIRI) };
@@ -11330,7 +11332,7 @@ async function kurlariListele(tenant2) {
     if (error2 || !Array.isArray(data)) throw new PublicResourceError("Kurlar okunamad\u0131.", 503);
     const rows = data;
     const kurlar2 = rows.map(satirdan);
-    if (kurlar2.some((kayit5) => kayit5.tenantId !== tenantId))
+    if (kurlar2.some((kayit6) => kayit6.tenantId !== tenantId))
       throw new PublicResourceError("Kurlar okunamad\u0131.", 503);
     return kurlar2;
   };
@@ -12350,12 +12352,140 @@ router13.post("/kasa/teslimler", async (req, res) => {
 });
 var kasa_default = router13;
 
+// src/server/routes/v2/kacaklar.ts
+import { Router as Router14 } from "express";
+
+// src/server/services/v2/kacakStore.ts
+var VARSAYILAN_ESIKLER = { q4Gun: 0, q5Saat: 24 };
+var KURUS3 = (value) => Math.round(value * 100);
+var bellekModu4 = (tenantId) => !supabase || tenantId === "demo_sandbox";
+function esik(value, varsayilan, sinir, ad) {
+  if (value === void 0) return varsayilan;
+  const sayi2 = typeof value === "string" && /^\d{1,6}$/.test(value) ? Number(value) : Number.NaN;
+  if (!Number.isInteger(sayi2) || sayi2 > sinir)
+    throw new PublicResourceError(`${ad} 0-${sinir} aras\u0131 tam say\u0131 olmal\u0131.`, 400);
+  return sayi2;
+}
+function kacakEsikleri(query) {
+  return {
+    q4Gun: esik(query.q4_gun, VARSAYILAN_ESIKLER.q4Gun, 3650, "q4_gun"),
+    q5Saat: esik(query.q5_saat, VARSAYILAN_ESIKLER.q5Saat, 87600, "q5_saat")
+  };
+}
+function kayit5(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new PublicResourceError("Ka\xE7aklar okunamad\u0131.", 503);
+  return value;
+}
+var yaziYaDaNull3 = (value) => typeof value === "string" ? value : null;
+function q4den(value) {
+  const r = kayit5(value);
+  if (typeof r.id !== "string") throw new PublicResourceError("Ka\xE7aklar okunamad\u0131.", 503);
+  return {
+    id: r.id,
+    musteriAdi: String(r.musteri_adi ?? ""),
+    modelSurumu: Number(r.model_surumu ?? 1),
+    toplamTutar: Number(r.toplam_tutar),
+    alinanTutar: Number(r.alinan_tutar),
+    kalanTutar: Number(r.kalan_tutar),
+    teslimTarihi: yaziYaDaNull3(r.teslim_tarihi),
+    bakuKuryeAdi: yaziYaDaNull3(r.baku_kurye_adi),
+    yasGun: Number(r.yas_gun)
+  };
+}
+function q5ten(value) {
+  const r = kayit5(value);
+  if (typeof r.kurye_kullanici_id !== "string")
+    throw new PublicResourceError("Ka\xE7aklar okunamad\u0131.", 503);
+  return {
+    kuryeKullaniciId: r.kurye_kullanici_id,
+    adSoyad: yaziYaDaNull3(r.ad_soyad),
+    bakiye: Number(r.bakiye),
+    acikTahsilatSayisi: Number(r.acik_tahsilat_sayisi),
+    enEskiTahsilat: String(r.en_eski_tahsilat),
+    beklemeSaat: Number(r.bekleme_saat)
+  };
+}
+function bellekQ4(tenantId, gun, simdi) {
+  const havuz4 = tenantId === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+  return havuz4.filter((s) => s.tenant_id === tenantId && s.lojistik_durumu === "TESLIM_EDILDI").map((s) => {
+    const toplam = Number(s.toplam_tutar ?? 0);
+    const alinan = Number(s.alinan_tutar ?? 0);
+    const zaman = Date.parse(
+      String(s.teslim_tarihi ?? s.guncellenme_tarihi ?? s.olusturma_tarihi ?? "")
+    );
+    return { s, toplam, alinan, zaman };
+  }).filter(
+    ({ toplam, alinan, zaman }) => KURUS3(toplam) > KURUS3(alinan) && Number.isFinite(zaman) && zaman <= simdi - gun * 864e5
+  ).sort((a, b) => a.zaman - b.zaman).slice(0, 500).map(({ s, toplam, alinan, zaman }) => ({
+    id: String(s.id),
+    musteriAdi: String(s.musteri_adi ?? ""),
+    modelSurumu: Number(s.model_surumu ?? 1),
+    toplamTutar: toplam,
+    alinanTutar: alinan,
+    kalanTutar: (KURUS3(toplam) - KURUS3(alinan)) / 100,
+    teslimTarihi: yaziYaDaNull3(s.teslim_tarihi),
+    bakuKuryeAdi: yaziYaDaNull3(s.baku_kurye_adi),
+    yasGun: Math.floor((simdi - zaman) / 864e5)
+  }));
+}
+async function bellekQ5(tenantId, saat, simdi) {
+  return (await kuryeBakiyeleri(tenantId)).map((b) => ({
+    b,
+    enEski: Math.min(...b.acikTahsilatlar.map((o) => Date.parse(o.almaZamani)))
+  })).filter(({ b, enEski }) => b.bakiye > 0 && enEski <= simdi - saat * 36e5).sort((x, y) => x.enEski - y.enEski).map(({ b, enEski }) => ({
+    kuryeKullaniciId: b.kuryeKullaniciId,
+    adSoyad: b.adSoyad,
+    bakiye: b.bakiye,
+    acikTahsilatSayisi: b.acikTahsilatlar.length,
+    enEskiTahsilat: new Date(enEski).toISOString(),
+    beklemeSaat: Math.floor((simdi - enEski) / 36e5)
+  }));
+}
+async function kacaklariOku(tenant2, esikler = VARSAYILAN_ESIKLER) {
+  const tenantId = v2Tenant(tenant2);
+  if (bellekModu4(tenantId)) {
+    const simdi = Date.now();
+    return {
+      esikler,
+      q4: bellekQ4(tenantId, esikler.q4Gun, simdi),
+      q5: await bellekQ5(tenantId, esikler.q5Saat, simdi)
+    };
+  }
+  const client2 = supabase;
+  const [q4, q5] = await Promise.all([
+    client2.rpc("tomnap_v2_kacak_q4", { p_tenant_id: tenantId, p_min_gun: esikler.q4Gun }),
+    client2.rpc("tomnap_v2_kacak_q5", { p_tenant_id: tenantId, p_min_saat: esikler.q5Saat })
+  ]);
+  if (q4.error || q5.error || !Array.isArray(q4.data) || !Array.isArray(q5.data))
+    throw new PublicResourceError("Ka\xE7aklar okunamad\u0131.", 503);
+  const q4Rows = q4.data;
+  const q5Rows = q5.data;
+  return { esikler, q4: q4Rows.map(q4den), q5: q5Rows.map(q5ten) };
+}
+
+// src/server/routes/v2/kacaklar.ts
+var router14 = Router14();
+router14.get("/kacaklar", async (req, res) => {
+  try {
+    const esikler = kacakEsikleri(req.query);
+    res.json({ basarili: true, ...await kacaklariOku(req.tenantId, esikler) });
+  } catch (error2) {
+    if (error2 instanceof PublicResourceError) {
+      const code = [400, 403, 404, 503].includes(error2.status) ? error2.status : 500;
+      return res.status(code).json({ basarili: false, hata: error2.message });
+    }
+    res.status(500).json({ basarili: false, hata: "\u0130\u015Flem tamamlanamad\u0131." });
+  }
+});
+var kacaklar_default = router14;
+
 // src/server/routes/v2/index.ts
 function v2Kapisi(_req, res, next) {
   if (isV2FlowEnabled()) return next();
   res.status(404).json({ basarili: false, hata: "Bu funksiya aktiv deyil." });
 }
-var router14 = Router14();
+var router15 = Router15();
 function hata5(res, error2) {
   if (error2 instanceof PublicResourceError) {
     const code = [400, 401, 403, 404, 409, 413, 503].includes(error2.status) ? error2.status : 500;
@@ -12364,17 +12494,17 @@ function hata5(res, error2) {
   return res.status(500).json({ basarili: false, hata: "\u0130\u015Flem tamamlanamad\u0131." });
 }
 var kullanici3 = (req) => req.auth?.userId ?? "";
-router14.get("/durum", (_req, res) => {
+router15.get("/durum", (_req, res) => {
   res.json({ basarili: true, v2: true });
 });
-router14.get("/kurlar", async (req, res) => {
+router15.get("/kurlar", async (req, res) => {
   try {
     res.json({ basarili: true, ...await kurlariListele(req.tenantId) });
   } catch (error2) {
     hata5(res, error2);
   }
 });
-router14.post("/kurlar", async (req, res) => {
+router15.post("/kurlar", async (req, res) => {
   try {
     const girdi = kurGirdisiniDogrula(req.body);
     res.status(201).json({ basarili: true, kur: await kurEkle(req.tenantId, kullanici3(req), girdi) });
@@ -12388,14 +12518,14 @@ function gorunur(req, ayarlar) {
   const { primOraniVarsayilan: _gizli, ...digerleri } = ayarlar;
   return digerleri;
 }
-router14.get("/ayarlar", async (req, res) => {
+router15.get("/ayarlar", async (req, res) => {
   try {
     res.json({ basarili: true, ayarlar: gorunur(req, await ayarlariOku(req.tenantId)) });
   } catch (error2) {
     hata5(res, error2);
   }
 });
-router14.patch("/ayarlar", async (req, res) => {
+router15.patch("/ayarlar", async (req, res) => {
   try {
     if (!primGorur(req) && Object.hasOwn(Object(req.body), "prim_orani_varsayilan"))
       throw new PublicResourceError("Prim oran\u0131n\u0131 yaln\u0131z patron de\u011Fi\u015Ftirebilir.", 403);
@@ -12408,10 +12538,11 @@ router14.patch("/ayarlar", async (req, res) => {
     hata5(res, error2);
   }
 });
-router14.use(siparisler_default2);
-router14.use(odemeler_default);
-router14.use(kasa_default);
-var v2_default = router14;
+router15.use(siparisler_default2);
+router15.use(odemeler_default);
+router15.use(kasa_default);
+router15.use(kacaklar_default);
+var v2_default = router15;
 
 // src/server/index.ts
 function createApp({ trustProxy = false } = {}) {
