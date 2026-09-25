@@ -13,10 +13,51 @@ import { v2GovdesiniAyikla, v2Tenant } from './ortak';
  * v2 sipariş önerisi (A9): AI mesajdan müşteri alanlarını ve SATIRLARI çıkarır,
  * sunucu müşteriyi eşleştirir; hiçbir şey yazılmaz, insan onaylar.
  * A1 kuralı: AI'a hiçbir müşteri listesi ya da başka müşterinin verisi gitmez;
- * istem yalnız gönderilen mesajı içerir.
+ * istem yalnız gönderilen mesajı ve görselleri içerir.
+ * A9b: ekran görüntüsü de verilebilir. Görseller istemcide küçültülür (Vercel'in 4,5 MB
+ * gövde sınırının çok altında kalsın diye), burada sınırlanır ve doğrulanır, AI'a
+ * gönderilir ve HİÇBİR YERDE saklanmaz.
  */
 
 export const HAM_MESAJ_SINIRI = 20_000;
+/** Per request: at most 3 images of at most 1 MB each (after client-side downscaling). */
+export const GORSEL_SINIRI = { adet: 3, bayt: 1_000_000 } as const;
+const GORSEL_IMZALARI: Record<string, (b: Buffer) => boolean> = {
+  'image/jpeg': (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/png': (b) =>
+    b.length > 8 &&
+    b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/webp': (b) =>
+    b.length > 12 &&
+    b.toString('latin1', 0, 4) === 'RIFF' &&
+    b.toString('latin1', 8, 12) === 'WEBP',
+};
+
+/** Validates the screenshots of a request; nothing is stored. */
+export function gorselleriAyikla(value: unknown): Array<{ mimeType: string; data: string }> {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new PublicResourceError('Görseller liste olmalı.', 400);
+  if (value.length > GORSEL_SINIRI.adet)
+    throw new PublicResourceError(`En fazla ${GORSEL_SINIRI.adet} görsel gönderilebilir.`, 413);
+  return value.map((item) => {
+    const alanlar = v2GovdesiniAyikla(item, ['mime_type', 'veri_base64'] as const);
+    const mime = alanlar.mime_type;
+    const veri = alanlar.veri_base64;
+    if (typeof mime !== 'string' || !GORSEL_IMZALARI[mime])
+      throw new PublicResourceError('Görsel JPEG, PNG ya da WebP olmalı.', 400);
+    if (typeof veri !== 'string' || veri.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(veri))
+      throw new PublicResourceError('Görsel verisi geçersiz.', 400);
+    // Cheap bound before decoding (4 characters carry 3 bytes), exact check after.
+    if (veri.length > (Math.ceil(GORSEL_SINIRI.bayt / 3) + 1) * 4)
+      throw new PublicResourceError('Görsel 1 MB sınırını aşıyor; küçültülerek gönderilmeli.', 413);
+    const bytes = Buffer.from(veri, 'base64');
+    if (bytes.length > GORSEL_SINIRI.bayt)
+      throw new PublicResourceError('Görsel 1 MB sınırını aşıyor; küçültülerek gönderilmeli.', 413);
+    if (bytes.length === 0 || !GORSEL_IMZALARI[mime](bytes))
+      throw new PublicResourceError('Görsel verisi türüyle uyuşmuyor.', 400);
+    return { mimeType: mime, data: veri };
+  });
+}
 
 export interface V2SatirOnerisi {
   urun_aciklamasi: string;
@@ -44,10 +85,11 @@ export interface V2AyristirmaSonucu {
 }
 
 const SISTEM_TALIMATI = `Sen Instagram ve WhatsApp üzerinden satış yapan bir butiğin sipariş ayrıştırma asistanısın.
-Görevin yalnızca SANA VERİLEN MESAJDAN alan çıkarmak.
+Görevin yalnızca SANA VERİLEN MESAJDAN ve (varsa) EKRAN GÖRÜNTÜLERİNDEN alan çıkarmak.
 
 KURALLAR:
-1. Müşteri bilgilerini (ad, telefon, Instagram kullanıcı adı, şehir, adres) yalnızca mesajda yazdığı gibi çıkar.
+1. Müşteri bilgilerini (ad, telefon, Instagram kullanıcı adı, şehir, adres) yalnızca mesajda ya da görselde yazdığı gibi çıkar.
+   Bir WhatsApp/Instagram ekran görüntüsünde "İletildi / Forwarded / Yönləndirildi" etiketinin altındaki kişi siparişin sahibidir.
    Sana hiçbir müşteri listesi verilmez; müşteriyi tanımaya, eşleştirmeye veya adını düzeltmeye çalışma. Eşleştirmeyi sunucu yapar.
 2. Mesajdaki HER FARKLI ÜRÜN ayrı bir satırdır ("satirlar"). Aynı üründen birden fazla isteniyorsa tek satırda "adet" ile yaz.
    Her satır için: urun_aciklamasi, beden, renk, adet, birim_fiyat (AZN, bir adedin fiyatı).
@@ -172,11 +214,15 @@ export async function v2SiparisAyristir(
   body: unknown
 ): Promise<V2AyristirmaSonucu> {
   const tenantId = v2Tenant(tenant);
-  const alanlar = v2GovdesiniAyikla(body, ['ham_mesaj'] as const);
+  const alanlar = v2GovdesiniAyikla(body, ['ham_mesaj', 'gorseller'] as const);
+  if (alanlar.ham_mesaj !== undefined && typeof alanlar.ham_mesaj !== 'string')
+    throw new PublicResourceError('Mesaj metin olmalı.', 400);
   const hamMesaj = typeof alanlar.ham_mesaj === 'string' ? alanlar.ham_mesaj.trim() : '';
-  if (!hamMesaj) throw new PublicResourceError('Ayrıştırılacak mesaj gereklidir.', 400);
   if (hamMesaj.length > HAM_MESAJ_SINIRI)
     throw new PublicResourceError(`Mesaj en fazla ${HAM_MESAJ_SINIRI} karakter olabilir.`, 413);
+  const gorseller = gorselleriAyikla(alanlar.gorseller);
+  if (!hamMesaj && !gorseller.length)
+    throw new PublicResourceError('Ayrıştırılacak mesaj ya da ekran görüntüsü gereklidir.', 400);
   let ai;
   try {
     ai = getGeminiClient();
@@ -184,8 +230,13 @@ export async function v2SiparisAyristir(
     throw new PublicResourceError('AI hizmeti yapılandırılmamış.', 503);
   }
   const yanit = await generateContentWithRetryAndFallback(ai, {
-    // Only the message itself: no customer directory, no other order (A1, CLAUDE.md).
-    contents: `Mesaj:\n"""\n${hamMesaj}\n"""`,
+    // Only the message and its screenshots: no customer directory, no other order (A1).
+    contents: gorseller.length
+      ? [
+          { text: `Mesaj:\n"""\n${hamMesaj || '(yok; yalnız ekran görüntüleri)'}\n"""` },
+          ...gorseller.map((g) => ({ inlineData: { mimeType: g.mimeType, data: g.data } })),
+        ]
+      : `Mesaj:\n"""\n${hamMesaj}\n"""`,
     config: {
       systemInstruction: SISTEM_TALIMATI,
       temperature: 0.1,
