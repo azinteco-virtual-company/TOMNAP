@@ -405,3 +405,25 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       ödeme varken çalışmayı reddediyor.
     - **Okuma ve ekran:** Defteri STAFF okuyabilir (sipariş listesindeki `alinan_tutar` ile
       aynı görünürlük). "Kassa" sekmesi yalnız `FINANCE` rollerine açık.
+
+29. **Kurye nakdi ve kasa teslimi (A11, varsayım).**
+    - **Kurye tahsilatı:** Yalnız `BAKU_KURYE`, yalnız aktif kurye kaydına bağlı olduğu ve
+      kendisine atanmış bir v2 siparişte, sipariş teslimattayken (`BAKU_DAGITIM_ARKADAS`)
+      ya da kendisi teslim ettiyse (`TESLIM_EDILDI`) yazar. Yöntem yalnız `NAKIT`, tutar en
+      çok kalan tutar (kurye fazla tahsilat yazamaz). Parayı alan ve kaydı yapan kuryedir.
+    - **Kasa teslimi:** Kasa (PATRON, BAKU_FINANS; SUPER_ADMIN PATRON gibi, yeni `KASA`
+      grubu) bir kuryenin açık nakit tahsilatlarından seçtiklerini teslim alır. Tutar,
+      seçilenlerin toplamına eşit olmalı; böylece teslim hiçbir zaman bakiyeyi aşmaz. Kısmi
+      tutar (ör. eksik para) desteklenmiyor; eksik için PATRON ters kayıt yazar.
+    - **Tablo adı:** Spec `kurye_id` diyordu. Zimmet kullanıcıya yazıldığı için kolon
+      `kurye_kullanici_id` (kullanıcı kimliği) oldu.
+    - **Defterde tek değişiklik:** `odemeler` append-only kalıyor. Tek istisna: açık bir
+      kurye nakdinin `kasa_teslim_id`'si bir kez, aynı kuryenin aynı tenant'taki teslimine
+      yazılabiliyor (service_role'a yalnız bu kolon için UPDATE; gerisini tetikleyici
+      reddediyor). Teslim edilmiş nakit ters kayıtla düzeltilemez. Teslim ile ters kayıt
+      aynı anda gelirse yalnız biri geçiyor (yarış testi).
+    - **Kurye ekranı:** `VITE_FF_V2_FLOW` açıkken kurye ekranında "Üzərimdə olan nağd pul"
+      bölümü ayrı bir parça olarak yükleniyor. Sunucu bayrağı kapalıysa (404) görünmüyor.
+      v1 kurye görev listesi ve teslim akışı değişmedi.
+    - **Demo alanı:** `demo_sandbox` Supabase'e bağlıyken kurye kayıtları veritabanında,
+      siparişleri bellekte olduğu için kurye nakdi orada çalışmıyor (503).
