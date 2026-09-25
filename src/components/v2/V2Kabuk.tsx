@@ -9,14 +9,16 @@ import V2Ayarlar from './V2Ayarlar';
 // Sipariş girişi kendi parçasında: kabuk açılınca değil, sekme seçilince yüklenir.
 const SiparisGirisi = lazy(() => import('./SiparisGirisi'));
 const V2Kasa = lazy(() => import('./V2Kasa'));
+const KacaklarPanosu = lazy(() => import('./KacaklarPanosu'));
 
 type SunucuDurumu = 'yukleniyor' | 'acik' | 'kapali' | 'hata';
-type Sekme = 'siparisler' | 'kasa' | 'kurlar' | 'ayarlar';
+type Sekme = 'siparisler' | 'kasa' | 'kacaklar' | 'kurlar' | 'ayarlar';
 
 /**
  * v2 kabuğu (VITE_FF_V2_FLOW). Ayrı bir parça olarak yüklenir; bayrak kapalıyken
  * derlemeye hiç girmez. Sekmeler sunucudaki allowlist ile aynı gruplardan açılır:
- * siparişler STAFF (form yalnız SALES), kasa FINANCE, kurlar RATES, ayarlar OWNERS.
+ * siparişler STAFF (form yalnız SALES), kasa FINANCE, kaçaklar KASA (Q4, Q5), kurlar RATES,
+ * ayarlar OWNERS.
  */
 export default function V2Kabuk() {
   const navigate = useNavigate();
@@ -25,6 +27,7 @@ export default function V2Kabuk() {
   const sekmeler: Array<{ id: Sekme; ad: string }> = [
     ...(rolGrubunda(aktifRol, 'STAFF') ? [{ id: 'siparisler' as const, ad: 'Sifarişlər' }] : []),
     ...(rolGrubunda(aktifRol, 'FINANCE') ? [{ id: 'kasa' as const, ad: 'Kassa' }] : []),
+    ...(rolGrubunda(aktifRol, 'KASA') ? [{ id: 'kacaklar' as const, ad: 'Qaçaqlar' }] : []),
     ...(rolGrubunda(aktifRol, 'RATES') ? [{ id: 'kurlar' as const, ad: 'Kurlar' }] : []),
     ...(rolGrubunda(aktifRol, 'OWNERS') ? [{ id: 'ayarlar' as const, ad: 'Ayarlar' }] : []),
   ];
@@ -96,6 +99,11 @@ export default function V2Kabuk() {
         {durum === 'acik' && aktif === 'kasa' && (
           <Suspense fallback={<p className="text-sm text-slate-400">Yüklənir…</p>}>
             <V2Kasa />
+          </Suspense>
+        )}
+        {durum === 'acik' && aktif === 'kacaklar' && (
+          <Suspense fallback={<p className="text-sm text-slate-400">Yüklənir…</p>}>
+            <KacaklarPanosu />
           </Suspense>
         )}
         {durum === 'acik' && aktif === 'kurlar' && <V2Kurlar />}
