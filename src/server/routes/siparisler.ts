@@ -651,7 +651,18 @@ router.post('/siparisler', async (req, res) => {
   }
 });
 
+// Order detail form (SiparisDetayModal; Codex R3 F14). The Canada purchase details and
+// the customer's customs identity are written by the owners and the buyers, never by
+// sales or finance; a platform admin writes no customs identity (OPEN_QUESTIONS 34).
+const purchaseDetailFields = [
+  'kanada_magaza_adi',
+  'kanada_alis_fiyati_cad',
+  'kanada_fatura_gorseli',
+];
+const customsFields = ['kanada_gumruk_fin_kodu', 'kanada_gumruk_pasaport_no'];
 const generalFields = new Set([
+  ...purchaseDetailFields,
+  ...customsFields,
   'ham_mesaj',
   'musteri_id',
   'musteri_adi',
@@ -699,6 +710,8 @@ const salesFields = new Set(
         'teslim_tarihi',
         'teslim_eden_kisi',
         'kargo_agirligi_kg',
+        ...purchaseDetailFields,
+        ...customsFields,
       ].includes(field)
   )
 );
@@ -751,7 +764,44 @@ const purchaseFields = new Set([
   'baku_kurye_adi',
   'baku_kurye_bolgesi',
   'kargo_agirligi_kg',
+  ...purchaseDetailFields,
+  ...customsFields,
 ]);
+/** Light checks of the detail form values; FIN and passport are stored upper-case. */
+function checkDetailFields(updates: Record<string, unknown>): void {
+  const bad = (field: string) => new PublicResourceError('Geçersiz değer: ' + field, 400);
+  const text = (field: string, pattern: RegExp) => {
+    const value = updates[field];
+    if (value === undefined || value === null) return;
+    if (typeof value !== 'string') throw bad(field);
+    const normalized = value.trim().toUpperCase();
+    if (normalized !== '' && !pattern.test(normalized)) throw bad(field);
+    updates[field] = normalized;
+  };
+  text('kanada_gumruk_fin_kodu', /^[A-Z0-9]{7}$/);
+  text('kanada_gumruk_pasaport_no', /^[A-Z0-9]{6,12}$/);
+  const store = updates.kanada_magaza_adi;
+  if (store !== undefined && store !== null && (typeof store !== 'string' || store.length > 200))
+    throw bad('kanada_magaza_adi');
+  const price = updates.kanada_alis_fiyati_cad;
+  if (
+    price !== undefined &&
+    price !== null &&
+    (typeof price !== 'number' || !Number.isFinite(price) || price < 0 || price > 1_000_000)
+  )
+    throw bad('kanada_alis_fiyati_cad');
+  // An invoice photo: an uploaded file or an inline image under the 4.5 MB request limit.
+  const invoice = updates.kanada_fatura_gorseli;
+  if (
+    invoice !== undefined &&
+    invoice !== null &&
+    (typeof invoice !== 'string' ||
+      invoice.length > 4_200_000 ||
+      (invoice !== '' &&
+        !/^(data:image\/(png|jpeg|webp|gif);base64,|(\/api)?\/uploads\/)/.test(invoice)))
+  )
+    throw bad('kanada_fatura_gorseli');
+}
 async function ownedOrder(tenant: string, id: string): Promise<any | undefined> {
   if (dbActive(tenant)) {
     const { data, error } = await supabase
@@ -795,6 +845,8 @@ router.patch('/siparisler/:id', async (req, res) => {
       // (OPEN_QUESTIONS 20, 32), in v1 as in the v2 ledger.
       if (role === PLATFORM_ROLU && (key === 'alinan_tutar' || key === 'finans_durumu'))
         throw new PublicResourceError('Platform yöneticisi tahsilatı değiştiremez.', 403);
+      if (role === PLATFORM_ROLU && customsFields.includes(key))
+        throw new PublicResourceError('Platform yöneticisi gümrük kimlik bilgisi yazamaz.', 403);
       if (
         [
           'baku_kurye_id',
@@ -818,6 +870,7 @@ router.patch('/siparisler/:id', async (req, res) => {
         updates.eksik_bilgiler.some((v: any) => typeof v !== 'string' || v.startsWith('META:')))
     )
       throw new PublicResourceError('Geçersiz eksik bilgi listesi.', 400);
+    checkDetailFields(updates);
     await validateCustomerReference(tenant, updates.musteri_id);
     await assertTenantImageReferences(req, updates);
     const kaynak = dbActive(tenant)

@@ -36,6 +36,7 @@ export const SIPARIS_EK_ALANLAR = [
   'kanada_fatura_no',
   'kanada_fatura_gorseli',
   'kanada_gumruk_fin_kodu',
+  'kanada_gumruk_pasaport_no',
   'islem_gecmisi',
 ] as const;
 

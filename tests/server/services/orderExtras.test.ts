@@ -17,6 +17,7 @@ const extras = {
   kanada_fatura_no: 'FIXTURE-001',
   kanada_fatura_gorseli: null,
   kanada_gumruk_fin_kodu: 'SYNTHETIC',
+  kanada_gumruk_pasaport_no: 'SYNTHETIC1',
   islem_gecmisi: [
     { tarih: '2026-01-01', yapan_rol: 'PATRON', yapan_kisi: 'Fixture', eylem: 'Updated' },
   ],
