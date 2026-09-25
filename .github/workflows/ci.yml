@@ -122,6 +122,8 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/security-rls.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/inbox-transactions.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/maintenance-transactions.sql
+          # Backup columns: the list the export/restore round-trip test relies on.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/siparis-yedek-kolonlari.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/onboarding-transactions.sql
           # Role catalog (A4) and ABD_SATINALMA (A5); then the role migrations
           # up -> down -> up, and the same tests again on the rebuilt schema.
