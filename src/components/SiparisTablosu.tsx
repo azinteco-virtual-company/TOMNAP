@@ -730,6 +730,17 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
                             onChange={(e) =>
                               handleFinansDurumDegistir(siparis, e.target.value as FinansDurumu)
                             }
+                            // The server refuses both: a platform admin never changes the
+                            // money collected (OPEN_QUESTIONS 32); a v2 order's status
+                            // comes from its payment ledger (K20).
+                            disabled={aktifRol === 'SUPER_ADMIN' || siparis.model_surumu === 2}
+                            title={
+                              siparis.model_surumu === 2
+                                ? 'v2 sifarişin ödəniş vəziyyəti ödəniş dəftərindən gəlir.'
+                                : aktifRol === 'SUPER_ADMIN'
+                                  ? 'Platforma inzibatçısı ödənişi dəyişə bilməz.'
+                                  : undefined
+                            }
                             className={`text-xs font-bold px-2 py-1 rounded-full border-0 outline-none cursor-pointer ${
                               siparis.finans_durumu === 'ODENDI'
                                 ? 'bg-emerald-100 text-emerald-700'
