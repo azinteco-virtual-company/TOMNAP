@@ -8,7 +8,7 @@ import {
   siparislerVeritabani,
 } from '../state';
 import { localCourierForUser } from '../couriers';
-import { PLATFORM_ROLU, rolGrubunda } from '../../../shared/roller';
+import { rolGrubunda } from '../../../shared/roller';
 import { v2GovdesiniAyikla, v2Tenant } from './ortak';
 import {
   bellekteKasayaKapat,
@@ -391,8 +391,8 @@ export async function kasaTeslimAl(
       (k) =>
         k.id === userId &&
         k.durum === 'AKTIF' &&
-        rolGrubunda(k.rol, 'KASA') &&
-        (k.tenant_id === tenantId || k.rol === PLATFORM_ROLU)
+        rolGrubunda(k.rol, 'KASA_WRITE') &&
+        k.tenant_id === tenantId
     );
     if (!alan || !aktifFirma(tenantId)) rpcHatasi({ code: 'PT403' });
     if (
