@@ -1,4 +1,4 @@
-import { apiFetch, getApiContextVersion } from './lib/apiClient';
+import { ApiError, apiFetch, getApiContextVersion } from './lib/apiClient';
 import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Siparis, KullaniciRolu } from './types';
@@ -364,7 +364,11 @@ export default function App() {
   };
 
   // Durum veya alan güncelleme
-  const handleDurumGuncelle = async (id: string, guncellemeler: Partial<Siparis>) => {
+  // Sunucu kabul ettiyse true; red nedeni (yetki, 409 çakışma, geçersiz değer) bildirimde.
+  const handleDurumGuncelle = async (
+    id: string,
+    guncellemeler: Partial<Siparis>
+  ): Promise<boolean> => {
     // 2. Sunucuya bildirme
     try {
       const response = await apiFetch(`/api/siparisler/${id}`, {
@@ -377,8 +381,14 @@ export default function App() {
       siparisGuncelle(id, result.siparis);
       if (seciliSiparis?.id === id) setSeciliSiparis(result.siparis);
       bildirimGoster('Sipariş durumu güncellendi.');
+      return true;
     } catch (err) {
-      bildirimGoster('Sifariş yenilənmədi. İcazələrinizi və bağlantını yoxlayın.');
+      bildirimGoster(
+        err instanceof ApiError && err.status < 500
+          ? err.message
+          : 'Sifariş yenilənmədi. İcazələrinizi və bağlantını yoxlayın.'
+      );
+      return false;
     }
   };
 

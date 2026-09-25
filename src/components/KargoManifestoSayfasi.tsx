@@ -368,7 +368,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         s.toplam_tutar || 0,
         s.alinan_tutar || 0,
         s.kalan_tutar || 0,
-        s.gumruk_fin_kodu || '—',
+        s.kanada_gumruk_fin_kodu || '—',
         s.baku_kurye_adi || 'Bölgə üzrə',
         getLojistikEtiketi(s.lojistik_durumu).label,
         s.kanada_takip_kodu || '',
@@ -731,8 +731,8 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
       } else {
         metin += `   ✅ *ÖDƏNİLİB (0 AZN)*\n`;
       }
-      if (s.gumruk_fin_kodu) {
-        metin += `   🪪 FİN: ${s.gumruk_fin_kodu}\n`;
+      if (s.kanada_gumruk_fin_kodu) {
+        metin += `   🪪 FİN: ${s.kanada_gumruk_fin_kodu}\n`;
       }
       if (s.baku_kurye_adi) {
         metin += `   🛵 Kurye: ${s.baku_kurye_adi}\n`;
@@ -769,7 +769,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
           </div>
           <div class="alici-bolumu">
             <div class="etiket-satir"><span class="etiket-baslik">ALICI (GÖMRÜK):</span> <strong class="alici-adi">${s.musteri_adi}</strong></div>
-            <div class="etiket-satir"><span class="etiket-baslik">FİN KODU / Ş.V:</span> <span class="vurgu-kod">${s.gumruk_fin_kodu || 'QEYD EDİLMƏYİB'}</span></div>
+            <div class="etiket-satir"><span class="etiket-baslik">FİN KODU / Ş.V:</span> <span class="vurgu-kod">${s.kanada_gumruk_fin_kodu || 'QEYD EDİLMƏYİB'}</span></div>
             <div class="etiket-satir"><span class="etiket-baslik">TEL:</span> ${s.telefon_numarasi || '—'}</div>
             <div class="etiket-satir"><span class="etiket-baslik">ŞƏHƏR & ÜNVAN:</span> ${s.teslimat_sehri || 'Bakı'}, ${s.teslimat_adresi || 'Mərkəzi Təhvil'}</div>
           </div>
@@ -1438,9 +1438,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                       </td>
                       <td className="p-3">
                         <div className="text-xs">
-                          {s.gumruk_fin_kodu ? (
+                          {s.kanada_gumruk_fin_kodu ? (
                             <div className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md inline-block border border-slate-200">
-                              🪪 {s.gumruk_fin_kodu}
+                              🪪 {s.kanada_gumruk_fin_kodu}
                             </div>
                           ) : (
                             <span className="text-[10px] text-slate-400 italic">

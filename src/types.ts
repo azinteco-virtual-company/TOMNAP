@@ -104,6 +104,7 @@ export interface Siparis {
   kanada_fatura_no?: string; // Mağaza fiş/fatura no
   kanada_fatura_gorseli?: string; // Yüklenen fiş/fatura fotoğrafı
   kanada_gumruk_fin_kodu?: string; // Müşteri FIN Kodu (SmartCustoms gümrük beyannamesi için)
+  kanada_gumruk_pasaport_no?: string; // Müşteri pasaport no (gümrük; yazma: OPEN_QUESTIONS 34)
   tenant_id?: string; // Firma / Butik İdentifikatoru (Multi-Tenant SaaS)
   is_demo?: boolean; // Demo / Sınaq qeydi olub-olmadığı
   /** 2 = v2 order with order lines (A8); its totals come from the lines, not v1 fields. */

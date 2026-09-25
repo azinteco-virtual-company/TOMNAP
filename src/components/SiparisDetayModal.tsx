@@ -28,11 +28,13 @@ import {
 } from 'lucide-react';
 import { useDil } from '../context/DilKonteksti';
 import { uretKanadaTakipKodu, uretUluslararasiKargoKodu } from '../utils/pdfHelpers';
+import { detayFormuDegisiklikleri, FATURA_GORSELI_AZAMI_BAYT } from './siparisDetayFormu';
 
 interface SiparisDetayModalProps {
   siparis: Siparis | null;
   onKapat: () => void;
-  onGuncelle: (id: string, guncellemeler: Partial<Siparis>) => void;
+  /** Sunucu kaydı kabul ettiyse true. */
+  onGuncelle: (id: string, guncellemeler: Partial<Siparis>) => Promise<boolean>;
   onWhatsAppAc?: (siparis: Siparis) => void;
   onAtamaKaydedildi: (siparis: Siparis) => void;
   onSiparisYenile: () => Promise<void>;
@@ -51,6 +53,8 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
   const tenantId = useAppStore((state) => state.seciliFirmaId);
   const [kopyalandi, setKopyalandi] = useState(false);
   const [kaydedildi, setKaydedildi] = useState(false);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [formMesaji, setFormMesaji] = useState('');
   const [kanadaTakip, setKanadaTakip] = useState(siparis?.kanada_takip_kodu || '');
   const [kargoKodu, setKargoKodu] = useState(siparis?.uluslararasi_kargo_kodu || '');
   const [tahsilatNotu, setTahsilatNotu] = useState(siparis?.baku_tahsilat_notu || '');
@@ -62,8 +66,8 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
     siparis?.kanada_alis_fiyati_cad?.toString() || ''
   );
   const [faturaGorseli, setFaturaGorseli] = useState(siparis?.kanada_fatura_gorseli || '');
-  const [finKodu, setFinKodu] = useState(siparis?.gumruk_fin_kodu || '');
-  const [pasaportNo, setPasaportNo] = useState(siparis?.gumruk_pasaport_no || '');
+  const [finKodu, setFinKodu] = useState(siparis?.kanada_gumruk_fin_kodu || '');
+  const [pasaportNo, setPasaportNo] = useState(siparis?.kanada_gumruk_pasaport_no || '');
 
   React.useEffect(() => {
     if (siparis) {
@@ -74,8 +78,9 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
       setMagazaAdi(siparis.kanada_magaza_adi || '');
       setAlisFiyatiCad(siparis.kanada_alis_fiyati_cad?.toString() || '');
       setFaturaGorseli(siparis.kanada_fatura_gorseli || '');
-      setFinKodu(siparis.gumruk_fin_kodu || '');
-      setPasaportNo(siparis.gumruk_pasaport_no || '');
+      setFinKodu(siparis.kanada_gumruk_fin_kodu || '');
+      setPasaportNo(siparis.kanada_gumruk_pasaport_no || '');
+      setFormMesaji('');
     }
   }, [siparis]);
 
@@ -99,7 +104,9 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
 
   const handleFaturaYukle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (file && file.size > FATURA_GORSELI_AZAMI_BAYT) {
+      setFormMesaji('Fatura görseli en fazla 3 MB olabilir.');
+    } else if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setFaturaGorseli(reader.result as string);
@@ -108,18 +115,27 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
     }
   };
 
-  const kaydetDetaylar = () => {
-    onGuncelle(siparis.id, {
-      kanada_takip_kodu: kanadaTakip,
-      uluslararasi_kargo_kodu: kargoKodu,
-      baku_tahsilat_notu: tahsilatNotu,
-      ozel_not: ozelNot,
-      kanada_magaza_adi: magazaAdi,
-      kanada_alis_fiyati_cad: alisFiyatiCad ? parseFloat(alisFiyatiCad) : undefined,
-      kanada_fatura_gorseli: faturaGorseli,
-      gumruk_fin_kodu: finKodu,
-      gumruk_pasaport_no: pasaportNo,
+  // Yalnız değişen alanlar gider; "kaydedildi" sunucu kabul ettikten sonra (Codex R3 F14).
+  const kaydetDetaylar = async () => {
+    const sonuc = detayFormuDegisiklikleri(siparis, {
+      kanadaTakip,
+      kargoKodu,
+      tahsilatNotu,
+      ozelNot,
+      magazaAdi,
+      alisFiyatiCad,
+      faturaGorseli,
+      finKodu,
+      pasaportNo,
     });
+    if (sonuc.hata !== undefined) return setFormMesaji(sonuc.hata);
+    if (Object.keys(sonuc.degisiklikler).length === 0) return setFormMesaji('Değişiklik yok.');
+    setFormMesaji('');
+    setKaydediliyor(true);
+    const kabul = await onGuncelle(siparis.id, sonuc.degisiklikler).finally(() =>
+      setKaydediliyor(false)
+    );
+    if (!kabul) return setFormMesaji('Kaydedilmedi. Bildirimdeki nedene bakın.');
     setKaydedildi(true);
     setTimeout(() => setKaydedildi(false), 3000);
   };
@@ -458,6 +474,12 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
             </div>
           </div>
 
+          {formMesaji && (
+            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-bold">
+              {formMesaji}
+            </div>
+          )}
+
           {/* Kaydedildi Başarı Bildirimi */}
           {kaydedildi && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2 animate-fadeIn">
@@ -548,7 +570,8 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
             </button>
             <button
               onClick={kaydetDetaylar}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-sm cursor-pointer"
+              disabled={kaydediliyor}
+              className="px-4 py-2 disabled:opacity-60 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-sm cursor-pointer"
             >
               {kaydedildi ? t.kopyalandi : t.yaddaSaxla}
             </button>
