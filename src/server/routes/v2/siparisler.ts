@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import { PublicResourceError } from '../../services/publicFetch';
+import { PLATFORM_ROLU } from '../../../shared/roller';
 import {
+  sahipGerekli,
   v2SiparisGetir,
   v2SiparisGirdisiniDogrula,
   v2SiparisleriListele,
@@ -44,6 +46,8 @@ router.get('/siparis-sahipleri', async (req: Request, res: Response) => {
 router.post('/siparisler', async (req: Request, res: Response) => {
   try {
     const girdi = v2SiparisGirdisiniDogrula(req.body);
+    // The RPC refuses this too; answering here gives the clear message (O-24).
+    if (req.auth?.role === PLATFORM_ROLU && girdi.sahipKullaniciId === null) throw sahipGerekli();
     const siparis = await v2SiparisOlustur(req.tenantId, req.auth?.userId ?? '', girdi);
     res.status(201).json({ basarili: true, siparis });
   } catch (error) {

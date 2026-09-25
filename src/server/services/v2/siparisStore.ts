@@ -8,7 +8,7 @@ import {
   musterilerVeritabani,
   siparislerVeritabani,
 } from '../state';
-import { rolGrubunda } from '../../../shared/roller';
+import { PLATFORM_ROLU, rolGrubunda } from '../../../shared/roller';
 import { v2GovdesiniAyikla, v2Tenant } from './ortak';
 
 /**
@@ -192,6 +192,10 @@ interface BellekSatiri extends V2SiparisSatiri {
 }
 const satirBellegi: BellekSatiri[] = [];
 
+/** A platform admin is not a team member: it names the owner of every order it creates. */
+export const sahipGerekli = () =>
+  new PublicResourceError('Platform yöneticisi siparişin sahibini seçmelidir.', 400);
+
 const bellekModu = (tenantId: string) => !supabase || tenantId === 'demo_sandbox';
 const havuz = (tenantId: string): Record<string, unknown>[] =>
   tenantId === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani;
@@ -208,11 +212,13 @@ function bellekteOlustur(tenantId: string, userId: string, girdi: V2SiparisGirdi
   const firma = firmalarVeritabani.find((f) => f.id === tenantId);
   if (!firma || (firma.onayDurumu && firma.onayDurumu !== 'AKTIF'))
     throw new PublicResourceError('Firma aktif değil.', 403);
+  // Same rules as the RPC: the owner earns the prim, so it is always an active
+  // PATRON / SATIS_SORUMLUSU of the tenant; a platform admin must name one (O-24).
+  if (olusturan.rol === PLATFORM_ROLU && girdi.sahipKullaniciId === null) throw sahipGerekli();
   const sahip = girdi.sahipKullaniciId ?? olusturan.id;
   if (olusturan.rol === 'SATIS_SORUMLUSU' && sahip !== olusturan.id)
     throw new PublicResourceError('Satış sorumlusu yalnız kendi siparişinin sahibi olabilir.', 403);
   if (
-    sahip !== olusturan.id &&
     !kullanicilarVeritabani.some(
       (u) =>
         u.id === sahip &&

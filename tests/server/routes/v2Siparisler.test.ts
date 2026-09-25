@@ -254,15 +254,34 @@ describe('v2 orders with lines and an owner (A8)', () => {
       expect((await agents.PATRON.get(`/api/v2/siparisler/${id}`)).status).toBe(404);
   });
 
-  it('lets the administrator create in a selected boutique; the owner defaults to the creator', async () => {
-    const created = await agents.SUPER_ADMIN.post(`/api/v2/siparisler?tenant_id=${TENANT}`).send(
-      siparis()
+  it('lets the administrator create in a selected boutique only for a named team owner (O-24)', async () => {
+    const url = `/api/v2/siparisler?tenant_id=${TENANT}`;
+    const before = siparislerVeritabani.length;
+    const missing = await agents.SUPER_ADMIN.post(url).send(siparis());
+    expect([missing.status, missing.body.hata]).toEqual([
+      400,
+      'Platform yöneticisi siparişin sahibini seçmelidir.',
+    ]);
+    const self = await agents.SUPER_ADMIN.post(url).send(
+      siparis({ sahip_kullanici_id: userIds.SUPER_ADMIN })
+    );
+    expect(self.status).toBe(409);
+    expect(siparislerVeritabani.length).toBe(before);
+
+    const created = await agents.SUPER_ADMIN.post(url).send(
+      siparis({ sahip_kullanici_id: 'v2-diger-satis' })
     );
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     expect(created.body.siparis).toMatchObject({
       tenantId: TENANT,
-      sahipKullaniciId: userIds.SUPER_ADMIN,
+      sahipKullaniciId: 'v2-diger-satis',
     });
-    expect((await agents.SUPER_ADMIN.post('/api/v2/siparisler').send(siparis())).status).toBe(403);
+    expect(
+      (
+        await agents.SUPER_ADMIN.post('/api/v2/siparisler').send(
+          siparis({ sahip_kullanici_id: 'v2-diger-satis' })
+        )
+      ).status
+    ).toBe(403);
   });
 });
