@@ -117,6 +117,12 @@ describe('role catalog is the single source of roles (A4)', () => {
         ),
         name
       ).toEqual([[...ROL_GRUPLARI.FINANCE].sort()]);
+    // Cash desk (A11): hand-over receivers are exactly the KASA group.
+    expect(
+      [...latestSqlDefinition('tomnap_v2_kasa_teslimi').matchAll(/rol IN \(([^)]*)\)/g)].map(
+        (match) => quoted(match[1])
+      )
+    ).toEqual([[...ROL_GRUPLARI.KASA].sort()]);
     const approvers = latestSqlDefinition('tomnap_approve_awb_matches').match(
       /u\.rol IN \(([^)]*)\)/
     );
