@@ -427,3 +427,16 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       v1 kurye görev listesi ve teslim akışı değişmedi.
     - **Demo alanı:** `demo_sandbox` Supabase'e bağlıyken kurye kayıtları veritabanında,
       siparişleri bellekte olduğu için kurye nakdi orada çalışmıyor (503).
+
+30. **Kaçaklar panosu v0: Q4 ve Q5 (A12, varsayım).**
+    - **Q4:** Faz A'da ürün birimi olmadığı için "bütün birimler teslim edildi" yerine
+      siparişin `lojistik_durumu = TESLIM_EDILDI` kullanılıyor; "ödenmedi" = `kalan_tutar > 0`
+      (v2'de defterden türetilir). Yaş teslim tarihinden sayılıyor; tarih yoksa son
+      güncelleme. En eski 500 kayıt.
+    - **Q5:** A11'in bakiye tanımı kullanılıyor (Σ nakit − Σ kasa teslimi); bekleme süresi en
+      eski açık tahsilattan. Kasaya teslim edilmiş ya da ters kaydı olan nakit görünmüyor.
+    - **Eşikler:** Spec eşikleri `tenant_v2_ayarlari`'ndan okuyordu. O tabloya kolon eklemek
+      yerine v0'da sorgu parametresi (`?q4_gun=`, `?q5_saat=`) ve spec varsayılanları (0 gün,
+      24 saat) kullanılıyor. Tenant bazında saklamak Faz D'ye kaldı.
+    - **Kim görür:** PATRON, SUPER_ADMIN, BAKU_FINANS (`KASA` grubu; rol matrisinde Q4 ve
+      Q5'i görenler). Diğer sorgular (Q1–Q3, Q6–Q8) Faz B–D'de.
