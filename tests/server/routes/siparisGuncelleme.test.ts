@@ -109,10 +109,10 @@ describe('PATCH /api/siparisler/:id writes only what changed (Codex R3 F1/F2)', 
     env.row = order({ alinan_tutar: 20, finans_durumu: 'KISMI_ODEME', kalan_tutar: 80 });
     const paid = await request(app('BAKU_FINANS'))
       .patch(`/api/siparisler/${env.row.id}`)
-      .send({ alinan_tutar: 50 });
+      .send({ alinan_tutar: 100 });
     expect(paid.status, JSON.stringify(paid.body)).toBe(200);
     expect(env.writes[0]).toMatchObject({
-      values: { alinan_tutar: 50, finans_durumu: 'KISMI_ODEME' },
+      values: { alinan_tutar: 100, finans_durumu: 'ODENDI' },
       expected: { alinan_tutar: 20, toplam_tutar: 100 },
     });
 

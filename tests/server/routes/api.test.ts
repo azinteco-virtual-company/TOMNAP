@@ -100,8 +100,16 @@ describe('API Rota Entegrasyon Testleri', () => {
     const eklenenId = ekleRes.body.siparis.id;
     expect(eklenenId).toBeDefined();
 
-    // 2. Güncelle
-    const guncelleRes = await authenticated
+    // 2. Güncelle: tahsilatı ekip yazar; platform yöneticisi yazamaz (OPEN_QUESTIONS 32).
+    const patron = (await loginFixture(app, 'PATRON', 'kanada_shopper_baku')).agent;
+    expect(
+      (
+        await authenticated
+          .patch(`/api/siparisler/${eklenenId}`)
+          .send({ alinan_tutar: 220, finans_durumu: 'ODENDI' })
+      ).status
+    ).toBe(403);
+    const guncelleRes = await patron
       .patch(`/api/siparisler/${eklenenId}`)
       .send({ alinan_tutar: 220, finans_durumu: 'ODENDI' });
     expect(guncelleRes.status).toBe(200);

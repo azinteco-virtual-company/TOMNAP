@@ -90,6 +90,41 @@ function database(tables: Record<string, any[]>) {
     failures,
     beforeUpdate: undefined as (() => void) | undefined,
     rpc: vi.fn(async (name: string, args: any) => {
+      if (name === 'tomnap_siparis_guncelle') {
+        // Stand-in for the order edit RPC (Codex R3 F1/F2): the real locking is exercised
+        // by the SQL race tests; here the expected values and the scoped write are checked.
+        calls.push({
+          table: 'siparisler',
+          operation: 'update',
+          filters: [
+            ['eq', 'tenant_id', args.p_tenant_id],
+            ['eq', 'id', args.p_siparis_id],
+          ],
+        });
+        const failure = failures.findIndex(
+          (item) => item.table === 'siparisler' && item.operation === 'update'
+        );
+        if (failure >= 0) {
+          failures.splice(failure, 1);
+          return { data: null, error: { message: 'private database detail' } };
+        }
+        db.beforeUpdate?.();
+        const row = tables.siparisler.find(
+          (item) => item.id === args.p_siparis_id && item.tenant_id === args.p_tenant_id
+        );
+        if (!row) return { data: null, error: { code: 'PT404' } };
+        const same = (a: any, b: any) =>
+          JSON.stringify(a ?? null) === JSON.stringify(b ?? null) ||
+          (a !== null &&
+            b !== null &&
+            a !== undefined &&
+            b !== undefined &&
+            Number(a) === Number(b));
+        for (const [key, value] of Object.entries(args.p_beklenen))
+          if (!same(row[key], value)) return { data: null, error: { code: 'PT409' } };
+        Object.assign(row, structuredClone(args.p_degisiklik));
+        return { data: structuredClone(row), error: null };
+      }
       if (name === 'tomnap_list_page' || name === 'tomnap_customer_snapshot') {
         const selected =
           name === 'tomnap_list_page' ? [args.p_dataset] : ['musteriler', 'siparisler'];
