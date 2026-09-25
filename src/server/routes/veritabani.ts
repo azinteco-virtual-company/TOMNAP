@@ -13,6 +13,7 @@ import {
   demoSiparislerVeritabani,
   setDemoSiparislerVeritabani,
   firmalarVeritabani,
+  kullanicilarVeritabani,
   musterilerVeritabani,
 } from '../services/state';
 import { BASLANGIC_SIPARISLER } from '../../data/ornek-siparisler';
@@ -22,6 +23,7 @@ import { PublicResourceError } from '../services/publicFetch';
 const router = Router();
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const localReceipts = new Map<string, { fingerprint: string; result: any }>();
+const KURYE_KOLONLARI = ['kurye_atama_surumu', 'kurye_teslim_kullanici_id', 'kurye_teslim_alan'];
 const tenantOf = (row: any) => row.tenant_id || formatlaSiparis(row).tenant_id;
 const localRows = (tenant: string) =>
   tenant === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani;
@@ -89,6 +91,8 @@ function prepareRows(rows: any, tenant: string, demo = false) {
     // v1 export of the A8 columns; only v1 values are accepted below.
     'model_surumu',
     'sahip_kullanici_id',
+    // Courier columns the server added later (database export carries them).
+    ...KURYE_KOLONLARI,
   ]);
   return rows.map((raw: any) => {
     if (
@@ -121,6 +125,18 @@ function prepareRows(rows: any, tenant: string, demo = false) {
       (raw.sahip_kullanici_id !== undefined && raw.sahip_kullanici_id !== null)
     )
       throw new PublicResourceError('v2 siparişleri bu yedekle yüklenemez.', 400);
+    const kuryeKullanicisi = raw.kurye_teslim_kullanici_id,
+      teslimAlan = raw.kurye_teslim_alan,
+      surum = raw.kurye_atama_surumu;
+    if (
+      !(
+        kuryeKullanicisi == null ||
+        (typeof kuryeKullanicisi === 'string' && kuryeKullanicisi.length <= 200)
+      ) ||
+      !(teslimAlan == null || (typeof teslimAlan === 'string' && teslimAlan.length <= 150)) ||
+      !(surum == null || (Number.isSafeInteger(surum) && surum >= 0))
+    )
+      throw new PublicResourceError('Kurye teslim bilgisi geçersiz.', 400);
     const claims = [
       raw.tenant_id,
       raw.tenantId,
@@ -173,6 +189,11 @@ function prepareRows(rows: any, tenant: string, demo = false) {
       }),
       id,
     };
+    // Who delivered and to whom goes back; the assignment version never does:
+    // it only moves forward (kept for an existing order, default for a new one).
+    if (kuryeKullanicisi !== undefined)
+      payload.kurye_teslim_kullanici_id = kuryeKullanicisi || null;
+    if (teslimAlan !== undefined) payload.kurye_teslim_alan = teslimAlan;
     for (const field of ['olusturma_tarihi', 'guncellenme_tarihi'])
       if (raw[field] !== undefined) {
         if (typeof raw[field] !== 'string' || !Number.isFinite(Date.parse(raw[field])))
@@ -181,6 +202,35 @@ function prepareRows(rows: any, tenant: string, demo = false) {
       }
     return payload;
   });
+}
+/** Every delivering courier named in a backup must be a user of the target tenant. */
+async function assertTenantCouriers(
+  tenant: string,
+  rows: ReadonlyArray<{ kurye_teslim_kullanici_id?: unknown }>
+) {
+  const ids = [
+    ...new Set(
+      rows
+        .map((row) => row.kurye_teslim_kullanici_id)
+        .filter((id): id is string => typeof id === 'string' && id !== '')
+    ),
+  ];
+  if (!ids.length) return;
+  let found: string[];
+  if (dbActive(tenant)) {
+    const { data, error } = await supabase
+      .from('kullanicilar')
+      .select('id,tenant_id')
+      .eq('tenant_id', tenant)
+      .in('id', ids);
+    if (error || !Array.isArray(data)) throw new Error('Courier lookup failed');
+    const users: Array<{ id?: unknown; tenant_id?: unknown }> = data;
+    found = users.flatMap((u) =>
+      u.tenant_id === tenant && typeof u.id === 'string' ? [u.id] : []
+    );
+  } else found = kullanicilarVeritabani.filter((u) => u.tenant_id === tenant).map((u) => u.id);
+  if (ids.some((id) => !found.includes(id)))
+    throw new PublicResourceError('Yedekteki kurye kullanıcısı seçili firmada bulunamadı.', 404);
 }
 async function maintain(
   tenant: string,
@@ -223,9 +273,18 @@ async function maintain(
     )
   )
     throw new PublicResourceError('Yükleme mevcut sipariş kimliğiyle çakışıyor.', 409);
-  const normalized = rows.map((row) =>
-    formatlaSiparis({ ...row, olusturma_tarihi: row.olusturma_tarihi || new Date().toISOString() })
-  );
+  const normalized = rows.map((row) => {
+    const existing = current.find(
+      (r) => (UUID.test(r.id) ? r.id.toLowerCase() : r.id) === row.id && tenantOf(r) === tenant
+    );
+    return formatlaSiparis({
+      ...row,
+      ...(existing?.kurye_atama_surumu !== undefined
+        ? { kurye_atama_surumu: existing.kurye_atama_surumu }
+        : {}),
+      olusturma_tarihi: row.olusturma_tarihi || new Date().toISOString(),
+    });
+  });
   const next = [
     ...current.filter((r) => mode === 'merge' || tenantOf(r) !== tenant),
     ...normalized,
@@ -350,6 +409,7 @@ router.post('/veritabani/yedek-yukle', async (req, res) => {
       }
     }
     await assertTenantImageReferences(req, rows);
+    await assertTenantCouriers(tenant, rows);
     const result = await maintain(tenant, key, replace ? 'replace' : 'merge', rows);
     res.json({ basarili: true, ...result, mesaj: 'Sipariş yedeği seçili firmaya yüklendi.' });
   } catch (error) {
