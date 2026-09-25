@@ -9,12 +9,18 @@
 SELECT set_config('tomnap_test.kolonlar', :'kolonlar', false) AS kolonlar_ayari \gset
 
 DO $$
-DECLARE beklenen jsonb := current_setting('tomnap_test.kolonlar')::jsonb; gercek jsonb;
+DECLARE yeni text[]; eksik text[];
 BEGIN
-  SELECT jsonb_agg(column_name::text ORDER BY column_name::text) INTO gercek
-    FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'siparisler';
-  SELECT jsonb_agg(value ORDER BY value) INTO beklenen FROM jsonb_array_elements_text(beklenen);
-  IF gercek IS DISTINCT FROM beklenen THEN
-    RAISE EXCEPTION 'siparisler columns changed; update tests/fixtures/siparisler-kolonlari.json and the backup restore. Table: %, list: %', gercek, beklenen;
+  -- Set comparison: independent of the cluster's collation and of column order.
+  SELECT array_agg(k) INTO yeni FROM (
+    SELECT column_name::text AS k FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'siparisler'
+    EXCEPT SELECT jsonb_array_elements_text(current_setting('tomnap_test.kolonlar')::jsonb)) t;
+  SELECT array_agg(k) INTO eksik FROM (
+    SELECT jsonb_array_elements_text(current_setting('tomnap_test.kolonlar')::jsonb) AS k
+    EXCEPT SELECT column_name::text FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'siparisler') t;
+  IF yeni IS NOT NULL OR eksik IS NOT NULL THEN
+    RAISE EXCEPTION 'siparisler columns changed; update tests/fixtures/siparisler-kolonlari.json and the backup restore. Only in the table: %; only in the list: %', yeni, eksik;
   END IF;
 END $$;
