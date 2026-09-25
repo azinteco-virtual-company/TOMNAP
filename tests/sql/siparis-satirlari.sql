@@ -144,8 +144,10 @@ BEGIN
 END $$;
 ROLLBACK;
 
--- 3. Up -> down -> up (no v2 order is committed at this point).
+-- 3. Up -> down -> up (no v2 order is committed at this point). Newer migrations
+-- that replace the order RPC roll back first and are re-applied last.
 BEGIN;
+\ir ../../supabase/rollbacks/20260925100000_siparis_sahibi_kurali.down.sql
 \ir ../../supabase/rollbacks/20260924150000_siparis_satirlari.down.sql
 COMMIT;
 BEGIN;
@@ -175,3 +177,4 @@ DO $$ BEGIN
     RAISE EXCEPTION 'Re-applied order line migration is incomplete';
   END IF;
 END $$;
+\ir ../../supabase/migrations/20260925100000_siparis_sahibi_kurali.sql
