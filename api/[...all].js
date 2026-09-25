@@ -8973,6 +8973,7 @@ import { createHash as createHash5 } from "node:crypto";
 var router8 = Router8();
 var UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 var localReceipts = /* @__PURE__ */ new Map();
+var KURYE_KOLONLARI = ["kurye_atama_surumu", "kurye_teslim_kullanici_id", "kurye_teslim_alan"];
 var tenantOf = (row) => row.tenant_id || formatlaSiparis(row).tenant_id;
 var localRows = (tenant2) => tenant2 === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
 var dbActive3 = (tenant2) => !!supabase && tenant2 !== "demo_sandbox";
@@ -9015,7 +9016,9 @@ function prepareRows(rows, tenant2, demo = false) {
     "birden_fazla_urun",
     // v1 export of the A8 columns; only v1 values are accepted below.
     "model_surumu",
-    "sahip_kullanici_id"
+    "sahip_kullanici_id",
+    // Courier columns the server added later (database export carries them).
+    ...KURYE_KOLONLARI
   ]);
   return rows.map((raw) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw) || typeof raw.id !== "string" || !raw.id || raw.id.length > 200)
@@ -9029,6 +9032,9 @@ function prepareRows(rows, tenant2, demo = false) {
       );
     if (raw.model_surumu !== void 0 && raw.model_surumu !== null && Number(raw.model_surumu) !== 1 || raw.sahip_kullanici_id !== void 0 && raw.sahip_kullanici_id !== null)
       throw new PublicResourceError("v2 sipari\u015Fleri bu yedekle y\xFCklenemez.", 400);
+    const kuryeKullanicisi = raw.kurye_teslim_kullanici_id, teslimAlan = raw.kurye_teslim_alan, surum = raw.kurye_atama_surumu;
+    if (!(kuryeKullanicisi == null || typeof kuryeKullanicisi === "string" && kuryeKullanicisi.length <= 200) || !(teslimAlan == null || typeof teslimAlan === "string" && teslimAlan.length <= 150) || !(surum == null || Number.isSafeInteger(surum) && surum >= 0))
+      throw new PublicResourceError("Kurye teslim bilgisi ge\xE7ersiz.", 400);
     const claims = [
       raw.tenant_id,
       raw.tenantId,
@@ -9060,6 +9066,9 @@ function prepareRows(rows, tenant2, demo = false) {
       }),
       id
     };
+    if (kuryeKullanicisi !== void 0)
+      payload.kurye_teslim_kullanici_id = kuryeKullanicisi || null;
+    if (teslimAlan !== void 0) payload.kurye_teslim_alan = teslimAlan;
     for (const field of ["olusturma_tarihi", "guncellenme_tarihi"])
       if (raw[field] !== void 0) {
         if (typeof raw[field] !== "string" || !Number.isFinite(Date.parse(raw[field])))
@@ -9068,6 +9077,25 @@ function prepareRows(rows, tenant2, demo = false) {
       }
     return payload;
   });
+}
+async function assertTenantCouriers(tenant2, rows) {
+  const ids = [
+    ...new Set(
+      rows.map((row) => row.kurye_teslim_kullanici_id).filter((id) => typeof id === "string" && id !== "")
+    )
+  ];
+  if (!ids.length) return;
+  let found;
+  if (dbActive3(tenant2)) {
+    const { data, error: error2 } = await supabase.from("kullanicilar").select("id,tenant_id").eq("tenant_id", tenant2).in("id", ids);
+    if (error2 || !Array.isArray(data)) throw new Error("Courier lookup failed");
+    const users = data;
+    found = users.flatMap(
+      (u) => u.tenant_id === tenant2 && typeof u.id === "string" ? [u.id] : []
+    );
+  } else found = kullanicilarVeritabani.filter((u) => u.tenant_id === tenant2).map((u) => u.id);
+  if (ids.some((id) => !found.includes(id)))
+    throw new PublicResourceError("Yedekteki kurye kullan\u0131c\u0131s\u0131 se\xE7ili firmada bulunamad\u0131.", 404);
 }
 async function maintain(tenant2, key, mode, rows) {
   if (dbActive3(tenant2)) {
@@ -9098,9 +9126,16 @@ async function maintain(tenant2, key, mode, rows) {
     (r) => ids.has(UUID.test(r.id) ? r.id.toLowerCase() : r.id) && (mode === "merge" || tenantOf(r) !== tenant2)
   ))
     throw new PublicResourceError("Y\xFCkleme mevcut sipari\u015F kimli\u011Fiyle \xE7ak\u0131\u015F\u0131yor.", 409);
-  const normalized = rows.map(
-    (row) => formatlaSiparis({ ...row, olusturma_tarihi: row.olusturma_tarihi || (/* @__PURE__ */ new Date()).toISOString() })
-  );
+  const normalized = rows.map((row) => {
+    const existing = current.find(
+      (r) => (UUID.test(r.id) ? r.id.toLowerCase() : r.id) === row.id && tenantOf(r) === tenant2
+    );
+    return formatlaSiparis({
+      ...row,
+      ...existing?.kurye_atama_surumu !== void 0 ? { kurye_atama_surumu: existing.kurye_atama_surumu } : {},
+      olusturma_tarihi: row.olusturma_tarihi || (/* @__PURE__ */ new Date()).toISOString()
+    });
+  });
   const next = [
     ...current.filter((r) => mode === "merge" || tenantOf(r) !== tenant2),
     ...normalized
@@ -9216,6 +9251,7 @@ router8.post("/veritabani/yedek-yukle", async (req, res) => {
       }
     }
     await assertTenantImageReferences(req, rows);
+    await assertTenantCouriers(tenant2, rows);
     const result2 = await maintain(tenant2, key, replace ? "replace" : "merge", rows);
     res.json({ basarili: true, ...result2, mesaj: "Sipari\u015F yede\u011Fi se\xE7ili firmaya y\xFCklendi." });
   } catch (error2) {
@@ -11170,6 +11206,7 @@ function siparisToplami(satirlar) {
   return kurus / 100;
 }
 var satirBellegi = [];
+var sahipGerekli = () => new PublicResourceError("Platform y\xF6neticisi sipari\u015Fin sahibini se\xE7melidir.", 400);
 var bellekModu = (tenantId) => !supabase || tenantId === "demo_sandbox";
 var havuz = (tenantId) => tenantId === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
 function bellekteOlustur(tenantId, userId, girdi) {
@@ -11180,10 +11217,11 @@ function bellekteOlustur(tenantId, userId, girdi) {
   const firma = firmalarVeritabani.find((f) => f.id === tenantId);
   if (!firma || firma.onayDurumu && firma.onayDurumu !== "AKTIF")
     throw new PublicResourceError("Firma aktif de\u011Fil.", 403);
+  if (olusturan.rol === PLATFORM_ROLU && girdi.sahipKullaniciId === null) throw sahipGerekli();
   const sahip = girdi.sahipKullaniciId ?? olusturan.id;
   if (olusturan.rol === "SATIS_SORUMLUSU" && sahip !== olusturan.id)
     throw new PublicResourceError("Sat\u0131\u015F sorumlusu yaln\u0131z kendi sipari\u015Finin sahibi olabilir.", 403);
-  if (sahip !== olusturan.id && !kullanicilarVeritabani.some(
+  if (!kullanicilarVeritabani.some(
     (u) => u.id === sahip && u.tenant_id === tenantId && u.durum === "AKTIF" && rolGrubunda(u.rol, "ORDER_OWNERS")
   ))
     throw new PublicResourceError("Sahip bu firman\u0131n aktif bir sat\u0131\u015F sorumlusu de\u011Fil.", 409);
@@ -11575,6 +11613,7 @@ router11.get("/siparis-sahipleri", async (req, res) => {
 router11.post("/siparisler", async (req, res) => {
   try {
     const girdi = v2SiparisGirdisiniDogrula(req.body);
+    if (req.auth?.role === PLATFORM_ROLU && girdi.sahipKullaniciId === null) throw sahipGerekli();
     const siparis = await v2SiparisOlustur(req.tenantId, req.auth?.userId ?? "", girdi);
     res.status(201).json({ basarili: true, siparis });
   } catch (error2) {
