@@ -97,6 +97,11 @@ async function rpc(name: string, args: Record<string, unknown>) {
     throw new PublicResourceError('Kurye işlemi doğrulanamadı.', 503);
   return data;
 }
+/** Development store: the active courier record bound to a user (A11 cash collection). */
+export function localCourierForUser(tenant: string, userId: string): CourierRecord | undefined {
+  scope(tenant);
+  return localRecords().find((r) => r.tenant_id === tenant && r.kullanici_id === userId && r.aktif);
+}
 export function deliveryTask(order: any) {
   // Do not spread an order here: this is the courier's complete PII contract.
   return {

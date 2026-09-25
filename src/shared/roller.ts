@@ -58,6 +58,8 @@ export const ROL_GRUPLARI = {
    * yok (OPEN_QUESTIONS 22); KANADA_SATINALMA'nın mevcut yetkisi korunur.
    */
   COURIER_ASSIGN: [...OWNERS, 'KANADA_SATINALMA'],
+  /** Kasa teslimi alma ve kurye bakiyeleri (v2 rol matrisi, K17): sahipler ve Bakü finans. */
+  KASA: [...OWNERS, 'BAKU_FINANS'],
   /** Kur okuma ve girişi (v2 rol matrisi): sahipler, satın almacılar, Bakü finans. */
   RATES: [...OWNERS, ...BUYERS, 'BAKU_FINANS'],
   /** Sipariş sahibi olabilecek roller (primi sahibe ait); oluşturan her zaman kendisi olabilir. */
