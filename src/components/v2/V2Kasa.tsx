@@ -23,13 +23,12 @@ const FINANS_ADI: Record<string, string> = {
 
 /**
  * Kasa (A10, A11): v2 siparişleri ve seçilenin ödeme defteri; KASA rollerine kurye
- * bakiyeleri ve kasa teslimi.
+ * bakiyeleri; teslim almayı yalnız KASA_WRITE (SUPER_ADMIN okur).
  */
 export default function V2Kasa() {
-  const kasa = rolGrubunda(
-    useAppStore((state) => state.aktifRol),
-    'KASA'
-  );
+  const aktifRol = useAppStore((state) => state.aktifRol);
+  const kasa = rolGrubunda(aktifRol, 'KASA');
+  const kasaYazar = rolGrubunda(aktifRol, 'KASA_WRITE');
   const [siparisler, setSiparisler] = useState<KasaSiparisi[] | null>(null);
   const [secili, setSecili] = useState<string | null>(null);
   const [hata, setHata] = useState<string | null>(null);
@@ -98,7 +97,7 @@ export default function V2Kasa() {
           </tbody>
         </table>
       )}
-      {kasa && <KuryeBakiyeleri />}
+      {kasa && <KuryeBakiyeleri teslimAlabilir={kasaYazar} />}
       {secili && (
         // A new order starts with a fresh form and closed reversal inputs.
         <React.Fragment key={secili}>

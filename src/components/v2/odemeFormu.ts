@@ -53,8 +53,8 @@ export const DURUM_ADI: Record<OdemeDurumu, string> = {
   FAZLA: 'Artıq ödənib',
 };
 
-/** Who may record payments on this screen (v2 role matrix: FINANCE). */
-export const odemeYazabilir = (rol: KullaniciRolu | null) => rolGrubunda(rol, 'FINANCE');
+/** Who may record and reverse payments (PAYMENT_WRITE; SUPER_ADMIN only reads). */
+export const odemeYazabilir = (rol: KullaniciRolu | null) => rolGrubunda(rol, 'PAYMENT_WRITE');
 
 /** Sources a role may record here; TESLIMAT comes only from the courier flow. */
 export function kaynakSecenekleri(rol: KullaniciRolu | null): Array<'BUTIK' | 'ONLINE'> {

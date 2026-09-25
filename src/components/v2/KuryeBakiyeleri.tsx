@@ -5,9 +5,10 @@ import { seciliToplam, teslimIstegi, type KuryeBakiyesi } from './kasaFormu';
 
 /**
  * Kurye bakiyeleri ve kasa teslimi (A11, K17): kasa (PATRON, BAKU_FINANS) bir kuryenin
- * açık nakit tahsilatlarından seçtiklerini tam tutarıyla teslim alır.
+ * açık nakit tahsilatlarından seçtiklerini tam tutarıyla teslim alır. SUPER_ADMIN yalnız
+ * bakiyeleri görür (teslimAlabilir = false).
  */
-export default function KuryeBakiyeleri() {
+export default function KuryeBakiyeleri({ teslimAlabilir }: { teslimAlabilir: boolean }) {
   const [kuryeler, setKuryeler] = useState<KuryeBakiyesi[] | null>(null);
   const [secilenKurye, setSecilenKurye] = useState<string | null>(null);
   const [secili, setSecili] = useState<Set<string>>(new Set());
@@ -87,7 +88,7 @@ export default function KuryeBakiyeleri() {
                 <td className="text-right">{azn(k.teslimToplami)}</td>
                 <td className="text-right font-semibold">{azn(k.bakiye)}</td>
                 <td className="text-right">
-                  {k.acikTahsilatlar.length > 0 && (
+                  {teslimAlabilir && k.acikTahsilatlar.length > 0 && (
                     <button
                       type="button"
                       onClick={() => sec(k.kuryeKullaniciId)}
