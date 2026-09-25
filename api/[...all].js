@@ -5057,6 +5057,7 @@ var SIPARIS_EK_ALANLAR = [
   "kanada_fatura_no",
   "kanada_fatura_gorseli",
   "kanada_gumruk_fin_kodu",
+  "kanada_gumruk_pasaport_no",
   "islem_gecmisi"
 ];
 function siparisEkVerileriniAl(input) {
@@ -7283,7 +7284,15 @@ router3.post("/siparisler", async (req, res) => {
     orderFailure(res, genelHata);
   }
 });
+var purchaseDetailFields = [
+  "kanada_magaza_adi",
+  "kanada_alis_fiyati_cad",
+  "kanada_fatura_gorseli"
+];
+var customsFields = ["kanada_gumruk_fin_kodu", "kanada_gumruk_pasaport_no"];
 var generalFields = /* @__PURE__ */ new Set([
+  ...purchaseDetailFields,
+  ...customsFields,
   "ham_mesaj",
   "musteri_id",
   "musteri_adi",
@@ -7329,7 +7338,9 @@ var salesFields = new Set(
       "baku_kurye_bolgesi",
       "teslim_tarihi",
       "teslim_eden_kisi",
-      "kargo_agirligi_kg"
+      "kargo_agirligi_kg",
+      ...purchaseDetailFields,
+      ...customsFields
     ].includes(field)
   )
 );
@@ -7377,8 +7388,32 @@ var purchaseFields = /* @__PURE__ */ new Set([
   "baku_kurye_id",
   "baku_kurye_adi",
   "baku_kurye_bolgesi",
-  "kargo_agirligi_kg"
+  "kargo_agirligi_kg",
+  ...purchaseDetailFields,
+  ...customsFields
 ]);
+function checkDetailFields(updates) {
+  const bad = (field) => new PublicResourceError("Ge\xE7ersiz de\u011Fer: " + field, 400);
+  const text3 = (field, pattern) => {
+    const value = updates[field];
+    if (value === void 0 || value === null) return;
+    if (typeof value !== "string") throw bad(field);
+    const normalized = value.trim().toUpperCase();
+    if (normalized !== "" && !pattern.test(normalized)) throw bad(field);
+    updates[field] = normalized;
+  };
+  text3("kanada_gumruk_fin_kodu", /^[A-Z0-9]{7}$/);
+  text3("kanada_gumruk_pasaport_no", /^[A-Z0-9]{6,12}$/);
+  const store = updates.kanada_magaza_adi;
+  if (store !== void 0 && store !== null && (typeof store !== "string" || store.length > 200))
+    throw bad("kanada_magaza_adi");
+  const price = updates.kanada_alis_fiyati_cad;
+  if (price !== void 0 && price !== null && (typeof price !== "number" || !Number.isFinite(price) || price < 0 || price > 1e6))
+    throw bad("kanada_alis_fiyati_cad");
+  const invoice = updates.kanada_fatura_gorseli;
+  if (invoice !== void 0 && invoice !== null && (typeof invoice !== "string" || invoice.length > 42e5 || invoice !== "" && !/^(data:image\/(png|jpeg|webp|gif);base64,|(\/api)?\/uploads\/)/.test(invoice)))
+    throw bad("kanada_fatura_gorseli");
+}
 async function ownedOrder(tenant2, id) {
   if (dbActive(tenant2)) {
     const { data, error: error2 } = await supabase.from("siparisler").select("*").eq("id", id).eq("tenant_id", tenant2).maybeSingle();
@@ -7408,6 +7443,8 @@ router3.patch("/siparisler/:id", async (req, res) => {
         throw new PublicResourceError("v2 sipari\u015Fte bu alan sat\u0131rlardan t\xFCretilir: " + key, 409);
       if (role === PLATFORM_ROLU && (key === "alinan_tutar" || key === "finans_durumu"))
         throw new PublicResourceError("Platform y\xF6neticisi tahsilat\u0131 de\u011Fi\u015Ftiremez.", 403);
+      if (role === PLATFORM_ROLU && customsFields.includes(key))
+        throw new PublicResourceError("Platform y\xF6neticisi g\xFCmr\xFCk kimlik bilgisi yazamaz.", 403);
       if ([
         "baku_kurye_id",
         "baku_kurye_adi",
@@ -7425,6 +7462,7 @@ router3.patch("/siparisler/:id", async (req, res) => {
     }
     if (updates.eksik_bilgiler !== void 0 && (!Array.isArray(updates.eksik_bilgiler) || updates.eksik_bilgiler.some((v) => typeof v !== "string" || v.startsWith("META:"))))
       throw new PublicResourceError("Ge\xE7ersiz eksik bilgi listesi.", 400);
+    checkDetailFields(updates);
     await validateCustomerReference(tenant2, updates.musteri_id);
     await assertTenantImageReferences(req, updates);
     const kaynak = dbActive(tenant2) ? "supabase" : tenant2 === "demo_sandbox" ? "demo_sandbox" : "bellek";

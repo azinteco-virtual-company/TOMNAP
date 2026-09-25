@@ -152,6 +152,26 @@ describe('PATCH /api/siparisler/:id writes only what changed (Codex R3 F1/F2)', 
     expect(env.writes).toEqual([]);
   });
 
+  it('detail form fields go into ek_veriler, locked on the extras they were based on (F14)', async () => {
+    env.row = order({ ek_veriler: { kanada_magaza_adi: 'Winners' } });
+    const response = await request(app('KANADA_SATINALMA'))
+      .patch(`/api/siparisler/${env.row.id}`)
+      .send({ kanada_gumruk_fin_kodu: '5abc123', kanada_gumruk_pasaport_no: 'c01234567' });
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
+    expect(Object.keys(env.writes[0].values)).toEqual(['ek_veriler']);
+    expect(env.writes[0]).toMatchObject({
+      values: {
+        ek_veriler: {
+          kanada_magaza_adi: 'Winners',
+          kanada_gumruk_fin_kodu: '5ABC123',
+          kanada_gumruk_pasaport_no: 'C01234567',
+        },
+      },
+      expected: { ek_veriler: { kanada_magaza_adi: 'Winners' } },
+    });
+    expect(response.body.siparis.kanada_gumruk_pasaport_no).toBe('C01234567');
+  });
+
   it('a platform admin changes no collected amount on v1 either (OPEN_QUESTIONS 32)', async () => {
     env.row = order();
     for (const body of [{ alinan_tutar: 30 }, { finans_durumu: 'ODENDI' }]) {

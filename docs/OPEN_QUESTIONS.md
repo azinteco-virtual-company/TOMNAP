@@ -497,3 +497,19 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **Kalan risk:** Aynı anda iki kişi farklı notlar yazarsa son yazan kazanıyor (notlar
       para ya da AWB değil). `ek_veriler` birlikte yazıldığı için ek alanlardan birini
       değiştiren iki eşzamanlı düzenlemeden ikincisi 409 alıyor.
+
+34. **Sipariş detay formu: satın alma ve gümrük alanları kimde (Codex R3 F14, varsayım).**
+    - **Yazma:** Mağaza, alış fiyatı (CAD) ve fatura görseli ile müşterinin gümrük kimliği
+      (FİN kodu `kanada_gumruk_fin_kodu`, pasaport no `kanada_gumruk_pasaport_no`) yalnız
+      PATRON ve satın almacılar (KANADA_SATINALMA, ABD_SATINALMA) tarafından yazılır; kargo
+      manifestosunu onlar hazırlıyor. SATIS_SORUMLUSU ve BAKU_FINANS yazamaz (403).
+      SUPER_ADMIN satın alma alanlarını yazar ama gümrük kimliğini **yazamaz**: kimlik
+      bilgisi kişisel veri ve platform yöneticisi butik ekibinden değil (24 ile aynı gerekçe).
+    - **Biçim:** FİN 7 harf/rakam, pasaport 6–12 harf/rakam; büyük harfe çevrilir, boş
+      bırakmak silmektir. Alış fiyatı 0 veya pozitif sayı.
+    - **Form:** Yalnız değişen alanları gönderir; değişmeyen boş alan artık 403 yaratmaz.
+      "Kaydedildi" sunucu kabul ettikten sonra görünür, red nedeni bildirimde.
+    - **Açık:** Okuma değişmedi: siparişi gören her ekip rolü (kurye hariç) gümrük kimliğini
+      de görür. Daraltmak isterseniz ayrı iş. Modalda pasaport alanı için giriş kutusu yok
+      (alan yalnız sunucuda yazılabilir oldu). Fatura görseli hâlâ satır içi base64 olarak
+      `ek_veriler`'e yazılıyor (en fazla 3 MB); dosya deposuna taşımak K22 / Faz B işi.
