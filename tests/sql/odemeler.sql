@@ -24,7 +24,10 @@ DO $$ DECLARE actor text; priv text; fn text; BEGIN
      OR has_table_privilege('service_role', 'public.odemeler', 'UPDATE')
      OR has_table_privilege('service_role', 'public.odemeler', 'DELETE')
      OR has_table_privilege('service_role', 'public.odemeler', 'TRUNCATE')
-     OR has_any_column_privilege('service_role', 'public.odemeler', 'UPDATE') THEN
+     -- A11 (kasa teslimi) may add exactly UPDATE (kasa_teslim_id); no other column.
+     OR EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = 'public.odemeler'::regclass
+                  AND a.attnum > 0 AND NOT a.attisdropped AND a.attname <> 'kasa_teslim_id'
+                  AND has_column_privilege('service_role', 'public.odemeler', a.attname, 'UPDATE')) THEN
     RAISE EXCEPTION 'service_role privileges on odemeler are wrong';
   END IF;
   FOREACH fn IN ARRAY ARRAY['public.tomnap_v2_odeme_kaydet(text,text,jsonb)',
@@ -208,7 +211,9 @@ ROLLBACK;
 
 -- 3. Down -> down -> up (no payment is committed at this point). The refusal while
 -- payments exist is checked in odemeler-concurrency.mjs, after payments are committed.
+-- Newer migrations built on the ledger (A11) roll back first and are re-applied last.
 BEGIN;
+\ir ../../supabase/rollbacks/20260925120000_kasa_teslimleri.down.sql
 \ir ../../supabase/rollbacks/20260925110000_odemeler.down.sql
 COMMIT;
 BEGIN;
@@ -237,3 +242,4 @@ DO $$ BEGIN
     RAISE EXCEPTION 'Re-applied ledger migration is incomplete';
   END IF;
 END $$;
+\ir ../../supabase/migrations/20260925120000_kasa_teslimleri.sql
