@@ -11774,11 +11774,41 @@ async function v2SiparisGetir(tenant2, id) {
 // src/server/services/v2/siparisAyristirma.ts
 import { Type as Type3 } from "@google/genai";
 var HAM_MESAJ_SINIRI = 2e4;
+var GORSEL_SINIRI = { adet: 3, bayt: 1e6 };
+var GORSEL_IMZALARI = {
+  "image/jpeg": (b) => b.length > 3 && b[0] === 255 && b[1] === 216 && b[2] === 255,
+  "image/png": (b) => b.length > 8 && b.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+  "image/webp": (b) => b.length > 12 && b.toString("latin1", 0, 4) === "RIFF" && b.toString("latin1", 8, 12) === "WEBP"
+};
+function gorselleriAyikla(value) {
+  if (value === void 0 || value === null) return [];
+  if (!Array.isArray(value)) throw new PublicResourceError("G\xF6rseller liste olmal\u0131.", 400);
+  if (value.length > GORSEL_SINIRI.adet)
+    throw new PublicResourceError(`En fazla ${GORSEL_SINIRI.adet} g\xF6rsel g\xF6nderilebilir.`, 413);
+  return value.map((item) => {
+    const alanlar = v2GovdesiniAyikla(item, ["mime_type", "veri_base64"]);
+    const mime = alanlar.mime_type;
+    const veri = alanlar.veri_base64;
+    if (typeof mime !== "string" || !GORSEL_IMZALARI[mime])
+      throw new PublicResourceError("G\xF6rsel JPEG, PNG ya da WebP olmal\u0131.", 400);
+    if (typeof veri !== "string" || veri.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(veri))
+      throw new PublicResourceError("G\xF6rsel verisi ge\xE7ersiz.", 400);
+    if (veri.length > (Math.ceil(GORSEL_SINIRI.bayt / 3) + 1) * 4)
+      throw new PublicResourceError("G\xF6rsel 1 MB s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor; k\xFC\xE7\xFClt\xFClerek g\xF6nderilmeli.", 413);
+    const bytes = Buffer.from(veri, "base64");
+    if (bytes.length > GORSEL_SINIRI.bayt)
+      throw new PublicResourceError("G\xF6rsel 1 MB s\u0131n\u0131r\u0131n\u0131 a\u015F\u0131yor; k\xFC\xE7\xFClt\xFClerek g\xF6nderilmeli.", 413);
+    if (bytes.length === 0 || !GORSEL_IMZALARI[mime](bytes))
+      throw new PublicResourceError("G\xF6rsel verisi t\xFCr\xFCyle uyu\u015Fmuyor.", 400);
+    return { mimeType: mime, data: veri };
+  });
+}
 var SISTEM_TALIMATI = `Sen Instagram ve WhatsApp \xFCzerinden sat\u0131\u015F yapan bir buti\u011Fin sipari\u015F ayr\u0131\u015Ft\u0131rma asistan\u0131s\u0131n.
-G\xF6revin yaln\u0131zca SANA VER\u0130LEN MESAJDAN alan \xE7\u0131karmak.
+G\xF6revin yaln\u0131zca SANA VER\u0130LEN MESAJDAN ve (varsa) EKRAN G\xD6R\xDCNT\xDCLER\u0130NDEN alan \xE7\u0131karmak.
 
 KURALLAR:
-1. M\xFC\u015Fteri bilgilerini (ad, telefon, Instagram kullan\u0131c\u0131 ad\u0131, \u015Fehir, adres) yaln\u0131zca mesajda yazd\u0131\u011F\u0131 gibi \xE7\u0131kar.
+1. M\xFC\u015Fteri bilgilerini (ad, telefon, Instagram kullan\u0131c\u0131 ad\u0131, \u015Fehir, adres) yaln\u0131zca mesajda ya da g\xF6rselde yazd\u0131\u011F\u0131 gibi \xE7\u0131kar.
+   Bir WhatsApp/Instagram ekran g\xF6r\xFCnt\xFCs\xFCnde "\u0130letildi / Forwarded / Y\xF6nl\u0259ndirildi" etiketinin alt\u0131ndaki ki\u015Fi sipari\u015Fin sahibidir.
    Sana hi\xE7bir m\xFC\u015Fteri listesi verilmez; m\xFC\u015Fteriyi tan\u0131maya, e\u015Fle\u015Ftirmeye veya ad\u0131n\u0131 d\xFCzeltmeye \xE7al\u0131\u015Fma. E\u015Fle\u015Ftirmeyi sunucu yapar.
 2. Mesajdaki HER FARKLI \xDCR\xDCN ayr\u0131 bir sat\u0131rd\u0131r ("satirlar"). Ayn\u0131 \xFCr\xFCnden birden fazla isteniyorsa tek sat\u0131rda "adet" ile yaz.
    Her sat\u0131r i\xE7in: urun_aciklamasi, beden, renk, adet, birim_fiyat (AZN, bir adedin fiyat\u0131).
@@ -11869,11 +11899,15 @@ async function tenantMusterileri(tenantId) {
 }
 async function v2SiparisAyristir(tenant2, body2) {
   const tenantId = v2Tenant(tenant2);
-  const alanlar = v2GovdesiniAyikla(body2, ["ham_mesaj"]);
+  const alanlar = v2GovdesiniAyikla(body2, ["ham_mesaj", "gorseller"]);
+  if (alanlar.ham_mesaj !== void 0 && typeof alanlar.ham_mesaj !== "string")
+    throw new PublicResourceError("Mesaj metin olmal\u0131.", 400);
   const hamMesaj = typeof alanlar.ham_mesaj === "string" ? alanlar.ham_mesaj.trim() : "";
-  if (!hamMesaj) throw new PublicResourceError("Ayr\u0131\u015Ft\u0131r\u0131lacak mesaj gereklidir.", 400);
   if (hamMesaj.length > HAM_MESAJ_SINIRI)
     throw new PublicResourceError(`Mesaj en fazla ${HAM_MESAJ_SINIRI} karakter olabilir.`, 413);
+  const gorseller = gorselleriAyikla(alanlar.gorseller);
+  if (!hamMesaj && !gorseller.length)
+    throw new PublicResourceError("Ayr\u0131\u015Ft\u0131r\u0131lacak mesaj ya da ekran g\xF6r\xFCnt\xFCs\xFC gereklidir.", 400);
   let ai;
   try {
     ai = getGeminiClient();
@@ -11881,8 +11915,14 @@ async function v2SiparisAyristir(tenant2, body2) {
     throw new PublicResourceError("AI hizmeti yap\u0131land\u0131r\u0131lmam\u0131\u015F.", 503);
   }
   const yanit = await generateContentWithRetryAndFallback(ai, {
-    // Only the message itself: no customer directory, no other order (A1, CLAUDE.md).
-    contents: `Mesaj:
+    // Only the message and its screenshots: no customer directory, no other order (A1).
+    contents: gorseller.length ? [
+      { text: `Mesaj:
+"""
+${hamMesaj || "(yok; yaln\u0131z ekran g\xF6r\xFCnt\xFCleri)"}
+"""` },
+      ...gorseller.map((g) => ({ inlineData: { mimeType: g.mimeType, data: g.data } }))
+    ] : `Mesaj:
 """
 ${hamMesaj}
 """`,

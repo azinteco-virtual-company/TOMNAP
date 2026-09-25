@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const environment = vi.hoisted(() => ({ ai: vi.fn() }));
@@ -13,7 +14,10 @@ import {
   musterilerVeritabani,
   siparislerVeritabani,
 } from '../../../src/server/services/state';
-import { aiYanitiniOneriyeCevir } from '../../../src/server/services/v2/siparisAyristirma';
+import {
+  aiYanitiniOneriyeCevir,
+  gorselleriAyikla,
+} from '../../../src/server/services/v2/siparisAyristirma';
 import { loginFixture } from '../helpers/session';
 import { TENANT_A, TENANT_B, describeTenantIsolation } from '../helpers/tenantIsolation';
 
@@ -161,6 +165,81 @@ describe('v2 order suggestion from a message (A9)', () => {
       response.body.musteriAdaylari.map((c: { musteri_id: string }) => c.musteri_id)
     ).toContain('m-aytan');
     expect(JSON.stringify(response.body)).not.toContain('m-yabanci');
+  });
+
+  // A real 1x1 PNG and a JPEG start marker: enough for the type check (nothing decodes them).
+  const PNG =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]).toString(
+    'base64'
+  );
+  const uploads = () =>
+    fs.existsSync(process.env.UPLOADS_DIR!)
+      ? fs.readdirSync(process.env.UPLOADS_DIR!, { recursive: true }).length
+      : 0;
+
+  it('reads screenshots too: sent only as images next to the message, nothing stored (A9b)', async () => {
+    aiReturns({
+      musteri_adi: 'Aytan',
+      satirlar: [{ urun_aciklamasi: 'Ekrandakı çanta', adet: 1, birim_fiyat: 30 }],
+      eksik_bilgiler: [],
+    });
+    const before = uploads();
+    const orders = siparislerVeritabani.length;
+    const response = await agents.SATIS_SORUMLUSU.post('/api/v2/siparisler/ayristir').send({
+      gorseller: [
+        { mime_type: 'image/png', veri_base64: PNG },
+        { mime_type: 'image/jpeg', veri_base64: JPEG },
+      ],
+    });
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
+    expect(response.body.oneri.satirlar[0]).toMatchObject({ urun_aciklamasi: 'Ekrandakı çanta' });
+    const [[, request]] = environment.ai.mock.calls;
+    expect(request.contents).toEqual([
+      { text: expect.stringContaining('yalnız ekran görüntüleri') },
+      { inlineData: { mimeType: 'image/png', data: PNG } },
+      { inlineData: { mimeType: 'image/jpeg', data: JPEG } },
+    ]);
+    const sent = JSON.stringify(environment.ai.mock.calls);
+    for (const marker of ['m-ayten', 'Məmmədova', 'gizli-adres', 'yabanci-adres'])
+      expect([marker, sent.includes(marker)]).toEqual([marker, false]);
+    expect(uploads()).toBe(before);
+    expect(siparislerVeritabani.length).toBe(orders);
+  });
+
+  it('refuses bad screenshots without calling the AI (A9b)', async () => {
+    const png = { mime_type: 'image/png', veri_base64: PNG };
+    const big = Buffer.alloc(1_000_001, 1);
+    big.set([0xff, 0xd8, 0xff]);
+    // The validator directly (the AI route is rate limited to 10 calls a minute) ...
+    for (const [value, status] of [
+      [[png, png, png, png], 413],
+      [[{ mime_type: 'image/jpeg', veri_base64: big.toString('base64') }], 413],
+      [[{ mime_type: 'image/gif', veri_base64: PNG }], 400],
+      [[{ mime_type: 'image/jpeg', veri_base64: PNG }], 400],
+      [[{ mime_type: 'image/png', veri_base64: 'bm90IGFuIGltYWdl!' }], 400],
+      [[{ mime_type: 'image/png', veri_base64: '' }], 400],
+      [[{ ...png, dosya_yolu: '/etc/passwd' }], 400],
+      [png, 400],
+    ] as const) {
+      let status_: number | undefined;
+      try {
+        gorselleriAyikla(value);
+      } catch (error) {
+        status_ = (error as { status?: number }).status;
+      }
+      expect([JSON.stringify(value).slice(0, 60), status_]).toEqual([
+        JSON.stringify(value).slice(0, 60),
+        status,
+      ]);
+    }
+    expect(gorselleriAyikla(undefined)).toEqual([]);
+    // ... and once through the route: refused before the AI.
+    for (const body of [{ gorseller: [png, png, png, png] }, { gorseller: [] }])
+      expect((await agents.PATRON.post('/api/v2/siparisler/ayristir').send(body)).status).toBe(
+        body.gorseller.length ? 413 : 400
+      );
+    expect(environment.ai).not.toHaveBeenCalled();
   });
 
   it('refuses empty, oversized and unknown input without calling the AI', async () => {

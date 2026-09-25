@@ -3,6 +3,7 @@ import { apiFetch } from '../../lib/apiClient';
 import { useAppStore } from '../../store/appStore';
 import { PLATFORM_ROLU, rolGrubunda } from '../../shared/roller';
 import SatirTablosu from './SatirTablosu';
+import { KUCULTME, gorseliKucult, type GonderilecekGorsel } from './gorselKucult';
 import {
   bosForm,
   formToplami,
@@ -54,6 +55,21 @@ export default function SiparisGirisi() {
   const [bekliyor, setBekliyor] = useState<'ai' | 'kayit' | null>(null);
   const [sahipler, setSahipler] = useState<Sahip[]>([]);
   const [siparisler, setSiparisler] = useState<V2SiparisOzeti[]>([]);
+  // A9b: screenshots, downscaled in the browser; used for the suggestion only, never stored.
+  const [gorseller, setGorseller] = useState<Array<GonderilecekGorsel & { ad: string }>>([]);
+
+  const gorselSec = async (files: FileList | null) => {
+    const secilen = Array.from(files ?? []).slice(0, KUCULTME.adet - gorseller.length);
+    setMesaj(null);
+    try {
+      const yeni = await Promise.all(
+        secilen.map(async (file) => ({ ...(await gorseliKucult(file)), ad: file.name }))
+      );
+      setGorseller([...gorseller, ...yeni]);
+    } catch (error) {
+      setMesaj(hataMetni(error));
+    }
+  };
 
   const listeyiYukle = useCallback(async () => {
     try {
@@ -78,13 +94,23 @@ export default function SiparisGirisi() {
   const alan = (key: keyof SiparisFormu) => (value: string) => setForm({ ...form, [key]: value });
 
   const ayristir = async () => {
-    if (!form.hamMesaj.trim()) return;
+    if (!form.hamMesaj.trim() && !gorseller.length) return;
     setBekliyor('ai');
     setMesaj(null);
     try {
       const response = await apiFetch(
         '/api/v2/siparisler/ayristir',
-        json({ ham_mesaj: form.hamMesaj })
+        json({
+          ...(form.hamMesaj.trim() ? { ham_mesaj: form.hamMesaj } : {}),
+          ...(gorseller.length
+            ? {
+                gorseller: gorseller.map(({ mime_type, veri_base64 }) => ({
+                  mime_type,
+                  veri_base64,
+                })),
+              }
+            : {}),
+        })
       );
       const sonuc = (await response.json()) as AyristirmaSonucu;
       setForm({ ...oneridenForm(sonuc, form.hamMesaj), sahipKullaniciId: form.sahipKullaniciId });
@@ -108,6 +134,7 @@ export default function SiparisGirisi() {
     try {
       await apiFetch('/api/v2/siparisler', json(govde));
       setForm(bosForm());
+      setGorseller([]);
       setAdaylar([]);
       setEksik([]);
       setMesaj('Sifariş yadda saxlanıldı.');
@@ -143,10 +170,37 @@ export default function SiparisGirisi() {
                 className={girdi}
               />
             </label>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+              <label className="cursor-pointer rounded-lg border border-slate-700 px-3 py-1.5 hover:bg-slate-800">
+                Ekran görüntüsü əlavə et ({gorseller.length}/{KUCULTME.adet})
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  disabled={gorseller.length >= KUCULTME.adet || bekliyor !== null}
+                  onChange={(event) => {
+                    void gorselSec(event.target.files);
+                    event.target.value = '';
+                  }}
+                  className="sr-only"
+                />
+              </label>
+              {gorseller.map((g, index) => (
+                <button
+                  key={`${g.ad}-${index}`}
+                  type="button"
+                  onClick={() => setGorseller(gorseller.filter((_, i) => i !== index))}
+                  className="rounded-full border border-slate-700 px-2 py-0.5"
+                  aria-label={`${g.ad} şəklini sil`}
+                >
+                  {g.ad} ×
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               onClick={ayristir}
-              disabled={bekliyor !== null || !form.hamMesaj.trim()}
+              disabled={bekliyor !== null || (!form.hamMesaj.trim() && !gorseller.length)}
               className="mt-2 rounded-lg bg-slate-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
             >
               {bekliyor === 'ai' ? 'Ayrışdırılır…' : 'AI ilə sətirlərə ayır'}
