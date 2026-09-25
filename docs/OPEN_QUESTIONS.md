@@ -440,3 +440,16 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       24 saat) kullanılıyor. Tenant bazında saklamak Faz D'ye kaldı.
     - **Kim görür:** PATRON, SUPER_ADMIN, BAKU_FINANS (`KASA` grubu; rol matrisinde Q4 ve
       Q5'i görenler). Diğer sorgular (Q1–Q3, Q6–Q8) Faz B–D'de.
+
+31. **v2 sipariş girişinde ekran görüntüsünden öneri (A9b, seçim).**
+    - **Seçim: istemcide küçültme, imzalı URL değil.** Görsel tarayıcıda en çok 1600 px uzun
+      kenara ve ~0,8 MB JPEG'e küçültülüyor; en çok 3 görsel, base64 ile toplam ~3,2 MB. Bu,
+      Vercel'in 4,5 MB gövde sınırının altında kalıyor. Sunucu her görseli ayrıca sınırlıyor
+      (en çok 3 adet, 1 MB) ve türünü ilk baytlarından doğruluyor.
+    - **Neden imzalı URL değil:** K22'deki imzalı URL deseni saklanması gereken faturalar
+      için. Burada görsel yalnız bir öneri için bir kez kullanılıyor. Doğrudan Storage'a
+      yüklemek, başka müşterilerin yazışmalarını da içerebilecek ekran görüntülerini
+      saklamak ve silmek anlamına gelirdi. Görsel hiçbir yerde saklanmıyor (v1'in
+      "Görsel & WhatsApp" akışından farklı olarak); test bunu yükleme klasörüyle doğruluyor.
+    - **A1 kuralı:** AI'a yalnız mesaj ve görseller gidiyor; müşteri eşleştirmesi yine
+      sunucuda. Öneri hiçbir şey yazmıyor; kayıt formun onayıyla oluyor.
