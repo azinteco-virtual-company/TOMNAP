@@ -139,7 +139,11 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/siparis-satirlari.sql
           # Owner rule (O-24): SUPER_ADMIN names the owner, never owns; down -> up.
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/siparis-sahibi-kurali.sql
+          # Payment ledger (A10): access, append-only, RPCs, K20 columns, down -> up;
+          # then the races, which commit payments (so they run last).
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/odemeler.sql
           node tests/sql/siparis-satirlari-concurrency.mjs
+          node tests/sql/odemeler-concurrency.mjs
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/cargo-settings.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/courier-access.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-upload-migrations.sql
