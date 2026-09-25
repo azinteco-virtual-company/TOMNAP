@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../../lib/apiClient';
 import { useAppStore } from '../../store/appStore';
-import { rolGrubunda } from '../../shared/roller';
+import { PLATFORM_ROLU, rolGrubunda } from '../../shared/roller';
 import SatirTablosu from './SatirTablosu';
 import {
   bosForm,
@@ -44,6 +44,8 @@ export default function SiparisGirisi() {
   const aktifRol = useAppStore((state) => state.aktifRol);
   const girebilir = rolGrubunda(aktifRol, 'SALES');
   const sahipSecebilir = rolGrubunda(aktifRol, 'OWNERS');
+  // A platform admin is not a team member: it always names the owner (O-24).
+  const sahipZorunlu = aktifRol === PLATFORM_ROLU;
   const [form, setForm] = useState<SiparisFormu>(bosForm);
   const [adaylar, setAdaylar] = useState<AyristirmaSonucu['musteriAdaylari']>([]);
   const [eksik, setEksik] = useState<string[]>([]);
@@ -98,7 +100,7 @@ export default function SiparisGirisi() {
 
   const kaydet = async (event: React.FormEvent) => {
     event.preventDefault();
-    const { govde, hatalar: yeniHatalar } = formdanIstek(form);
+    const { govde, hatalar: yeniHatalar } = formdanIstek(form, { sahipZorunlu });
     setHatalar(yeniHatalar);
     if (!govde) return;
     setBekliyor('kayit');
@@ -223,7 +225,7 @@ export default function SiparisGirisi() {
                 }
                 className={girdi}
               >
-                <option value="">Mən (sifarişi yaradan)</option>
+                <option value="">{sahipZorunlu ? 'Sahibi seçin' : 'Mən (sifarişi yaradan)'}</option>
                 {sahipler.map((sahip) => (
                   <option key={sahip.id} value={sahip.id}>
                     {sahip.adSoyad}

@@ -123,12 +123,17 @@ export function oneridenForm(sonuc: AyristirmaSonucu, hamMesaj: string): Siparis
 
 const bosIse = (value: string) => (value.trim() ? value.trim() : undefined);
 
-/** Validates the form and builds the POST /api/v2/siparisler body. */
+/**
+ * Validates the form and builds the POST /api/v2/siparisler body. `sahipZorunlu`:
+ * a platform admin never owns an order and must pick the owner (O-24).
+ */
 export function formdanIstek(
-  form: SiparisFormu
+  form: SiparisFormu,
+  { sahipZorunlu = false }: { sahipZorunlu?: boolean } = {}
 ): { govde: Record<string, unknown>; hatalar: [] } | { govde: null; hatalar: string[] } {
   const hatalar: string[] = [];
   if (!form.musteriAdi.trim()) hatalar.push('Müştəri adı lazımdır.');
+  if (sahipZorunlu && !form.sahipKullaniciId) hatalar.push('Sifarişin sahibini seçin.');
   if (form.satirlar.length === 0) hatalar.push('Ən azı bir sətir lazımdır.');
   if (form.satirlar.length > 100) hatalar.push('Ən çox 100 sətir ola bilər.');
   const satirlar = form.satirlar.map((satir, index) => {
