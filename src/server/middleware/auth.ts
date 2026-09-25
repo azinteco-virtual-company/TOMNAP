@@ -14,7 +14,7 @@ declare global {
 }
 
 const READ = new Set(['GET', 'HEAD', 'OPTIONS']);
-const { STAFF, OWNERS, SALES, PURCHASING, FINANCE, SHIPPING, COURIER_ASSIGN, RATES, ALL } =
+const { STAFF, OWNERS, SALES, PURCHASING, FINANCE, SHIPPING, COURIER_ASSIGN, RATES, KASA, ALL } =
   ROL_GRUPLARI;
 
 type Rule = [string, RegExp, readonly string[]];
@@ -67,6 +67,11 @@ const rules: Rule[] = [
   ['POST', /^\/api\/v2\/odemeler$/, FINANCE],
   ['POST', /^\/api\/v2\/odemeler\/[^/]+\/ters-kayit$/, FINANCE],
   ['GET', /^\/api\/v2\/siparisler\/[^/]+\/odemeler$/, STAFF],
+  // Courier cash and the cash desk (A11, K17): couriers their own cash; KASA takes it over.
+  ['GET', /^\/api\/v2\/kurye\/nakit$/, ['BAKU_KURYE']],
+  ['POST', /^\/api\/v2\/kurye\/tahsilat$/, ['BAKU_KURYE']],
+  ['GET', /^\/api\/v2\/kasa\/kurye-bakiyeleri$/, KASA],
+  ['POST', /^\/api\/v2\/kasa\/teslimler$/, KASA],
   ['GET', /^(?:\/api)?\/uploads\/[^/]+$/, STAFF],
   [
     'POST',

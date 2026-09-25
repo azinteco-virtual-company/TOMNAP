@@ -142,8 +142,11 @@ jobs:
           # Payment ledger (A10): access, append-only, RPCs, K20 columns, down -> up;
           # then the races, which commit payments (so they run last).
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/odemeler.sql
+          # Courier cash and cash desk (A11): collection, hand-over, balance, down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/kasa-teslimleri.sql
           node tests/sql/siparis-satirlari-concurrency.mjs
           node tests/sql/odemeler-concurrency.mjs
+          node tests/sql/kasa-concurrency.mjs
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/cargo-settings.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/courier-access.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-upload-migrations.sql

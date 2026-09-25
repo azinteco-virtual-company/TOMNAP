@@ -73,6 +73,14 @@ import {
   v2OdemeTersKayit,
   v2SiparisOdemeleri,
 } from '../../../src/server/services/v2/odemeStore';
+import {
+  kasaTeslimAl,
+  kasaTeslimGirdisi,
+  kuryeBakiyeleri,
+  kuryeNakitDurumu,
+  kuryeTahsilatGirdisi,
+  kuryeTahsilatiKaydet,
+} from '../../../src/server/services/v2/kasaStore';
 
 const rate = (tenant: string, extra: Record<string, unknown> = {}) => ({
   id: `${tenant}-rate`,
@@ -451,5 +459,175 @@ describe('v2 payment ledger on Supabase: one RPC per write, tenant-scoped reads 
     db.calls = [];
     expect(await v2SiparisOdemeleri('t-a', 'not-a-uuid')).toBeNull();
     expect(db.calls).toEqual([]);
+  });
+});
+
+describe('v2 cash desk on Supabase: RPCs with the session tenant and user only (A11)', () => {
+  const PAYMENT = '91000000-0000-4000-8000-000000000001';
+  const cash = (tenant: string) => ({
+    id: PAYMENT,
+    tenant_id: tenant,
+    siparis_id: ORDER,
+    tutar_azn: '10.00',
+    yontem: 'NAKIT',
+    kaynak: 'TESLIMAT',
+    alan_kullanici_id: 'kurye-1',
+    alma_zamani: '2026-09-25T10:00:00+00:00',
+    kaydeden_kullanici_id: 'kurye-1',
+    aciklama: null,
+    ters_kayit_odeme_id: null,
+    kasa_teslim_id: null,
+    olusturma_zamani: '2026-09-25T10:00:00+00:00',
+  });
+  const balance = {
+    kurye_kullanici_id: 'kurye-1',
+    ad_soyad: 'Kurye',
+    tahsilat_toplami: '30.00',
+    teslim_toplami: '20.00',
+    acik_tahsilatlar: [
+      {
+        id: PAYMENT,
+        siparis_id: ORDER,
+        tutar_azn: '10.00',
+        alma_zamani: 'x',
+        musteri_adi: 'Aytən',
+      },
+    ],
+  };
+
+  it('records a courier collection through the RPC and reads it back tenant-scoped', async () => {
+    db.rpcAnswer = () => ({ data: { odeme: cash('t-a') }, error: null });
+    db.answer = (call) => ({
+      data: call.table === 'siparisler' ? header('t-a') : [cash('t-a')],
+      error: null,
+    });
+    const result = await kuryeTahsilatiKaydet(
+      't-a',
+      'kurye-1',
+      kuryeTahsilatGirdisi({ siparis_id: ORDER, tutar_azn: 10 })
+    );
+    expect(db.rpcs).toEqual([
+      {
+        name: 'tomnap_v2_kurye_tahsilati',
+        args: { p_tenant_id: 't-a', p_user_id: 'kurye-1', p_siparis_id: ORDER, p_tutar: 10 },
+      },
+    ]);
+    expect(result.odeme).toMatchObject({ id: PAYMENT, kaynak: 'TESLIMAT' });
+    expect(db.calls.map((c) => [c.table, c.filters.find(([k]) => k === 'tenant_id')])).toEqual([
+      ['siparisler', ['tenant_id', 't-a']],
+      ['odemeler', ['tenant_id', 't-a']],
+    ]);
+    db.rpcAnswer = () => ({ data: { odeme: cash('t-b') }, error: null });
+    await expect(
+      kuryeTahsilatiKaydet(
+        't-a',
+        'kurye-1',
+        kuryeTahsilatGirdisi({ siparis_id: ORDER, tutar_azn: 10 })
+      )
+    ).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('reads balances and the courier view, and hands over through the RPC', async () => {
+    db.rpcAnswer = () => ({ data: [balance], error: null });
+    expect(await kuryeBakiyeleri('t-a')).toEqual([
+      expect.objectContaining({
+        kuryeKullaniciId: 'kurye-1',
+        bakiye: 10,
+        acikTahsilatlar: [expect.objectContaining({ tutarAzn: 10 })],
+      }),
+    ]);
+    db.rpcAnswer = () => ({
+      data: {
+        bakiye: 10,
+        acik_tahsilatlar: [],
+        siparisler: [
+          {
+            id: ORDER,
+            musteri_adi: 'A',
+            lojistik_durumu: 'BAKU_DAGITIM_ARKADAS',
+            toplam_tutar: 100,
+            kalan_tutar: 90,
+          },
+        ],
+      },
+      error: null,
+    });
+    expect(await kuryeNakitDurumu('t-a', 'kurye-1')).toMatchObject({
+      bakiye: 10,
+      siparisler: [{ id: ORDER, kalanTutar: 90 }],
+    });
+    db.rpcAnswer = () => ({
+      data: {
+        teslim: {
+          id: 'k-1',
+          tenant_id: 't-a',
+          kurye_kullanici_id: 'kurye-1',
+          teslim_alan_kullanici_id: 'fin-1',
+          tutar_azn: '10.00',
+          odeme_sayisi: 1,
+          aciklama: null,
+          zaman: 'z',
+        },
+        bakiye: balance,
+      },
+      error: null,
+    });
+    const taken = await kasaTeslimAl(
+      't-a',
+      'fin-1',
+      kasaTeslimGirdisi({
+        kurye_kullanici_id: 'kurye-1',
+        odeme_idleri: [PAYMENT.toUpperCase()],
+        tutar_azn: 10,
+      })
+    );
+    expect(taken.teslim).toMatchObject({ tutarAzn: 10, teslimAlanKullaniciId: 'fin-1' });
+    expect(db.rpcs.map((r) => [r.name, r.args])).toEqual([
+      ['tomnap_v2_kurye_bakiyeleri', { p_tenant_id: 't-a' }],
+      ['tomnap_v2_kurye_nakit_durumu', { p_tenant_id: 't-a', p_user_id: 'kurye-1' }],
+      [
+        'tomnap_v2_kasa_teslimi',
+        {
+          p_tenant_id: 't-a',
+          p_user_id: 'fin-1',
+          p_kurye_kullanici_id: 'kurye-1',
+          p_odeme_idleri: [PAYMENT],
+          p_tutar: 10,
+          p_aciklama: null,
+        },
+      ],
+    ]);
+    db.rpcAnswer = () => ({
+      data: {
+        teslim: {
+          id: 'k-1',
+          tenant_id: 't-b',
+          kurye_kullanici_id: 'kurye-1',
+          teslim_alan_kullanici_id: 'fin-1',
+          tutar_azn: '10.00',
+        },
+      },
+      error: null,
+    });
+    await expect(
+      kasaTeslimAl(
+        't-a',
+        'fin-1',
+        kasaTeslimGirdisi({ kurye_kullanici_id: 'kurye-1', odeme_idleri: [PAYMENT], tutar_azn: 10 })
+      )
+    ).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('maps RPC refusals', async () => {
+    for (const [code, status] of [
+      ['PT403', 403],
+      ['PT404', 404],
+      ['PT409', 409],
+      ['22023', 400],
+      ['XX000', 503],
+    ] as const) {
+      db.rpcAnswer = () => ({ data: null, error: { code } });
+      await expect(kuryeBakiyeleri('t-a')).rejects.toMatchObject({ status });
+    }
   });
 });

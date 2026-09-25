@@ -1,12 +1,17 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, LogOut, Package, Phone, RefreshCw, Truck } from 'lucide-react';
 import { ApiError, getApiContextVersion } from '../lib/apiClient';
+import { V2_FLOW_ENABLED } from '../lib/featureFlags';
 import {
   completeCourierTask,
   fetchCourierTasks,
   type CourierTask,
   type CourierTasks,
 } from '../lib/courierApi';
+
+// A11 (VITE_FF_V2_FLOW): the courier's own cash for v2 orders, in its own chunk.
+// With the flag off the import is dropped from the build.
+const KuryeNakitBolumu = V2_FLOW_ENABLED ? lazy(() => import('./v2/KuryeNakitBolumu')) : null;
 
 interface Props {
   userName: string;
@@ -169,6 +174,11 @@ export const KuryeCalismaAlani: React.FC<Props> = ({ userName, onLogout }) => {
               tapşırıqlar burada görünəcək.
             </p>
           </div>
+        )}
+        {!loading && data?.kurye && KuryeNakitBolumu && (
+          <Suspense fallback={null}>
+            <KuryeNakitBolumu />
+          </Suspense>
         )}
         {!loading && data?.kurye && (
           <>

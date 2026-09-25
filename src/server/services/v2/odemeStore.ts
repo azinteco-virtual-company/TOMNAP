@@ -233,6 +233,69 @@ function bellekteYaz(tenantId: string, odeme: BellekOdemesi, siparis: Record<str
   return kayitli;
 }
 
+/** A11 (memory): appends a courier's cash collection and updates the order summary. */
+export function bellekteKuryeTahsilatiYaz(
+  tenantId: string,
+  siparis: Record<string, unknown>,
+  kuryeId: string,
+  tutarAzn: number
+): V2Odeme {
+  const zaman = new Date().toISOString();
+  return bellekteYaz(
+    tenantId,
+    {
+      id: randomUUID(),
+      tenantId,
+      siparisId: String(siparis.id),
+      tutarAzn,
+      yontem: 'NAKIT',
+      kaynak: 'TESLIMAT',
+      alanKullaniciId: kuryeId,
+      almaZamani: zaman,
+      kaydedenKullaniciId: kuryeId,
+      aciklama: null,
+      tersKayitOdemeId: null,
+      kasaTeslimId: null,
+      olusturmaZamani: zaman,
+    },
+    siparis
+  );
+}
+/**
+ * A11 (memory): closes the selected open cash of one courier into a hand-over, only if
+ * every one is open and they add up to the amount; otherwise changes nothing.
+ */
+export function bellekteKasayaKapat(
+  tenantId: string,
+  kuryeId: string,
+  odemeIdleri: readonly string[],
+  tutarAzn: number,
+  kasaTeslimId: string
+): boolean {
+  const secilen = odemeIdleri.map((id) =>
+    odemeBellegi.find(
+      (o) =>
+        o.id === id &&
+        o.tenantId === tenantId &&
+        o.alanKullaniciId === kuryeId &&
+        o.kaynak === 'TESLIMAT' &&
+        o.yontem === 'NAKIT' &&
+        o.tutarAzn > 0 &&
+        o.tersKayitOdemeId === null &&
+        o.kasaTeslimId === null &&
+        !odemeBellegi.some((r) => r.tersKayitOdemeId === o.id)
+    )
+  );
+  const acik = secilen.filter((o): o is BellekOdemesi => o !== undefined);
+  if (
+    acik.length !== odemeIdleri.length ||
+    acik.reduce((kurus, o) => kurus + KURUS(o.tutarAzn), 0) !== KURUS(tutarAzn)
+  )
+    return false;
+  for (const o of acik) o.kasaTeslimId = kasaTeslimId;
+  return true;
+}
+
 /** Test and guard helper: the in-memory ledger rows of one tenant. */
 export function bellektekiOdemeler(tenant: string): V2Odeme[] {
   return odemeBellegi.filter((o) => o.tenantId === tenant).map(({ tenantId: _t, ...o }) => o);
