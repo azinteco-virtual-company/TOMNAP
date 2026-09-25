@@ -249,7 +249,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     (`kalan_toplam_borc`) müşteri listesinin parçası ve müşteriler testinde
     kapsanıyor.
 
-19. ✅ **Onaylandı (25 Eylül 2026):** **Yerelde ara sıra düşen testlerin kök nedeni: port çakışması.**
+26. ✅ **Onaylandı (25 Eylül 2026):** **Yerelde ara sıra düşen testlerin kök nedeni: port çakışması.**
     - **Belirti:** macOS'ta tam koşuda ara sıra bir istek boş gövdeli `404 text/html`
       alıyordu (AWB onayı, `listPagination`, v2 kapısı). Tek başına koşunca geçiyordu.
     - **Kök neden:** Supertest sunucusu `listen(0)` ile her adrese bağlanıyor. macOS bu
@@ -376,7 +376,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       Mevcut sipariş tablosunda v2 siparişler "v2" rozetiyle ayrılır; rozet bayraktan
       bağımsızdır, çünkü v2 sipariş ancak bayrak açıkken oluşabilir.
 
-26. ✅ **Onaylandı (25 Eylül 2026):** **Yedek geri yüklemede sonradan eklenen sunucu kolonları.**
+27. ✅ **Onaylandı (25 Eylül 2026):** **Yedek geri yüklemede sonradan eklenen sunucu kolonları.**
     - **Hata:** Veritabanı modunda dışa aktarılan yedek kurye kolonlarını
       (`kurye_atama_surumu`, `kurye_teslim_kullanici_id`, `kurye_teslim_alan`) da
       taşıyordu; geri yükleme bunları "desteklenmeyen alan" sayıp reddediyordu. Bellek
@@ -392,7 +392,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       gidiş-dönüş testi yeni kolonun geri yazılmasını ya da gerekçeyle dışarıda
       bırakılmasını istiyor.
 
-27. ✅ **Karar (25 Eylül 2026):** **Ödeme defteri (A10).** SUPER_ADMIN kısmı değişti (aşağıda).
+28. ✅ **Karar (25 Eylül 2026):** **Ödeme defteri (A10).** SUPER_ADMIN kısmı değişti (aşağıda).
     - **Kim yazar:** PATRON ve BAKU_FINANS (`PAYMENT_WRITE` grubu). **SUPER_ADMIN yazamaz**
       (karar 25 Eylül 2026): defterde parayı alan kaydı yapandır. SUPER_ADMIN kayıt yapsaydı butiğin
       parasını platform yöneticisi almış görünürdü, oysa SUPER_ADMIN ekip üyesi değil (24).
@@ -419,7 +419,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       aynı görünürlük). "Kassa" sekmesi `FINANCE` rollerine açık; SUPER_ADMIN orada yalnız
       okur (ödeme formu ve ters kayıt düğmesi görünmez).
 
-28. ✅ **Onaylandı (25 Eylül 2026):** **Kurye nakdi ve kasa teslimi (A11).** Tam tutarlı teslim, kolon adı
+29. ✅ **Onaylandı (25 Eylül 2026):** **Kurye nakdi ve kasa teslimi (A11).** Tam tutarlı teslim, kolon adı
     ve `demo_sandbox` 503 onaylandı; SUPER_ADMIN kısmı değişti.
     - **Kurye tahsilatı:** Yalnız `BAKU_KURYE`, yalnız aktif kurye kaydına bağlı olduğu ve
       kendisine atanmış bir v2 siparişte, sipariş teslimattayken (`BAKU_DAGITIM_ARKADAS`)
@@ -443,7 +443,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **Demo alanı:** `demo_sandbox` Supabase'e bağlıyken kurye kayıtları veritabanında,
       siparişleri bellekte olduğu için kurye nakdi orada çalışmıyor (503).
 
-29. ✅ **Onaylandı (25 Eylül 2026):** **Kaçaklar panosu v0: Q4 ve Q5 (A12).**
+30. ✅ **Onaylandı (25 Eylül 2026):** **Kaçaklar panosu v0: Q4 ve Q5 (A12).**
     - **Q4:** Faz A'da ürün birimi olmadığı için "bütün birimler teslim edildi" yerine
       siparişin `lojistik_durumu = TESLIM_EDILDI` kullanılıyor; "ödenmedi" = `kalan_tutar > 0`
       (v2'de defterden türetilir). Yaş teslim tarihinden sayılıyor; tarih yoksa son
@@ -456,7 +456,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **Kim görür:** PATRON, SUPER_ADMIN, BAKU_FINANS (`KASA` grubu; rol matrisinde Q4 ve
       Q5'i görenler). Diğer sorgular (Q1–Q3, Q6–Q8) Faz B–D'de.
 
-30. ✅ **Onaylandı (25 Eylül 2026):** **v2 sipariş girişinde ekran görüntüsünden öneri (A9b).**
+31. ✅ **Onaylandı (25 Eylül 2026):** **v2 sipariş girişinde ekran görüntüsünden öneri (A9b).**
     - **Seçim: istemcide küçültme, imzalı URL değil.** Görsel tarayıcıda en çok 1600 px uzun
       kenara ve ~0,8 MB JPEG'e küçültülüyor; en çok 3 görsel, base64 ile toplam ~3,2 MB. Bu,
       Vercel'in 4,5 MB gövde sınırının altında kalıyor. Sunucu her görseli ayrıca sınırlıyor
@@ -469,7 +469,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **A1 kuralı:** AI'a yalnız mesaj ve görseller gidiyor; müşteri eşleştirmesi yine
       sunucuda. Öneri hiçbir şey yazmıyor; kayıt formun onayıyla oluyor.
 
-31. **SUPER_ADMIN'in para yazma yetkisinin kapsamı (varsayım).**
+32. ✅ **Karar (25 Eylül 2026, Codex R3 incelemesi):** **SUPER_ADMIN'in para yazma yetkisinin kapsamı.**
     - **Kapsam:** Karar v2 defterine uygulandı: ödeme kaydı, ters kayıt, kasa teslimi.
       Kurye nakdini zaten yalnız `BAKU_KURYE` yazabiliyordu. Kurlar ve ayarlar aynı kaldı.
     - **Nasıl:** Rol kataloğuna iki yazma grubu eklendi, ikisinde de SUPER_ADMIN yok:
@@ -478,6 +478,22 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **RPC:** Yazanın butiğin kendi kullanıcısı olması gerekiyor. Daha önce SUPER_ADMIN
       her butikte yazabiliyordu; bu artık hiçbir butikte, kendi kayıtlı olduğu butikte bile
       mümkün değil.
-    - **v1 dokunulmadı:** v1 siparişte `alinan_tutar`'ı artırmak (genel `PATCH`) SUPER_ADMIN
-      için açık kalıyor. v1'de "parayı alan" alanı yok, karar defter gerekçesine dayanıyor.
-      Azaltma zaten yalnız PATRON'da (20). v1'de de kapatılması istenirse ayrı küçük bir iş.
+    - **v1 de kapandı:** SUPER_ADMIN v1 siparişte de `alinan_tutar` ve `finans_durumu`'nu
+      değiştiremez, artıramaz da (403). Sipariş tablosunda ödeme durumu seçimi ona kapalı.
+      Azaltma zaten yalnız PATRON'da (20).
+
+33. **v1 sipariş düzenlemesi: yalnız değişen alanlar (Codex R3 F1/F2/F9, varsayım).**
+    - **Nasıl:** `PATCH /api/siparisler/:id` artık okuduğu satırın tamamını geri yazmıyor;
+      yalnız kişinin değiştirdiği kolonları yeni `tomnap_siparis_guncelle` RPC'si ile, tek
+      transaction'da yazıyor (migration `20260925150000`). Hiçbir şey değişmediyse yazmıyor.
+    - **İyimser kilit:** Her düzenleme okunduğu andaki kurye sürümüne ve lojistik durumuna
+      bağlı (eskisi gibi). Para (`alinan_tutar`, `toplam_tutar`), AWB ve `ek_veriler`
+      değişikliği ayrıca eski değere bağlı; arada değiştiyse 409 ve hiçbir şey yazılmıyor.
+    - **v2:** Satırlardan türetilen kolonlar (`para_birimi` dahil) hem sunucuda hem RPC'de
+      yazılamıyor.
+    - **Yayın:** Düzenleme rotası bu RPC'yi çağırdığı için migration yeni kodla birlikte,
+      koddan **önce** uygulanmalı. v2 migration'larına bağlı değil (`model_surumu`'nu
+      `to_jsonb` ile okuyor).
+    - **Kalan risk:** Aynı anda iki kişi farklı notlar yazarsa son yazan kazanıyor (notlar
+      para ya da AWB değil). `ek_veriler` birlikte yazıldığı için ek alanlardan birini
+      değiştiren iki eşzamanlı düzenlemeden ikincisi 409 alıyor.
