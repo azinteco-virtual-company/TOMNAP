@@ -152,6 +152,8 @@ var ROL_GRUPLARI = {
    * yok (OPEN_QUESTIONS 22); KANADA_SATINALMA'nın mevcut yetkisi korunur.
    */
   COURIER_ASSIGN: [...OWNERS, "KANADA_SATINALMA"],
+  /** Kasa teslimi alma ve kurye bakiyeleri (v2 rol matrisi, K17): sahipler ve Bakü finans. */
+  KASA: [...OWNERS, "BAKU_FINANS"],
   /** Kur okuma ve girişi (v2 rol matrisi): sahipler, satın almacılar, Bakü finans. */
   RATES: [...OWNERS, ...BUYERS, "BAKU_FINANS"],
   /** Sipariş sahibi olabilecek roller (primi sahibe ait); oluşturan her zaman kendisi olabilir. */
@@ -4230,7 +4232,7 @@ function corsMiddleware() {
 
 // src/server/middleware/auth.ts
 var READ = /* @__PURE__ */ new Set(["GET", "HEAD", "OPTIONS"]);
-var { STAFF: STAFF2, OWNERS: OWNERS2, SALES: SALES2, PURCHASING, FINANCE, SHIPPING, COURIER_ASSIGN, RATES, ALL } = ROL_GRUPLARI;
+var { STAFF: STAFF2, OWNERS: OWNERS2, SALES: SALES2, PURCHASING, FINANCE, SHIPPING, COURIER_ASSIGN, RATES, KASA, ALL } = ROL_GRUPLARI;
 var rules = [
   ["GET", /^\/api\/auth\/oturum$/, ALL],
   ["POST", /^\/api\/auth\/cikis$/, ALL],
@@ -4279,6 +4281,11 @@ var rules = [
   ["POST", /^\/api\/v2\/odemeler$/, FINANCE],
   ["POST", /^\/api\/v2\/odemeler\/[^/]+\/ters-kayit$/, FINANCE],
   ["GET", /^\/api\/v2\/siparisler\/[^/]+\/odemeler$/, STAFF2],
+  // Courier cash and the cash desk (A11, K17): couriers their own cash; KASA takes it over.
+  ["GET", /^\/api\/v2\/kurye\/nakit$/, ["BAKU_KURYE"]],
+  ["POST", /^\/api\/v2\/kurye\/tahsilat$/, ["BAKU_KURYE"]],
+  ["GET", /^\/api\/v2\/kasa\/kurye-bakiyeleri$/, KASA],
+  ["POST", /^\/api\/v2\/kasa\/teslimler$/, KASA],
   ["GET", /^(?:\/api)?\/uploads\/[^/]+$/, STAFF2],
   [
     "POST",
@@ -5173,12 +5180,12 @@ function formatlaSiparis(s) {
   });
   const toplam = Number(s.toplam_tutar || 0);
   const alinan = Number(s.alinan_tutar || 0);
-  const kalan = s.kalan_tutar !== void 0 && s.kalan_tutar !== null ? Number(s.kalan_tutar) : Math.max(0, toplam - alinan);
+  const kalan2 = s.kalan_tutar !== void 0 && s.kalan_tutar !== null ? Number(s.kalan_tutar) : Math.max(0, toplam - alinan);
   return {
     ...s,
     toplam_tutar: toplam,
     alinan_tutar: alinan,
-    kalan_tutar: kalan,
+    kalan_tutar: kalan2,
     adet: Number(s.adet || 1),
     baku_tahsilat_notu: bakuTahsilatNotu,
     ozel_not: ozelNot,
@@ -6553,6 +6560,40 @@ function bellekteYaz(tenantId, odeme, siparis) {
   const { tenantId: _tenant, ...kayitli } = odeme;
   return kayitli;
 }
+function bellekteKuryeTahsilatiYaz(tenantId, siparis, kuryeId, tutarAzn) {
+  const zaman = (/* @__PURE__ */ new Date()).toISOString();
+  return bellekteYaz(
+    tenantId,
+    {
+      id: randomUUID(),
+      tenantId,
+      siparisId: String(siparis.id),
+      tutarAzn,
+      yontem: "NAKIT",
+      kaynak: "TESLIMAT",
+      alanKullaniciId: kuryeId,
+      almaZamani: zaman,
+      kaydedenKullaniciId: kuryeId,
+      aciklama: null,
+      tersKayitOdemeId: null,
+      kasaTeslimId: null,
+      olusturmaZamani: zaman
+    },
+    siparis
+  );
+}
+function bellekteKasayaKapat(tenantId, kuryeId, odemeIdleri, tutarAzn, kasaTeslimId) {
+  const secilen = odemeIdleri.map(
+    (id) => odemeBellegi.find(
+      (o) => o.id === id && o.tenantId === tenantId && o.alanKullaniciId === kuryeId && o.kaynak === "TESLIMAT" && o.yontem === "NAKIT" && o.tutarAzn > 0 && o.tersKayitOdemeId === null && o.kasaTeslimId === null && !odemeBellegi.some((r) => r.tersKayitOdemeId === o.id)
+    )
+  );
+  const acik = secilen.filter((o) => o !== void 0);
+  if (acik.length !== odemeIdleri.length || acik.reduce((kurus, o) => kurus + KURUS(o.tutarAzn), 0) !== KURUS(tutarAzn))
+    return false;
+  for (const o of acik) o.kasaTeslimId = kasaTeslimId;
+  return true;
+}
 function bellektekiOdemeler(tenant2) {
   return odemeBellegi.filter((o) => o.tenantId === tenant2).map(({ tenantId: _t, ...o }) => o);
 }
@@ -6695,8 +6736,8 @@ async function v2SiparisOdemeleri(tenant2, siparisId) {
   const b = kayit(baslik);
   if (b.tenant_id !== tenantId || b.id !== id)
     throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
-  const { data: rows, error: hata5 } = await client2.from("odemeler").select(ODEME_KOLONLARI).eq("tenant_id", tenantId).eq("siparis_id", id).order("olusturma_zamani", { ascending: true });
-  if (hata5 || !Array.isArray(rows)) throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
+  const { data: rows, error: hata6 } = await client2.from("odemeler").select(ODEME_KOLONLARI).eq("tenant_id", tenantId).eq("siparis_id", id).order("olusturma_zamani", { ascending: true });
+  if (hata6 || !Array.isArray(rows)) throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
   const liste = rows;
   const odemeler = liste.map((row) => odemeden(row, tenantId));
   if (odemeler.some((o) => o.siparisId !== id))
@@ -6953,7 +6994,7 @@ G\xF6rsel / ekran g\xF6r\xFCnt\xFCs\xFC ekliyse ki\u015Fi ad\u0131n\u0131, telef
     });
     const alinan = Number(parsedJson.alinan_tutar || 0);
     const toplam = Number(parsedJson.toplam_tutar || alinan);
-    const kalan = Math.max(0, toplam - alinan);
+    const kalan2 = Math.max(0, toplam - alinan);
     if (!Number.isFinite(toplam) || !Number.isFinite(alinan) || toplam < 0 || alinan < 0)
       throw new PublicResourceError("Ge\xE7ersiz tutar.", 400);
     const dbPayload = {
@@ -7058,7 +7099,7 @@ ${urunNotOzeti}`;
         id: "sip-" + randomUUID2(),
         olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
         ...dbPayload,
-        kalan_tutar: kalan
+        kalan_tutar: kalan2
       });
       if (otomatik_kaydet !== false) {
         memoryOrders(hedefTenantId).unshift(nihaiSiparis);
@@ -7068,7 +7109,7 @@ ${urunNotOzeti}`;
     if (otomatik_kaydet !== false && !dbActive(hedefTenantId) && bulunanMusteri) {
       bulunanMusteri.toplam_siparis_sayisi += 1;
       bulunanMusteri.toplam_harcama += toplam;
-      bulunanMusteri.kalan_toplam_borc += kalan;
+      bulunanMusteri.kalan_toplam_borc += kalan2;
       bulunanMusteri.son_siparis_tarihi = (/* @__PURE__ */ new Date()).toISOString();
       if (!bulunanMusteri.adres && parsedJson.teslimat_adresi)
         bulunanMusteri.adres = parsedJson.teslimat_adresi;
@@ -7090,7 +7131,7 @@ ${urunNotOzeti}`;
         musteri_tipi: parsedJson.musteri_tipi || "TANIMADIK",
         toplam_siparis_sayisi: 1,
         toplam_harcama: toplam,
-        kalan_toplam_borc: kalan,
+        kalan_toplam_borc: kalan2,
         olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
         son_siparis_tarihi: (/* @__PURE__ */ new Date()).toISOString()
       };
@@ -7128,7 +7169,7 @@ router3.post("/siparisler", async (req, res) => {
     }
     const toplam = Number(yeniVeri.toplam_tutar || 0);
     const alinan = Number(yeniVeri.alinan_tutar || 0);
-    const kalan = Math.max(0, toplam - alinan);
+    const kalan2 = Math.max(0, toplam - alinan);
     if (!Number.isFinite(toplam) || !Number.isFinite(alinan) || toplam < 0 || alinan < 0)
       throw new PublicResourceError("Ge\xE7ersiz tutar.", 400);
     const dbPayload = {
@@ -7172,7 +7213,7 @@ router3.post("/siparisler", async (req, res) => {
         ...dbPayload,
         tenant_id: "demo_sandbox",
         is_demo: true,
-        kalan_tutar: kalan
+        kalan_tutar: kalan2
       });
       demoSiparislerVeritabani.unshift(demoSiparis);
       return res.json({ basarili: true, kaynak: "demo_sandbox", siparis: demoSiparis });
@@ -7204,7 +7245,7 @@ router3.post("/siparisler", async (req, res) => {
       id: "sip-" + randomUUID2(),
       olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
       ...dbPayload,
-      kalan_tutar: kalan
+      kalan_tutar: kalan2
     });
     siparislerVeritabani.unshift(yeniSiparis);
     res.json({ basarili: true, kaynak: "bellek", siparis: yeniSiparis });
@@ -7953,7 +7994,7 @@ router5.post("/inbox/:id/onayla", async (req, res) => {
     const alinan = Number(siparisVerisi.alinan_tutar || 0);
     const toplam = Number(siparisVerisi.toplam_tutar || alinan);
     const adet = Number(siparisVerisi.adet ?? 1);
-    const kalan = Math.max(0, toplam - alinan);
+    const kalan2 = Math.max(0, toplam - alinan);
     if (!Number.isFinite(toplam) || !Number.isFinite(alinan) || toplam < 0 || alinan < 0 || !Number.isInteger(adet) || adet <= 0)
       throw new PublicResourceError("Ge\xE7ersiz tutar veya adet.", 400);
     const dbPayload = {
@@ -8002,7 +8043,7 @@ router5.post("/inbox/:id/onayla", async (req, res) => {
         id: orderId,
         olusturma_tarihi: (/* @__PURE__ */ new Date()).toISOString(),
         ...dbPayload,
-        kalan_tutar: kalan
+        kalan_tutar: kalan2
       });
       pool.unshift(stored);
     }
@@ -8948,6 +8989,10 @@ async function rpc(name, args) {
   if (!data || typeof data !== "object")
     throw new PublicResourceError("Kurye i\u015Flemi do\u011Frulanamad\u0131.", 503);
   return data;
+}
+function localCourierForUser(tenant2, userId) {
+  scope(tenant2);
+  return localRecords().find((r) => r.tenant_id === tenant2 && r.kullanici_id === userId && r.aktif);
 }
 function deliveryTask(order) {
   return {
@@ -11173,7 +11218,7 @@ router10.post("/auth/cikis", async (req, res) => {
 var auth_default = router10;
 
 // src/server/routes/v2/index.ts
-import { Router as Router13 } from "express";
+import { Router as Router14 } from "express";
 
 // src/server/services/v2/kurlar.ts
 import { randomUUID as randomUUID10 } from "node:crypto";
@@ -11241,15 +11286,15 @@ async function kurEkle(tenant2, userId, girdi) {
   if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
   const client2 = supabase;
   if (!client2) {
-    const kayit5 = {
+    const kayit6 = {
       ...girdi,
       id: randomUUID10(),
       tenantId,
       girenKullaniciId: userId,
       olusturmaZamani: (/* @__PURE__ */ new Date()).toISOString()
     };
-    bellek.push(kayit5);
-    return { ...kayit5 };
+    bellek.push(kayit6);
+    return { ...kayit6 };
   }
   const { data, error: error2 } = await client2.from("kurlar").insert({
     tenant_id: tenantId,
@@ -11260,20 +11305,20 @@ async function kurEkle(tenant2, userId, girdi) {
     giren_kullanici_id: userId
   }).select(COLUMNS).single();
   if (error2 || !data) throw new PublicResourceError("Kur kaydedilemedi.", 503);
-  const kayit4 = satirdan(data);
-  if (kayit4.tenantId !== tenantId) throw new PublicResourceError("Kur kaydedilemedi.", 503);
-  return kayit4;
+  const kayit5 = satirdan(data);
+  if (kayit5.tenantId !== tenantId) throw new PublicResourceError("Kur kaydedilemedi.", 503);
+  return kayit5;
 }
 var yenidenEskiye = (a, b) => b.olusturmaZamani.localeCompare(a.olusturmaZamani) || b.id.localeCompare(a.id);
 async function kurlariListele(tenant2) {
   const tenantId = v2Tenant(tenant2);
   const client2 = supabase;
   if (!client2) {
-    const kurlar2 = bellek.filter((kayit4) => kayit4.tenantId === tenantId).sort(yenidenEskiye).map((kayit4) => ({ ...kayit4 }));
+    const kurlar2 = bellek.filter((kayit5) => kayit5.tenantId === tenantId).sort(yenidenEskiye).map((kayit5) => ({ ...kayit5 }));
     const guncel2 = Object.fromEntries(
       KUR_PARA_BIRIMLERI.map((para) => [
         para,
-        kurlar2.find((kayit4) => kayit4.paraBirimi === para) ?? null
+        kurlar2.find((kayit5) => kayit5.paraBirimi === para) ?? null
       ])
     );
     return { guncel: guncel2, kurlar: kurlar2.slice(0, KUR_LISTE_SINIRI) };
@@ -11285,7 +11330,7 @@ async function kurlariListele(tenant2) {
     if (error2 || !Array.isArray(data)) throw new PublicResourceError("Kurlar okunamad\u0131.", 503);
     const rows = data;
     const kurlar2 = rows.map(satirdan);
-    if (kurlar2.some((kayit4) => kayit4.tenantId !== tenantId))
+    if (kurlar2.some((kayit5) => kayit5.tenantId !== tenantId))
       throw new PublicResourceError("Kurlar okunamad\u0131.", 503);
     return kurlar2;
   };
@@ -11970,11 +12015,297 @@ router12.get("/siparisler/:id/odemeler", async (req, res) => {
 });
 var odemeler_default = router12;
 
-// src/server/routes/v2/index.ts
-function v2Kapisi(_req, res, next) {
-  if (isV2FlowEnabled()) return next();
-  res.status(404).json({ basarili: false, hata: "Bu funksiya aktiv deyil." });
+// src/server/routes/v2/kasa.ts
+import { Router as Router13 } from "express";
+
+// src/server/services/v2/kasaStore.ts
+import { randomUUID as randomUUID12 } from "node:crypto";
+var UUID4 = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+var KURUS2 = (value) => Math.round(value * 100);
+var bellekModu3 = (tenantId) => !supabase || tenantId === "demo_sandbox";
+var havuz3 = (tenantId) => tenantId === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
+var kasaBellegi = [];
+function tutarOku(value, sinir) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value >= sinir || KURUS2(value) / 100 !== value)
+    throw new PublicResourceError("Tutar 0\u2019dan b\xFCy\xFCk, en fazla 2 ondal\u0131k olmal\u0131.", 400);
+  return value;
 }
+function kuryeTahsilatGirdisi(body2) {
+  const alanlar = v2GovdesiniAyikla(body2, ["siparis_id", "tutar_azn"]);
+  if (typeof alanlar.siparis_id !== "string" || !UUID4.test(alanlar.siparis_id))
+    throw new PublicResourceError("Ge\xE7erli bir sipari\u015F se\xE7ilmelidir.", 400);
+  return {
+    siparisId: alanlar.siparis_id.toLowerCase(),
+    tutarAzn: tutarOku(alanlar.tutar_azn, 1e6)
+  };
+}
+function kasaTeslimGirdisi(body2) {
+  const alanlar = v2GovdesiniAyikla(body2, [
+    "kurye_kullanici_id",
+    "odeme_idleri",
+    "tutar_azn",
+    "aciklama"
+  ]);
+  const kurye = alanlar.kurye_kullanici_id;
+  if (typeof kurye !== "string" || !/^[A-Za-z0-9_:.@-]{1,100}$/.test(kurye))
+    throw new PublicResourceError("Kurye se\xE7ilmelidir.", 400);
+  const ids = alanlar.odeme_idleri;
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > 5e3 || ids.some((id) => typeof id !== "string" || !UUID4.test(id)) || new Set(ids.map((id) => String(id).toLowerCase())).size !== ids.length)
+    throw new PublicResourceError("Teslim edilecek tahsilatlar se\xE7ilmelidir.", 400);
+  let aciklama = null;
+  if (alanlar.aciklama !== void 0 && alanlar.aciklama !== null) {
+    if (typeof alanlar.aciklama !== "string" || alanlar.aciklama.trim().length > 500)
+      throw new PublicResourceError("A\xE7\u0131klama en fazla 500 karakter.", 400);
+    aciklama = alanlar.aciklama.trim() || null;
+  }
+  return {
+    kuryeKullaniciId: kurye,
+    odemeIdleri: ids.map((id) => String(id).toLowerCase()),
+    tutarAzn: tutarOku(alanlar.tutar_azn, 1e7),
+    aciklama
+  };
+}
+function rpcHatasi3(error2) {
+  const code = error2?.code ?? "";
+  if (code === "PT403") throw new PublicResourceError("Bu kasa i\u015Flemi i\xE7in yetkiniz yok.", 403);
+  if (code === "PT404") throw new PublicResourceError("Sipari\u015F ya da kurye bulunamad\u0131.", 404);
+  if (code === "PT409" || code === "23505")
+    throw new PublicResourceError(
+      "Kay\u0131t de\u011Fi\u015Fti: sipari\u015F teslimatta de\u011Fil ya da tahsilat art\u0131k a\xE7\u0131k de\u011Fil. Listeyi yenileyin.",
+      409
+    );
+  if (["22023", "22003", "22P02", "23514", "23502"].includes(code))
+    throw new PublicResourceError("Kasa verisi ge\xE7ersiz.", 400);
+  throw new PublicResourceError("Kasa i\u015Flemi tamamlanamad\u0131.", 503);
+}
+function kayit4(value, mesaj = "Kasa verisi okunamad\u0131.") {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new PublicResourceError(mesaj, 503);
+  return value;
+}
+function acikTahsilattan(value) {
+  const r = kayit4(value);
+  const tutar = Number(r.tutar_azn);
+  if (typeof r.id !== "string" || typeof r.siparis_id !== "string" || !Number.isFinite(tutar))
+    throw new PublicResourceError("Kasa verisi okunamad\u0131.", 503);
+  return {
+    id: r.id,
+    siparisId: r.siparis_id,
+    tutarAzn: tutar,
+    almaZamani: String(r.alma_zamani),
+    musteriAdi: typeof r.musteri_adi === "string" ? r.musteri_adi : null
+  };
+}
+function bakiyeden(value) {
+  const r = kayit4(value);
+  const tahsilat = Number(r.tahsilat_toplami);
+  const teslim = Number(r.teslim_toplami);
+  if (typeof r.kurye_kullanici_id !== "string" || !Number.isFinite(tahsilat) || !Number.isFinite(teslim))
+    throw new PublicResourceError("Kasa verisi okunamad\u0131.", 503);
+  const acik = Array.isArray(r.acik_tahsilatlar) ? r.acik_tahsilatlar.map(acikTahsilattan) : [];
+  return {
+    kuryeKullaniciId: r.kurye_kullanici_id,
+    adSoyad: typeof r.ad_soyad === "string" ? r.ad_soyad : null,
+    tahsilatToplami: tahsilat,
+    teslimToplami: teslim,
+    bakiye: (KURUS2(tahsilat) - KURUS2(teslim)) / 100,
+    acikTahsilatlar: acik
+  };
+}
+function teslimden(value, tenantId) {
+  const r = kayit4(value);
+  const tutar = Number(r.tutar_azn);
+  if (r.tenant_id !== tenantId || typeof r.id !== "string" || typeof r.kurye_kullanici_id !== "string" || typeof r.teslim_alan_kullanici_id !== "string" || !Number.isFinite(tutar))
+    throw new PublicResourceError("Kasa verisi okunamad\u0131.", 503);
+  return {
+    id: r.id,
+    kuryeKullaniciId: r.kurye_kullanici_id,
+    teslimAlanKullaniciId: r.teslim_alan_kullanici_id,
+    tutarAzn: tutar,
+    odemeSayisi: Number(r.odeme_sayisi),
+    aciklama: typeof r.aciklama === "string" ? r.aciklama : null,
+    zaman: String(r.zaman)
+  };
+}
+function bellekBakiyeleri(tenantId, kurye) {
+  const nakit = bellektekiOdemeler(tenantId).filter(
+    (o) => o.kaynak === "TESLIMAT" && o.yontem === "NAKIT" && (!kurye || o.alanKullaniciId === kurye)
+  );
+  const tersler = new Set(nakit.map((o) => o.tersKayitOdemeId).filter(Boolean));
+  const teslimler = kasaBellegi.filter(
+    (k) => k.tenantId === tenantId && (!kurye || k.kuryeKullaniciId === kurye)
+  );
+  const kuryeler = [
+    .../* @__PURE__ */ new Set([
+      ...nakit.map((o) => o.alanKullaniciId),
+      ...teslimler.map((k) => k.kuryeKullaniciId)
+    ])
+  ].sort();
+  return kuryeler.map((id) => {
+    const tahsilat = nakit.filter((o) => o.alanKullaniciId === id).reduce((k, o) => k + KURUS2(o.tutarAzn), 0);
+    const teslim = teslimler.filter((k) => k.kuryeKullaniciId === id).reduce((k, t) => k + KURUS2(t.tutarAzn), 0);
+    return {
+      kuryeKullaniciId: id,
+      adSoyad: kullanicilarVeritabani.find((u) => u.id === id && u.tenant_id === tenantId)?.ad_soyad ?? null,
+      tahsilatToplami: tahsilat / 100,
+      teslimToplami: teslim / 100,
+      bakiye: (tahsilat - teslim) / 100,
+      acikTahsilatlar: nakit.filter(
+        (o) => o.alanKullaniciId === id && o.tutarAzn > 0 && o.kasaTeslimId === null && !tersler.has(o.id)
+      ).map((o) => ({
+        id: o.id,
+        siparisId: o.siparisId,
+        tutarAzn: o.tutarAzn,
+        almaZamani: o.almaZamani,
+        musteriAdi: String(havuz3(tenantId).find((s) => s.id === o.siparisId)?.musteri_adi ?? "") || null
+      }))
+    };
+  });
+}
+function aktifFirma(tenantId) {
+  const firma = firmalarVeritabani.find((f) => f.id === tenantId);
+  return !!firma && (!firma.onayDurumu || firma.onayDurumu === "AKTIF");
+}
+function bellekKuryesi(tenantId, userId) {
+  const u = kullanicilarVeritabani.find(
+    (k) => k.id === userId && k.tenant_id === tenantId && k.rol === "BAKU_KURYE" && k.durum === "AKTIF"
+  );
+  if (!u || !aktifFirma(tenantId))
+    throw new PublicResourceError("Bu kasa i\u015Flemi i\xE7in yetkiniz yok.", 403);
+  return localCourierForUser(tenantId, userId);
+}
+var teslimatta = (s, userId) => s.lojistik_durumu === "BAKU_DAGITIM_ARKADAS" || s.lojistik_durumu === "TESLIM_EDILDI" && s.kurye_teslim_kullanici_id === userId;
+var kalan = (s) => (KURUS2(Number(s.toplam_tutar)) - KURUS2(Number(s.alinan_tutar ?? 0))) / 100;
+async function kuryeTahsilatiKaydet(tenant2, userId, girdi) {
+  const tenantId = v2Tenant(tenant2);
+  if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
+  if (bellekModu3(tenantId)) {
+    const kurye = bellekKuryesi(tenantId, userId);
+    if (!kurye) throw new PublicResourceError("Bu kasa i\u015Flemi i\xE7in yetkiniz yok.", 403);
+    const s = havuz3(tenantId).find((r) => r.id === girdi.siparisId && r.tenant_id === tenantId);
+    if (!s) rpcHatasi3({ code: "PT404" });
+    if (s.baku_kurye_id !== kurye.id) rpcHatasi3({ code: "PT403" });
+    if (Number(s.model_surumu) !== 2 || !teslimatta(s, userId)) rpcHatasi3({ code: "PT409" });
+    if (KURUS2(girdi.tutarAzn) > KURUS2(kalan(s))) rpcHatasi3({ code: "22023" });
+    const odeme2 = bellekteKuryeTahsilatiYaz(tenantId, s, userId, girdi.tutarAzn);
+    return { odeme: odeme2, ozet: (await v2SiparisOdemeleri(tenantId, girdi.siparisId)).ozet };
+  }
+  const { data, error: error2 } = await supabase.rpc("tomnap_v2_kurye_tahsilati", {
+    p_tenant_id: tenantId,
+    p_user_id: userId,
+    p_siparis_id: girdi.siparisId,
+    p_tutar: girdi.tutarAzn
+  });
+  if (error2) rpcHatasi3(error2);
+  const odeme = kayit4(kayit4(data).odeme);
+  if (odeme.tenant_id !== tenantId || odeme.siparis_id !== girdi.siparisId)
+    throw new PublicResourceError("Kasa verisi okunamad\u0131.", 503);
+  const defter2 = await v2SiparisOdemeleri(tenantId, girdi.siparisId);
+  if (!defter2) throw new PublicResourceError("Kasa verisi okunamad\u0131.", 503);
+  return { odeme: defter2.odemeler.find((o) => o.id === odeme.id) ?? null, ozet: defter2.ozet };
+}
+async function kuryeNakitDurumu(tenant2, userId) {
+  const tenantId = v2Tenant(tenant2);
+  if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
+  if (bellekModu3(tenantId)) {
+    const kurye = bellekKuryesi(tenantId, userId);
+    const [bakiye] = bellekBakiyeleri(tenantId, userId);
+    return {
+      bakiye: bakiye?.bakiye ?? 0,
+      acikTahsilatlar: bakiye?.acikTahsilatlar ?? [],
+      siparisler: kurye ? havuz3(tenantId).filter(
+        (s) => s.tenant_id === tenantId && s.baku_kurye_id === kurye.id && Number(s.model_surumu) === 2 && teslimatta(s, userId) && kalan(s) > 0
+      ).map((s) => ({
+        id: String(s.id),
+        musteriAdi: String(s.musteri_adi ?? ""),
+        lojistikDurumu: String(s.lojistik_durumu),
+        toplamTutar: Number(s.toplam_tutar),
+        kalanTutar: kalan(s)
+      })) : []
+    };
+  }
+  const { data, error: error2 } = await supabase.rpc("tomnap_v2_kurye_nakit_durumu", {
+    p_tenant_id: tenantId,
+    p_user_id: userId
+  });
+  if (error2) rpcHatasi3(error2);
+  const r = kayit4(data);
+  const siparisler = Array.isArray(r.siparisler) ? r.siparisler : [];
+  return {
+    bakiye: Number(r.bakiye) || 0,
+    acikTahsilatlar: Array.isArray(r.acik_tahsilatlar) ? r.acik_tahsilatlar.map(acikTahsilattan) : [],
+    siparisler: siparisler.map((value) => {
+      const s = kayit4(value);
+      if (typeof s.id !== "string") throw new PublicResourceError("Kasa verisi okunamad\u0131.", 503);
+      return {
+        id: s.id,
+        musteriAdi: String(s.musteri_adi ?? ""),
+        lojistikDurumu: String(s.lojistik_durumu),
+        toplamTutar: Number(s.toplam_tutar),
+        kalanTutar: Number(s.kalan_tutar)
+      };
+    })
+  };
+}
+async function kuryeBakiyeleri(tenant2) {
+  const tenantId = v2Tenant(tenant2);
+  if (bellekModu3(tenantId)) return bellekBakiyeleri(tenantId, null);
+  const { data, error: error2 } = await supabase.rpc("tomnap_v2_kurye_bakiyeleri", {
+    p_tenant_id: tenantId
+  });
+  if (error2) rpcHatasi3(error2);
+  if (!Array.isArray(data)) throw new PublicResourceError("Kasa verisi okunamad\u0131.", 503);
+  const rows = data;
+  return rows.map(bakiyeden);
+}
+async function kasaTeslimAl(tenant2, userId, girdi) {
+  const tenantId = v2Tenant(tenant2);
+  if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
+  if (bellekModu3(tenantId)) {
+    const alan = kullanicilarVeritabani.find(
+      (k) => k.id === userId && k.durum === "AKTIF" && rolGrubunda(k.rol, "KASA") && (k.tenant_id === tenantId || k.rol === PLATFORM_ROLU)
+    );
+    if (!alan || !aktifFirma(tenantId)) rpcHatasi3({ code: "PT403" });
+    if (!kullanicilarVeritabani.some(
+      (k) => k.id === girdi.kuryeKullaniciId && k.tenant_id === tenantId && k.rol === "BAKU_KURYE"
+    ))
+      rpcHatasi3({ code: "PT404" });
+    const teslim = {
+      id: randomUUID12(),
+      tenantId,
+      kuryeKullaniciId: girdi.kuryeKullaniciId,
+      teslimAlanKullaniciId: alan.id,
+      tutarAzn: girdi.tutarAzn,
+      odemeSayisi: girdi.odemeIdleri.length,
+      aciklama: girdi.aciklama,
+      zaman: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (!bellekteKasayaKapat(
+      tenantId,
+      girdi.kuryeKullaniciId,
+      girdi.odemeIdleri,
+      girdi.tutarAzn,
+      teslim.id
+    ))
+      rpcHatasi3({ code: "PT409" });
+    kasaBellegi.push(teslim);
+    const { tenantId: _tenant, ...sonuc } = teslim;
+    return { teslim: sonuc, bakiye: bellekBakiyeleri(tenantId, girdi.kuryeKullaniciId)[0] ?? null };
+  }
+  const { data, error: error2 } = await supabase.rpc("tomnap_v2_kasa_teslimi", {
+    p_tenant_id: tenantId,
+    p_user_id: userId,
+    p_kurye_kullanici_id: girdi.kuryeKullaniciId,
+    p_odeme_idleri: girdi.odemeIdleri,
+    p_tutar: girdi.tutarAzn,
+    p_aciklama: girdi.aciklama
+  });
+  if (error2) rpcHatasi3(error2);
+  const r = kayit4(data);
+  return { teslim: teslimden(r.teslim, tenantId), bakiye: r.bakiye ? bakiyeden(r.bakiye) : null };
+}
+
+// src/server/routes/v2/kasa.ts
 var router13 = Router13();
 function hata4(res, error2) {
   if (error2 instanceof PublicResourceError) {
@@ -11984,22 +12315,71 @@ function hata4(res, error2) {
   return res.status(500).json({ basarili: false, hata: "\u0130\u015Flem tamamlanamad\u0131." });
 }
 var kullanici2 = (req) => req.auth?.userId ?? "";
-router13.get("/durum", (_req, res) => {
-  res.json({ basarili: true, v2: true });
-});
-router13.get("/kurlar", async (req, res) => {
+router13.get("/kurye/nakit", async (req, res) => {
   try {
-    res.json({ basarili: true, ...await kurlariListele(req.tenantId) });
+    res.json({ basarili: true, ...await kuryeNakitDurumu(req.tenantId, kullanici2(req)) });
   } catch (error2) {
     hata4(res, error2);
   }
 });
-router13.post("/kurlar", async (req, res) => {
+router13.post("/kurye/tahsilat", async (req, res) => {
   try {
-    const girdi = kurGirdisiniDogrula(req.body);
-    res.status(201).json({ basarili: true, kur: await kurEkle(req.tenantId, kullanici2(req), girdi) });
+    const girdi = kuryeTahsilatGirdisi(req.body);
+    res.status(201).json({
+      basarili: true,
+      ...await kuryeTahsilatiKaydet(req.tenantId, kullanici2(req), girdi)
+    });
   } catch (error2) {
     hata4(res, error2);
+  }
+});
+router13.get("/kasa/kurye-bakiyeleri", async (req, res) => {
+  try {
+    res.json({ basarili: true, kuryeler: await kuryeBakiyeleri(req.tenantId) });
+  } catch (error2) {
+    hata4(res, error2);
+  }
+});
+router13.post("/kasa/teslimler", async (req, res) => {
+  try {
+    const girdi = kasaTeslimGirdisi(req.body);
+    res.status(201).json({ basarili: true, ...await kasaTeslimAl(req.tenantId, kullanici2(req), girdi) });
+  } catch (error2) {
+    hata4(res, error2);
+  }
+});
+var kasa_default = router13;
+
+// src/server/routes/v2/index.ts
+function v2Kapisi(_req, res, next) {
+  if (isV2FlowEnabled()) return next();
+  res.status(404).json({ basarili: false, hata: "Bu funksiya aktiv deyil." });
+}
+var router14 = Router14();
+function hata5(res, error2) {
+  if (error2 instanceof PublicResourceError) {
+    const code = [400, 401, 403, 404, 409, 413, 503].includes(error2.status) ? error2.status : 500;
+    return res.status(code).json({ basarili: false, hata: error2.message });
+  }
+  return res.status(500).json({ basarili: false, hata: "\u0130\u015Flem tamamlanamad\u0131." });
+}
+var kullanici3 = (req) => req.auth?.userId ?? "";
+router14.get("/durum", (_req, res) => {
+  res.json({ basarili: true, v2: true });
+});
+router14.get("/kurlar", async (req, res) => {
+  try {
+    res.json({ basarili: true, ...await kurlariListele(req.tenantId) });
+  } catch (error2) {
+    hata5(res, error2);
+  }
+});
+router14.post("/kurlar", async (req, res) => {
+  try {
+    const girdi = kurGirdisiniDogrula(req.body);
+    res.status(201).json({ basarili: true, kur: await kurEkle(req.tenantId, kullanici3(req), girdi) });
+  } catch (error2) {
+    hata5(res, error2);
   }
 });
 var primGorur = (req) => rolGrubunda(req.auth?.role, "PAYROLL");
@@ -12008,29 +12388,30 @@ function gorunur(req, ayarlar) {
   const { primOraniVarsayilan: _gizli, ...digerleri } = ayarlar;
   return digerleri;
 }
-router13.get("/ayarlar", async (req, res) => {
+router14.get("/ayarlar", async (req, res) => {
   try {
     res.json({ basarili: true, ayarlar: gorunur(req, await ayarlariOku(req.tenantId)) });
   } catch (error2) {
-    hata4(res, error2);
+    hata5(res, error2);
   }
 });
-router13.patch("/ayarlar", async (req, res) => {
+router14.patch("/ayarlar", async (req, res) => {
   try {
     if (!primGorur(req) && Object.hasOwn(Object(req.body), "prim_orani_varsayilan"))
       throw new PublicResourceError("Prim oran\u0131n\u0131 yaln\u0131z patron de\u011Fi\u015Ftirebilir.", 403);
     const degisiklik = ayarGuncellemesiniDogrula(req.body);
     res.json({
       basarili: true,
-      ayarlar: gorunur(req, await ayarlariGuncelle(req.tenantId, kullanici2(req), degisiklik))
+      ayarlar: gorunur(req, await ayarlariGuncelle(req.tenantId, kullanici3(req), degisiklik))
     });
   } catch (error2) {
-    hata4(res, error2);
+    hata5(res, error2);
   }
 });
-router13.use(siparisler_default2);
-router13.use(odemeler_default);
-var v2_default = router13;
+router14.use(siparisler_default2);
+router14.use(odemeler_default);
+router14.use(kasa_default);
+var v2_default = router14;
 
 // src/server/index.ts
 function createApp({ trustProxy = false } = {}) {
