@@ -19,6 +19,7 @@ import {
 import { BASLANGIC_SIPARISLER } from '../../data/ornek-siparisler';
 import { assertTenantImageReferences } from './gorsel';
 import { PublicResourceError } from '../services/publicFetch';
+import { bellekteOdemesiVar } from '../services/v2/odemeStore';
 
 const router = Router();
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -32,7 +33,7 @@ function fail(res: any, error: any) {
   const status =
     error instanceof PublicResourceError
       ? error.status
-      : error?.code === '23505'
+      : error?.code === '23505' || error?.code === '23503'
         ? 409
         : ['22023', '22P02', '23514', '23502'].includes(error?.code)
           ? 400
@@ -45,7 +46,9 @@ function fail(res: any, error: any) {
       error instanceof PublicResourceError
         ? error.message
         : status === 409
-          ? 'İşlem kimliği veya sipariş kimliği çakışıyor. Mevcut kayıtlar değiştirilmedi.'
+          ? error?.code === '23503'
+            ? 'Ödemesi olan v2 siparişleri silinemez. Mevcut kayıtlar değiştirilmedi.'
+            : 'İşlem kimliği veya sipariş kimliği çakışıyor. Mevcut kayıtlar değiştirilmedi.'
           : status === 400
             ? 'Yedek verisi geçersiz. Mevcut kayıtlar değiştirilmedi.'
             : status === 413
@@ -261,6 +264,21 @@ async function maintain(
       throw new PublicResourceError('İşlem kimliği başka bir istek için kullanılmış.', 409);
     return { ...receipt.result, tekrar: true };
   }
+  // Orders with payments keep their money trail, as in the database (A10).
+  const kalanlar = new Set(rows.map((r) => r.id));
+  if (
+    mode !== 'merge' &&
+    bellekteOdemesiVar(
+      tenant,
+      localRows(tenant)
+        .filter((r) => tenantOf(r) === tenant && !kalanlar.has(r.id))
+        .map((r) => r.id)
+    )
+  )
+    throw new PublicResourceError(
+      'Ödemesi olan v2 siparişleri silinemez. Mevcut kayıtlar değiştirilmedi.',
+      409
+    );
   if (localReceipts.size >= 10000)
     throw new PublicResourceError('Yerel işlem kayıt sınırına ulaşıldı.', 503);
   const current = localRows(tenant),

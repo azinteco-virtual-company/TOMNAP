@@ -67,6 +67,12 @@ import {
   v2SiparisOlustur,
 } from '../../../src/server/services/v2/siparisStore';
 import { siparisSahipAdaylari } from '../../../src/server/services/v2/siparisAyristirma';
+import {
+  v2OdemeGirdisiniDogrula,
+  v2OdemeKaydet,
+  v2OdemeTersKayit,
+  v2SiparisOdemeleri,
+} from '../../../src/server/services/v2/odemeStore';
 
 const rate = (tenant: string, extra: Record<string, unknown> = {}) => ({
   id: `${tenant}-rate`,
@@ -326,5 +332,124 @@ describe('v2 order owner picker on Supabase (A9)', () => {
 
     db.answer = () => ({ data: null, error: { code: 'XX000' } });
     await expect(siparisSahipAdaylari('t-a')).rejects.toMatchObject({ status: 503 });
+  });
+});
+
+describe('v2 payment ledger on Supabase: one RPC per write, tenant-scoped reads (A10)', () => {
+  const PAYMENT = '90000000-0000-4000-8000-000000000001';
+  const payment = (tenant: string, extra: Record<string, unknown> = {}) => ({
+    id: PAYMENT,
+    tenant_id: tenant,
+    siparis_id: ORDER,
+    tutar_azn: '30.00',
+    yontem: 'NAKIT',
+    kaynak: 'BUTIK',
+    alan_kullanici_id: 'u-1',
+    alma_zamani: '2026-09-25T10:00:00+00:00',
+    kaydeden_kullanici_id: 'u-1',
+    aciklama: null,
+    ters_kayit_odeme_id: null,
+    kasa_teslim_id: null,
+    olusturma_zamani: '2026-09-25T10:00:00+00:00',
+    ...extra,
+  });
+  const ledgerAnswers = (tenant: string, rows: unknown[] = [payment(tenant)]) =>
+    (db.answer = (call) => ({
+      data: call.table === 'siparisler' ? header(tenant) : rows,
+      error: null,
+    }));
+  const body = () =>
+    v2OdemeGirdisiniDogrula({ siparis_id: ORDER, tutar_azn: 30, yontem: 'NAKIT', kaynak: 'BUTIK' });
+
+  it('records and reverses through the RPCs with the session tenant and user only', async () => {
+    db.rpcAnswer = () => ({ data: { odeme: payment('t-a') }, error: null });
+    ledgerAnswers('t-a');
+    const recorded = await v2OdemeKaydet('t-a', 'u-1', body());
+    expect(db.rpcs).toEqual([
+      {
+        name: 'tomnap_v2_odeme_kaydet',
+        args: {
+          p_tenant_id: 't-a',
+          p_user_id: 'u-1',
+          p_odeme: {
+            siparis_id: ORDER,
+            tutar_azn: 30,
+            yontem: 'NAKIT',
+            kaynak: 'BUTIK',
+            alma_zamani: null,
+            aciklama: null,
+          },
+        },
+      },
+    ]);
+    expect(recorded.odeme).toMatchObject({ id: PAYMENT, tutarAzn: 30 });
+    expect(recorded.ozet).toMatchObject({ odenenTutar: 30, durum: 'KISMI' });
+
+    db.rpcs = [];
+    db.rpcAnswer = () => ({
+      data: {
+        odeme: payment('t-a', {
+          id: ORDER,
+          tutar_azn: '-30.00',
+          ters_kayit_odeme_id: PAYMENT,
+          aciklama: 'x',
+        }),
+      },
+      error: null,
+    });
+    await v2OdemeTersKayit('t-a', 'u-2', PAYMENT.toUpperCase(), 'Yanlış');
+    expect(db.rpcs).toEqual([
+      {
+        name: 'tomnap_v2_odeme_ters_kayit',
+        args: { p_tenant_id: 't-a', p_user_id: 'u-2', p_odeme_id: PAYMENT, p_aciklama: 'Yanlış' },
+      },
+    ]);
+  });
+
+  it('maps RPC refusals and refuses foreign rows', async () => {
+    for (const [code, status] of [
+      ['PT403', 403],
+      ['PT404', 404],
+      ['PT409', 409],
+      ['23505', 409],
+      ['22023', 400],
+      ['23514', 400],
+      ['XX000', 503],
+    ] as const) {
+      db.rpcAnswer = () => ({ data: null, error: { code } });
+      await expect(v2OdemeKaydet('t-a', 'u-1', body())).rejects.toMatchObject({ status });
+    }
+    db.rpcAnswer = () => ({ data: { odeme: payment('t-b') }, error: null });
+    await expect(v2OdemeKaydet('t-a', 'u-1', body())).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('reads the order header and its ledger with tenant filters on every query', async () => {
+    ledgerAnswers('t-a');
+    const ledger = await v2SiparisOdemeleri('t-a', ORDER);
+    expect(ledger?.ozet).toMatchObject({ toplamTutar: 100, odenenTutar: 30, durum: 'KISMI' });
+    const [baslik, odemeler] = db.calls;
+    expect(baslik).toMatchObject({ table: 'siparisler' });
+    expect(baslik.filters).toEqual(
+      expect.arrayContaining([
+        ['tenant_id', 't-a'],
+        ['model_surumu', 2],
+        ['id', ORDER],
+      ])
+    );
+    expect(odemeler).toMatchObject({ table: 'odemeler' });
+    expect(odemeler.filters).toEqual(
+      expect.arrayContaining([
+        ['tenant_id', 't-a'],
+        ['siparis_id', ORDER],
+      ])
+    );
+
+    ledgerAnswers('t-a', [payment('t-b')]);
+    await expect(v2SiparisOdemeleri('t-a', ORDER)).rejects.toMatchObject({ status: 503 });
+    db.answer = () => ({ data: null, error: null });
+    expect(await v2SiparisOdemeleri('t-a', ORDER)).toBeNull();
+    db.calls = [];
+    expect(await v2SiparisOdemeleri('t-a', 'not-a-uuid')).toBeNull();
+    expect(db.calls).toEqual([]);
   });
 });

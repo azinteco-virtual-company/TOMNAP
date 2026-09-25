@@ -26,6 +26,7 @@ import {
 } from '../services/state';
 import { MusteriKaydi } from '../types';
 import { rolGrubunda } from '../../shared/roller';
+import { bellekteOdemesiVar } from '../services/v2/odemeStore';
 
 const router = Router();
 const rowTenant = (row: any): string => {
@@ -896,14 +897,18 @@ router.delete('/siparisler/:id', async (req, res) => {
     const tenant = tenantFor(req, true);
     const existing = await ownedOrder(tenant, req.params.id);
     if (!existing) return res.status(404).json({ basarili: false, hata: 'Sipariş bulunamadı.' });
+    // A v2 order with payments keeps its money trail (A10; odemeler ON DELETE RESTRICT).
+    const odemeli = new PublicResourceError('Ödemesi olan bir sipariş silinemez.', 409);
     if (dbActive(tenant)) {
       const { error } = await supabase
         .from('siparisler')
         .delete()
         .eq('id', existing.id)
         .eq('tenant_id', tenant);
+      if (error?.code === '23503') throw odemeli;
       if (error) throw new PublicResourceError('Sipariş silinemedi.', 503);
     } else {
+      if (bellekteOdemesiVar(tenant, [existing.id])) throw odemeli;
       const pool = memoryOrders(tenant);
       pool.splice(
         pool.findIndex((s) => s.id === existing.id && belongs(s, tenant)),

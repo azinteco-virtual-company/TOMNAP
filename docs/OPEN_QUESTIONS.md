@@ -382,3 +382,26 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       Bir migration `siparisler`'e kolon eklerse SQL testi düşüyor; liste güncellenince
       gidiş-dönüş testi yeni kolonun geri yazılmasını ya da gerekçeyle dışarıda
       bırakılmasını istiyor.
+
+28. **Ödeme defteri (A10, varsayım).**
+    - **Kim yazar:** PATRON, SUPER_ADMIN (tenant iş verisinde PATRON gibi) ve BAKU_FINANS
+      (`FINANCE` grubu). SATIS_SORUMLUSU yalnız kaynağı `BUTIK` olan tahsilatı yazar ve
+      yalnız kendi yazdığı butik tahsilatını ters kayıtla düzeltir. Parayı alan
+      (`alan_kullanici_id`) her zaman kaydı yapan kişidir; başkası adına kayıt yok.
+    - **Kaynak:** Bu uç yalnız `BUTIK` ve `ONLINE` yazar. `TESLIMAT` kurye akışından gelir
+      (A11). `kasa_teslim_id` A11'e ayrıldı; A10'da her satırda boş.
+    - **Tutar ve zaman:** 0'dan büyük, 1.000.000 AZN'den küçük, en çok 2 ondalık. Fazla
+      ödeme kabul ediliyor (durum `FAZLA`, eski `finans_durumu` `ODENDI`). Ödeme zamanı
+      girilmezse şimdi; gelecekte (5 dk pay) ya da 366 günden eski olamaz.
+    - **Ters kayıt (K16):** Gerekçe zorunlu; tutarın eksisi, aynı yöntem, kaynak ve alan
+      kişiyle; her ödeme bir kez; ters kaydın ters kaydı yok.
+    - **Eski kolonlar (K20):** `alinan_tutar` ve `finans_durumu`'nu her yeni defter
+      satırından sonra aynı transaction'da bir tetikleyici yazıyor; RPC dışından eklenen
+      bir satır da özeti bozamaz. Eşzamanlı ödemeler sipariş satırını kilitleyip sırayla
+      toplanıyor (yarış testi).
+    - **Silme:** Ödemesi olan bir v2 siparişi silinemez: v1 `DELETE`, veritabanı
+      temizleme ve "değiştirerek geri yükleme" 409 veriyor, kayıtlar değişmiyor. Bayrak
+      kapalıyken ödeme yazılamadığı için mevcut akışlarda bir şey değişmiyor. Down dosyası
+      ödeme varken çalışmayı reddediyor.
+    - **Okuma ve ekran:** Defteri STAFF okuyabilir (sipariş listesindeki `alinan_tutar` ile
+      aynı görünürlük). "Kassa" sekmesi yalnız `FINANCE` rollerine açık.

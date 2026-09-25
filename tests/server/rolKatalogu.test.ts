@@ -109,6 +109,14 @@ describe('role catalog is the single source of roles (A4)', () => {
       [...ROL_GRUPLARI.SALES].sort(),
       [...ROL_GRUPLARI.ORDER_OWNERS].sort(),
     ]);
+    // Payment ledger (A10): both RPCs accept exactly the FINANCE group.
+    for (const name of ['tomnap_v2_odeme_kaydet', 'tomnap_v2_odeme_ters_kayit'])
+      expect(
+        [...latestSqlDefinition(name).matchAll(/rol IN \(([^)]*)\)/g)].map((match) =>
+          quoted(match[1])
+        ),
+        name
+      ).toEqual([[...ROL_GRUPLARI.FINANCE].sort()]);
     const approvers = latestSqlDefinition('tomnap_approve_awb_matches').match(
       /u\.rol IN \(([^)]*)\)/
     );
