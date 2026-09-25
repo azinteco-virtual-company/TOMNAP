@@ -16,6 +16,7 @@ import {
   odemeDurumu,
   v2OdemeGirdisiniDogrula,
   v2OdemeKaydet,
+  v2OdemeTersKayit,
 } from '../../../src/server/services/v2/odemeStore';
 import { loginFixture } from '../helpers/session';
 import { TENANT_A, TENANT_B, describeTenantIsolation } from '../helpers/tenantIsolation';
@@ -185,7 +186,7 @@ describe('v2 payment ledger behaviour (A10)', () => {
     });
     await post('BAKU_FINANS', odeme(order, { tutar_azn: 70, yontem: 'KART', kaynak: 'ONLINE' }));
     const over = await post(
-      'SUPER_ADMIN',
+      'PATRON',
       odeme(order, { tutar_azn: 5.5, yontem: 'HAVALE', kaynak: 'ONLINE' })
     );
     expect(over.body.ozet).toMatchObject({ odenenTutar: 105.5, kalanTutar: -5.5, durum: 'FAZLA' });
@@ -220,6 +221,36 @@ describe('v2 payment ledger behaviour (A10)', () => {
     expect(ledgerOf(TENANT)).toHaveLength(before);
     expect((await post('SATIS_SORUMLUSU', odeme(order))).status).toBe(201);
     expect((await agents.BAKU_KURYE.get(`/api/v2/siparisler/${order}/odemeler`)).status).toBe(403);
+  });
+
+  it('lets a platform admin read the ledger but never write money (O-24, 20260925140000)', async () => {
+    const paid = (await post('PATRON', odeme(order))).body.odeme.id;
+    const before = ledgerOf(TENANT).length;
+    expect((await post('SUPER_ADMIN', odeme(order))).status).toBe(403);
+    expect(
+      (
+        await agents.SUPER_ADMIN.post(
+          `/api/v2/odemeler/${paid}/ters-kayit?tenant_id=${TENANT}`
+        ).send({
+          aciklama: 'Yanlış',
+        })
+      ).status
+    ).toBe(403);
+    // The store refuses too (second layer behind the allowlist), like the RPC.
+    await expect(
+      v2OdemeKaydet(TENANT, userIds.SUPER_ADMIN, v2OdemeGirdisiniDogrula(odeme(order)))
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      v2OdemeTersKayit(TENANT, userIds.SUPER_ADMIN, paid, 'Yanlış')
+    ).rejects.toMatchObject({ status: 403 });
+    expect(ledgerOf(TENANT)).toHaveLength(before);
+    const read = await agents.SUPER_ADMIN.get(
+      `/api/v2/siparisler/${order}/odemeler?tenant_id=${TENANT}`
+    );
+    expect(read.status).toBe(200);
+    expect(read.body.ozet).toMatchObject({ odenenTutar: 30 });
+    // PATRON and BAKU_FINANS are unaffected.
+    expect((await post('BAKU_FINANS', odeme(order, { tutar_azn: 1 }))).status).toBe(201);
   });
 
   it('refuses v1 orders, unknown orders and invalid payments without writing', async () => {

@@ -17,6 +17,8 @@ import {
   bellektekiOdemeler,
 } from '../../../src/server/services/v2/odemeStore';
 import {
+  kasaTeslimAl,
+  kasaTeslimGirdisi,
   kuryeBakiyeleri,
   kuryeTahsilatGirdisi,
   kuryeTahsilatiKaydet,
@@ -136,6 +138,7 @@ describe('v2 courier cash and the cash desk (A11)', () => {
     }
     const admin = await loginFixture(app, 'SUPER_ADMIN', 'all');
     agents.SUPER_ADMIN = admin.agent;
+    ids.SUPER_ADMIN = admin.userId;
     couriers.KURYE1 = await courierFor(TENANT, ids.KURYE1);
     couriers.KURYE2 = await courierFor(TENANT, ids.KURYE2);
   });
@@ -286,6 +289,31 @@ describe('v2 courier cash and the cash desk (A11)', () => {
     expect(bellekteKasayaKapat(TENANT, 'kasa-kurye-B', [foreign], 10, randomUUID())).toBe(false);
     expect(bellekteKasayaKapat(TENANT_A, 'kasa-kurye-B', [foreign], 10, randomUUID())).toBe(false);
     expect(bellektekiOdemeler(TENANT_B).find((o) => o.id === foreign)?.kasaTeslimId).toBeNull();
+  });
+
+  it('lets a platform admin read balances but never take or record cash (O-24)', async () => {
+    const cash = (await collect('KURYE1', own, 12)).body.odeme.id;
+    const body = { kurye_kullanici_id: ids.KURYE1, odeme_idleri: [cash], tutar_azn: 12 };
+    const read = await agents.SUPER_ADMIN.get(`/api/v2/kasa/kurye-bakiyeleri?tenant_id=${TENANT}`);
+    expect(read.status).toBe(200);
+    expect(
+      read.body.kuryeler
+        .find((k: { kuryeKullaniciId: string }) => k.kuryeKullaniciId === ids.KURYE1)
+        .acikTahsilatlar.map((o: { id: string }) => o.id)
+    ).toContain(cash);
+    expect(
+      (await agents.SUPER_ADMIN.post(`/api/v2/kasa/teslimler?tenant_id=${TENANT}`).send(body))
+        .status
+    ).toBe(403);
+    expect((await collect('SUPER_ADMIN', own, 1)).status).toBe(403);
+    await expect(
+      kasaTeslimAl(TENANT, ids.SUPER_ADMIN, kasaTeslimGirdisi(body))
+    ).rejects.toMatchObject({ status: 403 });
+    expect((await balanceOf(ids.KURYE1))!.acikTahsilatlar.map((o) => o.id)).toContain(cash);
+    // PATRON is unaffected.
+    expect(
+      (await agents.PATRON.post(`/api/v2/kasa/teslimler?tenant_id=${TENANT}`).send(body)).status
+    ).toBe(201);
   });
 
   it('shows balances to the cash desk only, and is closed with the flag off', async () => {
