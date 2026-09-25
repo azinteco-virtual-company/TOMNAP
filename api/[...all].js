@@ -7343,8 +7343,25 @@ var v2DerivedFields = /* @__PURE__ */ new Set([
   "adet",
   "beden_veya_olcu",
   "renk",
-  "urunler"
+  "urunler",
+  // The lines are in AZN (K5); the order currency follows them (Codex R3 F9).
+  "para_birimi"
 ]);
+var courierFields = ["baku_kurye_id", "baku_kurye_adi", "baku_kurye_bolgesi"];
+var moneyFields = ["alinan_tutar", "toplam_tutar", "finans_durumu"];
+function orderUpdateError(error2) {
+  const code = error2?.code ?? "";
+  if (code === "PT409")
+    throw new PublicResourceError(
+      "Sipari\u015F bu arada de\u011Fi\u015Fti (\xF6deme, AWB, atama ya da durum). Listeyi yenileyin.",
+      409
+    );
+  if (code === "PT404") throw new PublicResourceError("Sipari\u015F bulunamad\u0131.", 404);
+  if (code === "PT403") throw new PublicResourceError("Bu alan burada de\u011Fi\u015Ftirilemez.", 403);
+  if (["22023", "22P02", "22007", "22008", "23514", "23502"].includes(code))
+    throw new PublicResourceError("Sipari\u015F verisi ge\xE7ersiz.", 400);
+  throw new PublicResourceError("Sipari\u015F g\xFCncellenemedi.", 503);
+}
 var purchaseFields = /* @__PURE__ */ new Set([
   "urun_aciklamasi",
   "beden_veya_olcu",
@@ -7389,6 +7406,8 @@ router3.patch("/siparisler/:id", async (req, res) => {
       if (JSON.stringify(value) === JSON.stringify(formatted[key])) continue;
       if (Number(formatted.model_surumu) === 2 && v2DerivedFields.has(key))
         throw new PublicResourceError("v2 sipari\u015Fte bu alan sat\u0131rlardan t\xFCretilir: " + key, 409);
+      if (role === PLATFORM_ROLU && (key === "alinan_tutar" || key === "finans_durumu"))
+        throw new PublicResourceError("Platform y\xF6neticisi tahsilat\u0131 de\u011Fi\u015Ftiremez.", 403);
       if ([
         "baku_kurye_id",
         "baku_kurye_adi",
@@ -7408,12 +7427,15 @@ router3.patch("/siparisler/:id", async (req, res) => {
       throw new PublicResourceError("Ge\xE7ersiz eksik bilgi listesi.", 400);
     await validateCustomerReference(tenant2, updates.musteri_id);
     await assertTenantImageReferences(req, updates);
+    const kaynak = dbActive(tenant2) ? "supabase" : tenant2 === "demo_sandbox" ? "demo_sandbox" : "bellek";
+    if (Object.keys(updates).length === 0)
+      return res.json({ basarili: true, kaynak, siparis: formatted });
+    const simdi = (/* @__PURE__ */ new Date()).toISOString();
     const changed = {
       ...formatted,
       ...updates,
       id: existing.id,
-      tenant_id: tenant2,
-      guncellenme_tarihi: (/* @__PURE__ */ new Date()).toISOString()
+      tenant_id: tenant2
     };
     for (const key of ["toplam_tutar", "alinan_tutar", "adet"]) {
       changed[key] = Number(changed[key]);
@@ -7436,7 +7458,7 @@ router3.patch("/siparisler/:id", async (req, res) => {
       changed.islem_gecmisi = [
         ...Array.isArray(formatted.islem_gecmisi) ? formatted.islem_gecmisi : [],
         {
-          tarih: changed.guncellenme_tarihi,
+          tarih: simdi,
           yapan_rol: role,
           yapan_kisi: req.auth?.userId || "",
           eylem: "TAHSILAT_AZALTILDI",
@@ -7447,34 +7469,62 @@ router3.patch("/siparisler/:id", async (req, res) => {
         }
       ];
     }
-    changed.kalan_tutar = Math.max(0, changed.toplam_tutar - changed.alinan_tutar);
-    changed.finans_durumu = changed.alinan_tutar >= changed.toplam_tutar && changed.toplam_tutar > 0 ? "ODENDI" : changed.alinan_tutar > 0 ? "KISMI_ODEME" : "BEKLIYOR";
+    const paraDegisti = moneyFields.some((key) => key in updates);
+    if (paraDegisti) {
+      changed.kalan_tutar = Math.max(0, changed.toplam_tutar - changed.alinan_tutar);
+      changed.finans_durumu = changed.alinan_tutar >= changed.toplam_tutar && changed.toplam_tutar > 0 ? "ODENDI" : changed.alinan_tutar > 0 ? "KISMI_ODEME" : "BEKLIYOR";
+    }
+    const v2 = Number(formatted.model_surumu) === 2;
     if (dbActive(tenant2)) {
-      const payload = hazirlaSupabasePayload(changed);
-      for (const key of ["baku_kurye_id", "baku_kurye_adi", "baku_kurye_bolgesi"])
-        delete payload[key];
-      const { data, error: error2 } = await supabase.from("siparisler").update(payload).eq("id", existing.id).eq("tenant_id", tenant2).eq("kurye_atama_surumu", Number(formatted.kurye_atama_surumu || 0)).eq("lojistik_durumu", formatted.lojistik_durumu).select("*").maybeSingle();
-      if (error2) throw new PublicResourceError("Sipari\u015F g\xFCncellenemedi.", 503);
-      if (!data)
-        throw new PublicResourceError(
-          "Sipari\u015Fin atamas\u0131 veya durumu de\u011Fi\u015Fti. Listeyi yenileyin.",
-          409
-        );
-      return res.json({ basarili: true, kaynak: "supabase", siparis: formatlaSiparis(data) });
+      const once = hazirlaSupabasePayload(formatted);
+      const sonra = hazirlaSupabasePayload(changed);
+      const degisiklik = {};
+      for (const key of Object.keys(sonra))
+        if (JSON.stringify(sonra[key]) !== JSON.stringify(once[key])) degisiklik[key] = sonra[key];
+      for (const key of courierFields) delete degisiklik[key];
+      if (v2) for (const key of v2DerivedFields) delete degisiklik[key];
+      if (Object.keys(degisiklik).length === 0)
+        return res.json({ basarili: true, kaynak, siparis: formatted });
+      const beklenen = {
+        kurye_atama_surumu: existing.kurye_atama_surumu ?? null,
+        lojistik_durumu: existing.lojistik_durumu ?? null
+      };
+      if (moneyFields.some((key) => key in degisiklik)) {
+        beklenen.alinan_tutar = existing.alinan_tutar ?? null;
+        beklenen.toplam_tutar = existing.toplam_tutar ?? null;
+      }
+      if ("uluslararasi_kargo_kodu" in degisiklik)
+        beklenen.uluslararasi_kargo_kodu = existing.uluslararasi_kargo_kodu ?? null;
+      if ("ek_veriler" in degisiklik) beklenen.ek_veriler = existing.ek_veriler ?? null;
+      const { data, error: error2 } = await supabase.rpc("tomnap_siparis_guncelle", {
+        p_tenant_id: tenant2,
+        p_siparis_id: existing.id,
+        p_degisiklik: degisiklik,
+        p_beklenen: beklenen
+      });
+      if (error2) orderUpdateError(error2);
+      if (!data || typeof data !== "object" || data.id !== existing.id || data.tenant_id !== tenant2)
+        throw new PublicResourceError("Sipari\u015F g\xFCncellenemedi.", 503);
+      return res.json({ basarili: true, kaynak, siparis: formatlaSiparis(data) });
     }
     const pool = memoryOrders(tenant2);
     const index = pool.findIndex((s) => s.id === existing.id && belongs(s, tenant2));
-    if (index < 0 || Number(pool[index].kurye_atama_surumu || 0) !== Number(formatted.kurye_atama_surumu || 0) || pool[index].lojistik_durumu !== formatted.lojistik_durumu)
+    const current = index < 0 ? void 0 : pool[index];
+    const ayni = (key, numeric = false) => numeric ? Number(current?.[key] || 0) === Number(formatted[key] || 0) : (current?.[key] ?? null) === (formatted[key] ?? null);
+    if (!current || !ayni("kurye_atama_surumu", true) || !ayni("lojistik_durumu") || paraDegisti && (!ayni("alinan_tutar", true) || !ayni("toplam_tutar", true)) || "uluslararasi_kargo_kodu" in updates && !ayni("uluslararasi_kargo_kodu"))
       throw new PublicResourceError(
-        "Sipari\u015Fin atamas\u0131 veya durumu de\u011Fi\u015Fti. Listeyi yenileyin.",
+        "Sipari\u015F bu arada de\u011Fi\u015Fti (\xF6deme, AWB, atama ya da durum). Listeyi yenileyin.",
         409
       );
-    pool[index] = formatlaSiparis(changed);
-    res.json({
-      basarili: true,
-      kaynak: tenant2 === "demo_sandbox" ? "demo_sandbox" : "bellek",
-      siparis: pool[index]
-    });
+    const uygula = { ...updates, guncellenme_tarihi: simdi };
+    if (changed.islem_gecmisi !== formatted.islem_gecmisi)
+      uygula.islem_gecmisi = changed.islem_gecmisi;
+    if (paraDegisti)
+      for (const key of ["toplam_tutar", "alinan_tutar", "kalan_tutar", "finans_durumu"])
+        uygula[key] = changed[key];
+    for (const key of courierFields) delete uygula[key];
+    pool[index] = formatlaSiparis({ ...current, ...uygula });
+    res.json({ basarili: true, kaynak, siparis: pool[index] });
   } catch (error2) {
     orderFailure(res, error2);
   }
