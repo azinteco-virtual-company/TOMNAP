@@ -32,10 +32,11 @@ BEGIN;
 INSERT INTO public.firmalar(id, ad, onay_durumu) VALUES ('sg-a', 'Düzenleme A', 'AKTIF'), ('sg-b', 'Düzenleme B', 'AKTIF');
 INSERT INTO public.kullanicilar(id, tenant_id, ad_soyad, email, rol, durum)
   VALUES ('sg-patron', 'sg-a', 'Patron', 'patron@duzenleme.test', 'PATRON', 'AKTIF');
+-- Older update time: now() is the transaction start, the same for the insert and the edit.
 INSERT INTO public.siparisler(id, tenant_id, ham_mesaj, musteri_adi, urun_aciklamasi, toplam_tutar, alinan_tutar,
-                              lojistik_durumu, uluslararasi_kargo_kodu, baku_tahsilat_notu) VALUES
-  ('75000000-0000-4000-8000-000000000001', 'sg-a', 'v1', 'A', 'Çanta', 100, 20, 'ULUSLARARASI_KARGO', 'AWB-1', 'eski'),
-  ('75000000-0000-4000-8000-000000000002', 'sg-b', 'v1', 'B', 'Çanta', 100, 0, 'KANADA_DEPO', NULL, '');
+                              lojistik_durumu, uluslararasi_kargo_kodu, baku_tahsilat_notu, guncellenme_tarihi) VALUES
+  ('75000000-0000-4000-8000-000000000001', 'sg-a', 'v1', 'A', 'Çanta', 100, 20, 'ULUSLARARASI_KARGO', 'AWB-1', 'eski', now() - interval '1 day'),
+  ('75000000-0000-4000-8000-000000000002', 'sg-b', 'v1', 'B', 'Çanta', 100, 0, 'KANADA_DEPO', NULL, '', now() - interval '1 day');
 SELECT public.tomnap_v2_siparis_olustur('sg-a', 'sg-patron', '{"musteri_adi":"V2"}',
   '[{"urun_aciklamasi":"Kəmər","adet":1,"birim_satis_fiyati_azn":40,"kaynak_ulke":"CA"}]') IS NOT NULL AS v2_order;
 SET LOCAL ROLE service_role;
