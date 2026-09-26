@@ -226,6 +226,7 @@ ROLLBACK;
 -- hand-overs exist is checked in kasa-concurrency.mjs.
 -- Newer migrations built on the cash desk roll back first and are re-applied last.
 BEGIN;
+\ir ../../supabase/rollbacks/20260926100000_odeme_islem_anahtari.down.sql
 \ir ../../supabase/rollbacks/20260925140000_para_yazma_yetkisi.down.sql
 \ir ../../supabase/rollbacks/20260925120000_kasa_teslimleri.down.sql
 COMMIT;
@@ -259,3 +260,4 @@ DO $$ BEGIN
   END IF;
 END $$;
 \ir ../../supabase/migrations/20260925140000_para_yazma_yetkisi.sql
+\ir ../../supabase/migrations/20260926100000_odeme_islem_anahtari.sql

@@ -82,6 +82,7 @@ ROLLBACK;
 
 -- With the function gone (older rollbacks already ran), this rollback is a no-op.
 BEGIN;
+\ir ../../supabase/rollbacks/20260926100000_odeme_islem_anahtari.down.sql
 \ir ../../supabase/rollbacks/20260925140000_para_yazma_yetkisi.down.sql
 \ir ../../supabase/rollbacks/20260925120000_kasa_teslimleri.down.sql
 \ir ../../supabase/rollbacks/20260925110000_odemeler.down.sql

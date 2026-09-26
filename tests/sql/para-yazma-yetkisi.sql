@@ -84,6 +84,7 @@ ROLLBACK;
 
 -- 3. Down (twice) lets the admin write again (the A10/A11 bodies); up refuses again.
 BEGIN;
+\ir ../../supabase/rollbacks/20260926100000_odeme_islem_anahtari.down.sql
 \ir ../../supabase/rollbacks/20260925140000_para_yazma_yetkisi.down.sql
 \ir ../../supabase/rollbacks/20260925140000_para_yazma_yetkisi.down.sql
 COMMIT;
@@ -98,6 +99,7 @@ DO $$ BEGIN
 END $$;
 ROLLBACK;
 \ir ../../supabase/migrations/20260925140000_para_yazma_yetkisi.sql
+\ir ../../supabase/migrations/20260926100000_odeme_islem_anahtari.sql
 BEGIN;
 SELECT pg_temp.pz_fixture();
 SET LOCAL ROLE service_role;
