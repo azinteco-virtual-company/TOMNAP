@@ -291,15 +291,19 @@ Production'da **denenmeyecekler:**
 
 ## d2) v2'yi önce Preview'da açma
 
-Ayrı bir staging yok: Preview deployment'ları da **aynı Supabase projesine** bağlanır. İçindeki verinin tamamı demo verisidir (CLAUDE.md → ORTAM). Preview'da yapılan her v2 işlemi bu veritabanına yazar. Defterler (ödeme, kasa teslimi) append-only olduğu için yazılanlar silinemez.
+Ayrı bir staging yok. Preview'a verilen veritabanı değişkenleri **aynı Supabase projesini** gösterir. İçindeki verinin tamamı demo verisidir (CLAUDE.md → ORTAM). Preview'da yapılan her v2 işlemi bu veritabanına yazar. Defterler (ödeme, kasa teslimi) append-only olduğu için yazılanlar silinemez.
 
 1. **Migration'lar (bayrak her yerde kapalı):**
    - Yedek alın.
    - (b)'deki salt okunur kontrolü çalıştırın.
    - Eksik olanları 7–15, 17 ve 18 sırasıyla (dosya adı sırası) uygulayın.
    - Kontrolü yeniden çalıştırın; 18 migration satırının hepsi `true` olmalı.
-2. **Bayrakları yalnız Preview'a verin:** Vercel → Settings → Environment Variables. `FF_V2_FLOW=true` ve `VITE_FF_V2_FLOW=true` yalnız **Preview** ortamına girilir; Production'da boş kalır.
-3. **Preview deployment'ı:** `main`'den ya da bir daldan push ya da `vercel deploy` (`--prod` olmadan). `VITE_` bayrağı derleme zamanında okunduğu için yeni bir derleme gerekir.
+2. **Değişkenleri yalnız tek bir dalın Preview'ına verin (26 Eylül'de düzeltildi):** Vercel'deki değişkenlerin hepsi yalnız Production'da; Preview'da hiç değişken yok, yani bir Preview veritabanına bağlanamaz. Tüm Preview'a vermek her PR önizlemesine veritabanı anahtarı verir. Bu yüzden Vercel → Settings → Environment Variables → **Preview → belirli dal: `v2-deneme`**:
+   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `UPLOAD_STORAGE_BACKEND`, `CARGO_ENCRYPTION_KEYS`, `CARGO_ENCRYPTION_ACTIVE_KEY_ID`, `GEMINI_API_KEY`: Production'dakiyle aynı değer. Kilitli (sensitive) değerler Vercel'de okunamaz; kaynağından (Supabase → API ayarları vb.) girilir.
+   - `APP_URL`: dalın sabit Preview adresi (`https://<proje>-git-v2-deneme-<ekip>.vercel.app`). Sunucu, izin verilen origin'den gelmeyen her yazma isteğini (giriş dahil) 403 ile reddeder (`src/server/middleware/auth.ts`); Production'daki `APP_URL` Preview adresini kapsamaz.
+   - `FF_V2_FLOW=true`, `VITE_FF_V2_FLOW=true`.
+   - Production'da iki bayrak boş kalır.
+3. **Preview deployment'ı:** `main`, `v2-deneme` dalına push edilir; o dalın Preview deployment'ı (dal adresi) kullanılır. `--prod` yok. `VITE_` bayrağı derleme zamanında okunduğu için değişkenler girildikten sonraki bir derleme gerekir. Vercel'in önizleme koruması (Deployment Protection) açıksa adres Vercel girişi ister; API denemeleri tarayıcıdan yapılır.
 4. **Production kapalı mı:**
    ```bash
    curl -s -o /dev/null -w '%{http_code}\n' https://<canli>/api/v2/durum
@@ -416,11 +420,11 @@ Canlının hangi sürüm olduğu kesin değil. Codex'in kaydına göre 21 Eylül
 
 ## Çıkış sırası
 
-1. PR #3 ve bu PR incelenip `main`'e alınır.
+1. Yayına girecek PR'lar `main`'dedir (son: #31, `b85f297`).
 2. [RELEASE_READINESS.md](RELEASE_READINESS.md) ön koşulları kapatılır: Storage bucket, e-posta, 4,5 MB Functions sınırı, önizleme kabulü.
 3. Veritabanı yedeği alınır. (b)'deki salt okunur kontrol çalıştırılır; beklenmedik bir şey varsa durulur.
 4. Eksik migration'lar (f)'deki duruma göre sırayla uygulanır: (a) 1–6 ve 16, (b) 5, 6 ve 16.
 5. (c)'deki değişkenler Production ortamına girilir; AWB bayrakları kapalı kalır.
-6. `vercel.json`'daki `"main": false` ayrı bir commit ile kaldırılır ve production, `main`'den Vercel'in production değişkenleriyle derlenir.
+6. **Yayın yöntemi (karar 26 Eylül 2026, DEPLOY_1'den tek sapma):** `vercel.json`'daki `"main": false` **kalır**. "Merge ≠ yayın" kuralı korunur; `main`'e merge yetkisi buna dayanır. Production, `main`'in temiz bir worktree'sinden (`b85f297` ya da sonrası; içinde `.env` dosyası yok) Vercel CLI ile alınır: `vercel deploy --prod`. Bu yalnız proje sahibi "yayınla" dedikten sonra yapılır. CLI girişini proje sahibi kendisi yapar. Derleme, Vercel'in Production değişkenleriyle Vercel'de olur.
 7. (d)'deki smoke test yapılır. Sorun varsa (e)'ye geçilir.
 8. Deploy 1 oturduktan sonra, ayrı yayınlarla ve `FF_V2_FLOW` kapalıyken 7–15, 17 ve 18 uygulanır. Ardından (d2)'deki Preview denemesi yapılır; bayraklar yalnız Preview'da açılır.
