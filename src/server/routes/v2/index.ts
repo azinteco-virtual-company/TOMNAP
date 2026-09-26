@@ -36,6 +36,15 @@ function hata(res: Response, error: unknown) {
 
 const kullanici = (req: Request) => req.auth?.userId ?? '';
 
+// K21: v2 is closed in the demo area (Codex R3 F12). demo_sandbox lives in memory, which
+// cannot carry the transactional RPCs; the stores would otherwise fall back to memory
+// there. Runs after the session (the tenant is known) and answers like the closed gate,
+// so the v2 shell shows "closed".
+router.use((req, res, next) => {
+  if (req.tenantId !== 'demo_sandbox') return next();
+  res.status(404).json({ basarili: false, hata: 'Bu funksiya demo sahəsində aktiv deyil.' });
+});
+
 // Kabuğun sunucu bayrağını doğrulaması için; iş verisi döndürmez.
 router.get('/durum', (_req, res) => {
   res.json({ basarili: true, v2: true });

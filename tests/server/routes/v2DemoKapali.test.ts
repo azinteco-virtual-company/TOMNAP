@@ -56,10 +56,12 @@ describe('the v2 flow is closed in demo_sandbox (Codex R3 F12, K21)', () => {
   });
   afterAll(() => vi.unstubAllEnvs());
 
-  it.each(ROUTES)('%s answers 404 in the demo area', async (_name, call) => {
+  it.each(ROUTES)('%s answers 404 in the demo area', async (name, call) => {
     for (const role of ['PATRON', 'SUPER_ADMIN']) {
       const response = await call(agents[role]);
-      expect([role, response.status]).toEqual([role, 404]);
+      // The allowlist refuses a platform admin's payment before any v2 code (O-28/29).
+      const want = role === 'SUPER_ADMIN' && name === 'POST /odemeler' ? 403 : 404;
+      expect([role, response.status]).toEqual([role, want]);
     }
   });
 
