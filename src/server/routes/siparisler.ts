@@ -28,6 +28,7 @@ import {
 import { MusteriKaydi } from '../types';
 import { rolGrubunda } from '../../shared/roller';
 import {
+  aiOdemeBildirimi,
   DETAY_ALANLARI,
   detayAlaniYazabilir,
   detayAlaniYetkisiYok,
@@ -322,11 +323,24 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
       ad: cikarilanAd,
     });
 
-    const alinan = Number(parsedJson.alinan_tutar || 0);
-    const toplam = Number(parsedJson.toplam_tutar || alinan);
-    const kalan = Math.max(0, toplam - alinan);
-    if (!Number.isFinite(toplam) || !Number.isFinite(alinan) || toplam < 0 || alinan < 0)
+    const aiAlinan = Number(parsedJson.alinan_tutar || 0);
+    const toplam = Number(parsedJson.toplam_tutar || aiAlinan);
+    if (!Number.isFinite(toplam) || !Number.isFinite(aiAlinan) || toplam < 0 || aiAlinan < 0)
       throw new PublicResourceError('Geçersiz tutar.', 400);
+    // A saved order carries no collection this role may not write; the payment the AI
+    // saw stays as a notice (Codex R4, F19 side effect). A suggestion saves nothing.
+    const odemeBildirimi =
+      otomatik_kaydet !== false
+        ? aiOdemeBildirimi(req.auth?.role, {
+            alinan_tutar: aiAlinan,
+            finans_durumu: parsedJson.finans_durumu,
+            para_birimi: parsedJson.para_birimi,
+          })
+        : null;
+    const alinan = odemeBildirimi ? 0 : aiAlinan;
+    const kalan = Math.max(0, toplam - alinan);
+    const bildirimliNot = (not: unknown) =>
+      [typeof not === 'string' ? not.trim() : '', odemeBildirimi ?? ''].filter(Boolean).join('\n');
 
     const dbPayload = {
       tenant_id: hedefTenantId,
@@ -348,19 +362,25 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
       toplam_tutar: toplam,
       alinan_tutar: alinan,
       para_birimi: parsedJson.para_birimi || 'AZN',
-      finans_durumu:
-        parsedJson.finans_durumu ||
-        (alinan >= toplam && toplam > 0 ? 'ODENDI' : alinan > 0 ? 'KISMI_ODEME' : 'BEKLIYOR'),
+      finans_durumu: odemeBildirimi
+        ? 'BEKLIYOR'
+        : parsedJson.finans_durumu ||
+          (alinan >= toplam && toplam > 0 ? 'ODENDI' : alinan > 0 ? 'KISMI_ODEME' : 'BEKLIYOR'),
       lojistik_durumu: parsedJson.lojistik_durumu || 'ULUSLARARASI_KARGO',
-      baku_tahsilat_notu: parsedJson.baku_tahsilat_notu || '',
+      // The collection note, not the courier instruction (the [TƏLİMAT] tag): the notice
+      // is for whoever records the money.
+      baku_tahsilat_notu: bildirimliNot(parsedJson.baku_tahsilat_notu),
       ozel_not: parsedJson.ozel_not || '',
       kanada_takip_kodu: uretKanadaTakipKodu(parsedJson.urun_aciklamasi),
       uluslararasi_kargo_kodu: uretUluslararasiKargoKodu(),
-      eksik_bilgiler: Array.isArray(parsedJson.eksik_bilgiler)
-        ? parsedJson.eksik_bilgiler.filter(
-            (v: any) => typeof v === 'string' && !v.startsWith('META:')
-          )
-        : [],
+      eksik_bilgiler: [
+        ...(Array.isArray(parsedJson.eksik_bilgiler)
+          ? parsedJson.eksik_bilgiler.filter(
+              (v: any) => typeof v === 'string' && !v.startsWith('META:')
+            )
+          : []),
+        ...(odemeBildirimi ? [odemeBildirimi] : []),
+      ],
       ai_guven_skoru: Number(parsedJson.ai_guven_skoru || 0.95),
       musteri_id: eslesen?.id || '',
       musteri_tipi: eslesen?.musteri_tipi || parsedJson.musteri_tipi || 'TANIMADIK',
@@ -527,6 +547,11 @@ Görsel / ekran görüntüsü ekliyse kişi adını, telefon numarasını, beden
       ayristirilan_veri: nihaiSiparis,
       musteri_adaylari: musteriAdaylari,
       kaydedildi: otomatik_kaydet !== false,
+      ...(odemeBildirimi && {
+        uyari:
+          'Mesajdaki ödeme kaydedilmedi: bu rol tahsilat yazamaz. Sipariş ödemesiz kaydedildi; ' +
+          'ödemeyi butik ekibi kaydetmeli.',
+      }),
       kaynak: dbActive(hedefTenantId)
         ? 'supabase'
         : hedefTenantId === 'demo_sandbox'
