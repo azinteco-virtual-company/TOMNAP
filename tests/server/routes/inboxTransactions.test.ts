@@ -232,7 +232,8 @@ describe('Database inbox transition RPC boundary', () => {
         musteri_tipi: 'VIP',
         kanada_magaza_adi: 'Synthetic store',
         kanada_fatura_no: 'INVOICE-EDITED',
-        kanada_fatura_gorseli: '/images/synthetic-owned-image.png',
+        // An uploaded file path; the format check applies to approval too (Codex R4 F22).
+        kanada_fatura_gorseli: '/uploads/synthetic-owned-image.png',
         kargo_agirligi_kg: 1.25,
         kanada_alis_fiyati_cad: 80,
       };

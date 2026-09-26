@@ -19,6 +19,7 @@ import {
   musterilerVeritabani,
 } from '../services/state';
 import { OnayBekleyenKaydi } from '../types';
+import { siparisOlusturmaYetkisi } from '../services/siparisYetkisi';
 
 const router = Router();
 const rowTenant = (row: any): string => {
@@ -328,6 +329,10 @@ router.post('/inbox/:id/onayla', async (req, res) => {
       (siparisVerisi.tenantId && siparisVerisi.tenantId !== tenantId)
     )
       throw new PublicResourceError('Sipariş başka butike taşınamaz.', 403);
+    // Approving creates an order: the first collection and the detail-form fields follow
+    // the same rights as every creation path (Codex R4 F19, F22). The stored detail
+    // object (extras) is checked and normalized in place.
+    siparisOlusturmaYetkisi((req as any).auth?.role, siparisVerisi, extras);
     await assertTenantImageReferences(req, siparisVerisi);
     if (siparisVerisi.musteri_id) {
       let customer: any;

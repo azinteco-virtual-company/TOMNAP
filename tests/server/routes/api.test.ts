@@ -94,14 +94,16 @@ describe('API Rota Entegrasyon Testleri', () => {
       tenant_id: 'kanada_shopper_baku',
     };
 
-    const ekleRes = await authenticated.post('/api/siparisler').send(yeniSiparis);
+    // A platform admin writes no first collection either (Codex R4 F19); the team does.
+    const patron = (await loginFixture(app, 'PATRON', 'kanada_shopper_baku')).agent;
+    expect((await authenticated.post('/api/siparisler').send(yeniSiparis)).status).toBe(403);
+    const ekleRes = await patron.post('/api/siparisler').send(yeniSiparis);
     expect(ekleRes.status).toBe(200);
     expect(ekleRes.body.basarili).toBe(true);
     const eklenenId = ekleRes.body.siparis.id;
     expect(eklenenId).toBeDefined();
 
     // 2. Güncelle: tahsilatı ekip yazar; platform yöneticisi yazamaz (OPEN_QUESTIONS 32).
-    const patron = (await loginFixture(app, 'PATRON', 'kanada_shopper_baku')).agent;
     expect(
       (
         await authenticated
