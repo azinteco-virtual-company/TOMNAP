@@ -100,10 +100,10 @@ Repodaki migration'ların **hepsi** `90b8eae`'den sonra geldi; canlı kodda hiç
 | 12  | `20260925110000_odemeler.sql` (A10)                                       | PR #20    | `public.odemeler`                          | var          | **hayır**                  | okunamadı |
 | 13  | `20260925120000_kasa_teslimleri.sql` (A11)                                | PR #21    | `public.kasa_teslimleri`                   | var          | **hayır**                  | okunamadı |
 | 14  | `20260925130000_kacaklar.sql` (A12)                                       | PR #22    | `tomnap_v2_kacak_q4()`                     | var          | **hayır**                  | okunamadı |
-| 15  | `20260925140000_para_yazma_yetkisi.sql` (SUPER_ADMIN para yazmaz)         | bu PR     | 3 fonksiyon gövdesi (`para-yazma-yetkisi`) | var          | evet (`OR REPLACE`)        | okunamadı |
+| 15  | `20260925140000_para_yazma_yetkisi.sql` (SUPER_ADMIN para yazmaz)         | PR #25    | 3 fonksiyon gövdesi (`para-yazma-yetkisi`) | var          | evet (`OR REPLACE`)        | okunamadı |
 | 16  | `20260925150000_siparis_guncelle.sql` (v1 düzenleme, Codex R3 F1/F2)      | PR #27    | `tomnap_siparis_guncelle()`                | var          | **hayır**                  | okunamadı |
 | 17  | `20260925160000_not_sozlesmesi.sql` (not sözleşmesi, Codex R3 F8)         | PR #29    | `tomnap_v2_siparis_olustur()` gövdesi      | var          | evet (`OR REPLACE`)        | okunamadı |
-| 18  | `20260926100000_odeme_islem_anahtari.sql` (işlem anahtarı, Codex R3 F15)  | bu PR     | `tomnap_v2_odeme_kaydet()` gövdesi         | var          | **hayır**                  | okunamadı |
+| 18  | `20260926100000_odeme_islem_anahtari.sql` (işlem anahtarı, Codex R3 F15)  | PR #30    | `tomnap_v2_odeme_kaydet()` gövdesi         | var          | **hayır**                  | okunamadı |
 
 Toplam 18 migration. 7–18'in her biri CI'da `up → down → down → up` ile sınanıyor.
 
@@ -111,7 +111,7 @@ Toplam 18 migration. 7–18'in her biri CI'da `up → down → down → up` ile 
 
 ⚠️ Dikkat edilecekler:
 
-- **7–15 ne zaman:** faz-a-plan'a göre Deploy 1'den **sonra**, `FF_V2_FLOW` kapalıyken, ayrı yayınlarla. 7 ve 8, Deploy 1'deki kodun `ABD_SATINALMA` davetini açar; yoksa bu davet 409 ile reddedilir, diğer roller etkilenmez. 9–15 yalnız v2 akışı içindir.
+- **7–15, 17 ve 18 ne zaman:** faz-a-plan'a göre Deploy 1'den **sonra**, `FF_V2_FLOW` kapalıyken, ayrı yayınlarla. 7 ve 8, Deploy 1'deki kodun `ABD_SATINALMA` davetini açar; yoksa bu davet 409 ile reddedilir, diğer roller etkilenmez. 9–15 yalnız v2 akışı içindir.
 - **17 v2 ile gider:** 7–15 ile birlikte, 11'den sonra. 11'in fonksiyonunu değiştirir: v2 sipariş notu artık fiziksel bir `ozel_not` kolonuna değil, v1 gibi `baku_tahsilat_notu`'daki `[TƏLİMAT: …]` etiketine yazılır (hiçbir migration `ozel_not` kolonu oluşturmuyor; kolonsuz şemada v2 siparişi hiç oluşturulamıyordu). 11 herhangi bir nedenle yeniden uygulanırsa 17 de ardından yeniden uygulanır.
 - **18 v2 ile gider:** 12, 13 ve 15'ten sonra, en son. `odemeler`'e yeni bir kolon (`islem_anahtari`, var olan satırlarda boş) ve kiracı başına benzersiz bir indeks ekler; ödeme kaydı ve yeni beş argümanlı kurye tahsilatı aynı anahtarla gelen tekrarı yeni kayıt yazmadan ilk ödemeyle yanıtlar. v2 ödeme ve kurye ekranları her zaman anahtar gönderir: 18 olmadan kurye tahsilatı çalışmaz. 15 yeniden uygulanırsa 18 de ardından yeniden uygulanır.
 - **7–15 arası bağımlılık:** 11, 10'un fonksiyonunu değiştirir; 12, 10'un v2 siparişlerine bağlanır; 13, 12'ye ve 3'teki `kuryeler`'e; 14'ün Q5'i 13'ün bakiye fonksiyonunu çağırır; 15, 12 ve 13'ün üç yazma fonksiyonunu değiştirir (SUPER_ADMIN ödeme kaydı, ters kayıt ve kasa teslimi yazamaz). Sırayı bozmayın.
@@ -213,23 +213,23 @@ psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/migrations/<dosya>.sql
 
 Vercel'de değişkenler yalnız **yeni bir deployment** ile etkili olur. `VITE_` ile başlayanlar ayrıca **derleme zamanında** istemci paketine gömülür: değiştirildiklerinde yeniden derleme gerekir ve tarayıcıya açıktırlar, sır içeremezler.
 
-| Değişken                         | Okunduğu yer                | Deploy 1 için                                                                                                                                                 |
-| -------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SUPABASE_URL`                   | sunucu, çalışma zamanı      | zorunlu                                                                                                                                                       |
-| `SUPABASE_SERVICE_ROLE_KEY`      | sunucu, çalışma zamanı      | zorunlu, sır; asla `VITE_` önekiyle verilmez                                                                                                                  |
-| `APP_URL`                        | sunucu, çalışma zamanı      | zorunlu: canlı HTTPS adresi (CORS ve e-posta bağlantıları); boşsa `https://tomnap.com` varsayılır                                                             |
-| `UPLOAD_STORAGE_BACKEND`         | sunucu, çalışma zamanı      | zorunlu: `supabase`; Vercel'de `local` reddedilir                                                                                                             |
-| `CARGO_ENCRYPTION_KEYS`          | sunucu, çalışma zamanı      | kargo kimlik bilgileri için zorunlu, sır ([PHASE4_SECURITY.md](PHASE4_SECURITY.md))                                                                           |
-| `CARGO_ENCRYPTION_ACTIVE_KEY_ID` | sunucu, çalışma zamanı      | yukarıdakiyle birlikte zorunlu                                                                                                                                |
-| `RESEND_API_KEY`                 | sunucu, çalışma zamanı      | production'da davet e-postası için zorunlu, sır                                                                                                               |
-| `EMAIL_FROM`                     | sunucu, çalışma zamanı      | isteğe bağlı                                                                                                                                                  |
-| `GEMINI_API_KEY`                 | sunucu, çalışma zamanı      | yapay zeka özellikleri için, sır                                                                                                                              |
-| `CORS_ORIGIN`                    | sunucu, çalışma zamanı      | isteğe bağlı ek origin'ler; `APP_URL` her zaman kabul edilir                                                                                                  |
-| `LOG_LEVEL`                      | sunucu, çalışma zamanı      | isteğe bağlı (varsayılan `info`)                                                                                                                              |
-| `FF_AWB_REVIEW`                  | sunucu, çalışma zamanı      | ilk deploy'da **boş/false**; açılırsa `VITE_FF_AWB_REVIEW` ile birlikte                                                                                       |
-| `VITE_FF_AWB_REVIEW`             | **istemci, derleme zamanı** | ilk deploy'da **boş/false**; `FF_AWB_REVIEW` ile aynı değer                                                                                                   |
-| `FF_V2_FLOW`                     | sunucu, çalışma zamanı      | **Karar: önce yalnız Preview'da `true`**; Production'da boş, açma kararı proje sahibinde. Yalnız tam olarak `true` açar; kapalıyken `/api/v2` her istekte 404 |
-| `VITE_FF_V2_FLOW`                | **istemci, derleme zamanı** | `FF_V2_FLOW` ile aynı: yalnız Preview; Production'da boş. Açıkken `/v2` kabuğu ve kurye nakdi bölümü ayrı parça olarak derlenir                               |
+| Değişken                         | Okunduğu yer                | Deploy 1 için                                                                                                                                                                               |
+| -------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SUPABASE_URL`                   | sunucu, çalışma zamanı      | zorunlu                                                                                                                                                                                     |
+| `SUPABASE_SERVICE_ROLE_KEY`      | sunucu, çalışma zamanı      | zorunlu, sır; asla `VITE_` önekiyle verilmez                                                                                                                                                |
+| `APP_URL`                        | sunucu, çalışma zamanı      | zorunlu: canlı HTTPS adresi (CORS ve e-posta bağlantıları); boşsa `https://tomnap.com` varsayılır                                                                                           |
+| `UPLOAD_STORAGE_BACKEND`         | sunucu, çalışma zamanı      | zorunlu: `supabase`; Vercel'de `local` reddedilir                                                                                                                                           |
+| `CARGO_ENCRYPTION_KEYS`          | sunucu, çalışma zamanı      | kargo kimlik bilgileri için zorunlu, sır ([PHASE4_SECURITY.md](PHASE4_SECURITY.md))                                                                                                         |
+| `CARGO_ENCRYPTION_ACTIVE_KEY_ID` | sunucu, çalışma zamanı      | yukarıdakiyle birlikte zorunlu                                                                                                                                                              |
+| `RESEND_API_KEY`                 | sunucu, çalışma zamanı      | production'da davet e-postası için zorunlu, sır                                                                                                                                             |
+| `EMAIL_FROM`                     | sunucu, çalışma zamanı      | isteğe bağlı                                                                                                                                                                                |
+| `GEMINI_API_KEY`                 | sunucu, çalışma zamanı      | yapay zeka özellikleri için, sır                                                                                                                                                            |
+| `CORS_ORIGIN`                    | sunucu, çalışma zamanı      | isteğe bağlı ek origin'ler; `APP_URL` her zaman kabul edilir                                                                                                                                |
+| `LOG_LEVEL`                      | sunucu, çalışma zamanı      | isteğe bağlı (varsayılan `info`)                                                                                                                                                            |
+| `FF_AWB_REVIEW`                  | sunucu, çalışma zamanı      | **Bu yayında KAPALI** (karar 26 Eylül 2026). v1 siparişleri açılışta yapay AWB aldığı için (Codex R3 F3) inceleme gerçek eşleşmeleri zaten engelliyor. F3, F4, F5 ve F7 durak 4 işine kaldı |
+| `VITE_FF_AWB_REVIEW`             | **istemci, derleme zamanı** | **Bu yayında KAPALI**; `FF_AWB_REVIEW` ile aynı değer                                                                                                                                       |
+| `FF_V2_FLOW`                     | sunucu, çalışma zamanı      | **Karar: önce yalnız Preview'da `true`**; Production'da boş, açma kararı proje sahibinde. Yalnız tam olarak `true` açar; kapalıyken `/api/v2` her istekte 404                               |
+| `VITE_FF_V2_FLOW`                | **istemci, derleme zamanı** | `FF_V2_FLOW` ile aynı: yalnız Preview; Production'da boş. Açıkken `/v2` kabuğu ve kurye nakdi bölümü ayrı parça olarak derlenir                                                             |
 
 **Yeni kodun kullanmadığı değişkenler:**
 
@@ -296,8 +296,8 @@ Ayrı bir staging yok: Preview deployment'ları da **aynı Supabase projesine** 
 1. **Migration'lar (bayrak her yerde kapalı):**
    - Yedek alın.
    - (b)'deki salt okunur kontrolü çalıştırın.
-   - Eksik olanları 7'den 15'e sırayla uygulayın.
-   - Kontrolü yeniden çalıştırın; 15 satır `true` olmalı.
+   - Eksik olanları 7–15, 17 ve 18 sırasıyla (dosya adı sırası) uygulayın.
+   - Kontrolü yeniden çalıştırın; 18 migration satırının hepsi `true` olmalı.
 2. **Bayrakları yalnız Preview'a verin:** Vercel → Settings → Environment Variables. `FF_V2_FLOW=true` ve `VITE_FF_V2_FLOW=true` yalnız **Preview** ortamına girilir; Production'da boş kalır.
 3. **Preview deployment'ı:** `main`'den ya da bir daldan push ya da `vercel deploy` (`--prod` olmadan). `VITE_` bayrağı derleme zamanında okunduğu için yeni bir derleme gerekir.
 4. **Production kapalı mı:**
@@ -319,61 +319,108 @@ Ayrı bir staging yok: Preview deployment'ları da **aynı Supabase projesine** 
 
 ## e) Geri alma
 
-**Kod:** Vercel → Deployments → önceki production deployment'ı (`90b8eae`) → **Instant Rollback**. CLI karşılığı:
+**Hedef (Codex R3 F16): yeni kodun bayrakları kapalı sürümü.** Bir sorun çıkarsa önce bayraklar kapatılır ve yeni kod bayraksız yeniden deploy edilir. Eski bir sürüme (`90b8eae` ya da `5a02836`, bkz. f) dönmek **yalnız** aşağıdaki kontrol v2 verisi olmadığını gösterirse yapılır.
 
-```bash
-vercel rollback <önceki-deployment-url>
+- **Eski sürümde v2 verisinin sorunu:** Eski kod v2 siparişini (`model_surumu = 2`) tanımaz. Siparişi okuyup tamamını geri yazar (F1/F2'deki eski davranış). Bu yazma, satırlardan türetilen toplamları ve defterin tuttuğu `alinan_tutar`'ı ezer.
+- **Paylaşılan veritabanı:** Preview de aynı veritabanını kullanır. Bu yüzden v2 yalnız Preview'da açılmış olsa bile veri oluşur.
+
+**1. v2 verisi var mı (salt okunur):**
+
+```sql
+-- Salt okunur: v2 verisi var mı? Tablo yoksa 0; sorgu yalnız okur.
+select t.tablo,
+  case when to_regclass(t.tablo) is null then 0
+       else (xpath('/row/n/text()', query_to_xml(
+              'select count(*) as n from ' || t.tablo || coalesce(' where ' || t.kosul, ''),
+              false, true, '')))[1]::text::bigint
+  end as satir
+from (values
+  ('public.siparisler', 'to_jsonb(siparisler) ->> ''model_surumu'' = ''2'''),
+  ('public.siparis_satirlari', null),
+  ('public.odemeler', null),
+  ('public.kasa_teslimleri', null),
+  ('public.kurlar', null),
+  ('public.tenant_v2_ayarlari', null)
+) as t(tablo, kosul);
 ```
 
-- **Faz migration'ları uygulandıysa:** Eski sürüm production'da anon anahtarıyla çalışıyorsa (bkz. b), kodu `90b8eae`'ye döndürmek tek başına yetmez. Veritabanı da yedekten geri alınmalıdır.
-- **Uygulanmadılarsa:** Kod geri alma tek başına yeterlidir.
+Tüm satırlar `0` ise eski sürüme dönülebilir; değilse dönülmez, düzeltme yeni kod üzerinde yapılır. Sorgu 26 Eylül'de yerel CI şemasında denendi: v2 siparişi, satırı ve ödemesi olan veritabanında o üç satır `1` döndü; tablo yoksa `0` döner.
 
-**Veritabanı:** Önce kod geri alınır; böylece yeni RPC'leri çağıran bir sürüm kalmaz. Sonra down dosyaları ters sırayla, her biri tek transaction olarak uygulanır:
+**2. Kod:**
 
-1. AWB onay kaydını dışa aktarın; down dosyası bu tabloyu siler:
-   ```bash
-   psql "$DATABASE_URL" -c "\copy (select * from public.awb_match_approvals) to 'awb_match_approvals.csv' csv header"
-   ```
-2. Onay tablosunu kaldırın:
-   ```bash
-   psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/20260923164650_awb_match_approvals.down.sql
-   ```
-3. Onay RPC'sini kaldırın:
-   ```bash
-   psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/20260923023659_awb_match_confirmation.down.sql
-   ```
+1. Vercel → Settings → Environment Variables: `FF_V2_FLOW`, `VITE_FF_V2_FLOW`, `FF_AWB_REVIEW`, `VITE_FF_AWB_REVIEW` Production'da ve Preview'da boşaltılır.
+2. Yeni kodun son deployment'ı yeniden deploy edilir. `VITE_` bayrakları derlemede okunduğu için derleme önbelleği kullanılmaz.
+3. Sorun bayrak arkasında değilse, yani yeni kodun kendisindeyse, ve 1'deki kontrol tümüyle `0` ise: Vercel → Deployments → eski production deployment'ı → **Instant Rollback** (`vercel rollback <url>`). (a) durumunda buna ek olarak Production'da `SUPABASE_SERVICE_ROLE_KEY` tanımlı olmalıdır: eski sürüm bu anahtar yoksa anon anahtara düşer, migration 1 de anon erişimini kapatır.
 
-**v2 migration'ları (18 → 7):** Önce `FF_V2_FLOW` kapatılıp yeniden deploy edilir. Sonra down dosyaları yeniden eskiye, her biri tek transaction olarak uygulanır:
+**3. Veritabanı — tek sıra (Codex R3 F17):** Önce kod (2). Sonra down dosyaları **yalnız bu sırayla**, yeniden eskiye, her biri tek transaction olarak uygulanır:
 
 ```bash
 psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/<sürüm>_<ad>.down.sql
 ```
 
-| #   | Down dosyası                                    | Reddettiği durum / kaybolan veri                                   |
-| --- | ----------------------------------------------- | ------------------------------------------------------------------ |
-| 18  | `20260926100000_odeme_islem_anahtari.down.sql`  | yok; ödemeler kalır, yalnız işlem anahtarları silinir              |
-| 17  | `20260925160000_not_sozlesmesi.down.sql`        | yok; v2 notu yeniden fiziksel `ozel_not`'a yazılır (kolon gerekir) |
-| 15  | `20260925140000_para_yazma_yetkisi.down.sql`    | yok; A10/A11 gövdelerine döner (SUPER_ADMIN yeniden yazabilir)     |
-| 14  | `20260925130000_kacaklar.down.sql`              | yok; yalnız iki salt okunur fonksiyon                              |
-| 13  | `20260925120000_kasa_teslimleri.down.sql`       | kasa teslimi varsa **reddeder**; kurye tahsilatları defterde kalır |
-| 12  | `20260925110000_odemeler.down.sql`              | ödeme varsa **reddeder**                                           |
-| 11  | `20260925100000_siparis_sahibi_kurali.down.sql` | yok; A8 gövdesine döner                                            |
-| 10  | `20260924150000_siparis_satirlari.down.sql`     | v2 siparişi varsa **reddeder**                                     |
-| 9   | `20260924140000_kurlar_ve_v2_ayarlari.down.sql` | kur ve v2 ayarı satırları tablolarla silinir: önce dışa aktarın    |
-| 8   | `20260924130000_abd_satinalma.down.sql`         | yok; `ABD_SATINALMA` kullanıcıları ve davetleri olduğu gibi kalır  |
-| 7   | `20260924120000_rol_katalogu.down.sql`          | yok                                                                |
+| #   | Down dosyası                                     | Ne zaman                                                                               | Reddettiği durum / kaybolan veri                                   |
+| --- | ------------------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 18  | `20260926100000_odeme_islem_anahtari.down.sql`   | v2 geri alınırken                                                                      | yok; ödemeler kalır, yalnız işlem anahtarları silinir              |
+| 17  | `20260925160000_not_sozlesmesi.down.sql`         | v2 geri alınırken                                                                      | yok; v2 notu yeniden fiziksel `ozel_not`'a yazılır (kolon gerekir) |
+| 16  | `20260925150000_siparis_guncelle.down.sql`       | **yalnız kod 16'dan önceki bir sürüme döndüyse**; yeni kodun düzenlemesi 16'yı çağırır | yok; yalnız bir fonksiyon                                          |
+| 15  | `20260925140000_para_yazma_yetkisi.down.sql`     | v2 geri alınırken                                                                      | yok; A10/A11 gövdelerine döner (SUPER_ADMIN yeniden yazabilir)     |
+| 14  | `20260925130000_kacaklar.down.sql`               | v2 geri alınırken                                                                      | yok; yalnız iki salt okunur fonksiyon                              |
+| 13  | `20260925120000_kasa_teslimleri.down.sql`        | v2 geri alınırken                                                                      | kasa teslimi varsa **reddeder**; kurye tahsilatları defterde kalır |
+| 12  | `20260925110000_odemeler.down.sql`               | v2 geri alınırken                                                                      | ödeme varsa **reddeder**                                           |
+| 11  | `20260925100000_siparis_sahibi_kurali.down.sql`  | v2 geri alınırken                                                                      | yok; A8 gövdesine döner                                            |
+| 10  | `20260924150000_siparis_satirlari.down.sql`      | v2 geri alınırken                                                                      | v2 siparişi varsa **reddeder**                                     |
+| 9   | `20260924140000_kurlar_ve_v2_ayarlari.down.sql`  | v2 geri alınırken                                                                      | kur ve v2 ayarı satırları tablolarla silinir: önce dışa aktarın    |
+| 8   | `20260924130000_abd_satinalma.down.sql`          | rol kataloğu geri alınırken                                                            | yok; `ABD_SATINALMA` kullanıcıları ve davetleri olduğu gibi kalır  |
+| 7   | `20260924120000_rol_katalogu.down.sql`           | rol kataloğu geri alınırken                                                            | yok                                                                |
+| 6   | `20260923164650_awb_match_approvals.down.sql`    | AWB onayı geri alınırken; önce onay kaydını dışa aktarın (aşağıda)                     | onay tablosu ve kayıtları silinir                                  |
+| 5   | `20260923023659_awb_match_confirmation.down.sql` | 6'dan sonra                                                                            | yok; yalnız bir fonksiyon                                          |
 
+- **Neden tek sıra:** 8'in down dosyası `tomnap_approve_awb_matches`'i 6'nın sürümüne geri yazar. 6 önce geri alınırsa bu fonksiyon, tablosu olmadan yeniden oluşur. Eski belgedeki "önce 6 → 5, sonra 15 → 7" sırası tam da bunu yapıyordu.
+- **Kısmi geri alma:** Yalnız bir kısım geri alınacaksa da aynı sıranın başından başlanır ve istenen satırda durulur. Örneğin yalnız v2 için 18'den 7'ye inilir; kod yeni kalıyorsa 16 atlanır.
+- **CI:** Bu tabloyu `tests/sql/tum-zincir-gidis-donus.mjs` okur. Her PR'da bütün down dosyalarını bu sırayla tek transaction'da uygular, geride nesne kalmadığını denetler, migration'ları yeniden uygular, şemanın başlangıçtakiyle aynı olduğunu ve durum sorgusunun tümüyle `true` döndüğünü doğrular.
 - **Reddetme bilerek:** Defterler ve v2 siparişleri sessizce silinmesin diye down dosyası çalışmaz. Önce veriyi dışa aktarıp çözün.
 - **Veri geri alınmaz:** Down dosyaları yalnız kendi migration'larının oluşturduğu nesneleri siler. Onaylanarak siparişlere yazılmış AWB değerleri siparişlerde kalır.
 - **1–4 için down dosyası yok:** Bu migration'lar yalnız uygulama öncesi alınan yedekten geri döndürülebilir.
+
+AWB onay kaydını 6'dan önce dışa aktarma:
+
+```bash
+psql "$DATABASE_URL" -c "\copy (select * from public.awb_match_approvals) to 'awb_match_approvals.csv' csv header"
+```
+
+## f) Canlı durumuna göre plan
+
+Canlının hangi sürüm olduğu kesin değil. Codex'in kaydına göre 21 Eylül'de PR #2'nin merge'ü (`5a02836`) yayınlanmış ve 1–4 uygulanmış olabilir; bu belge ise canlıyı `90b8eae` varsayıyordu. Hangisi olduğunu iki şey söyler:
+
+- Vercel → Deployments: Production'daki deployment'ın commit'i.
+- (b)'deki salt okunur durum sorgusu: 1–4 satırları.
+
+İkisi aşağıdaki durumlardan birine uymuyorsa (başka bir commit, ya da 1–4'ün yalnız bir kısmı uygulanmış) **durun ve raporlayın**.
+
+**(a) Canlı `90b8eae`, 1–4 uygulanmamış:**
+
+1. Yedek alın. Durum sorgusunda 1–18 `false`, ön koşul kolonları `true` olmalı.
+2. Production'da `SUPABASE_SERVICE_ROLE_KEY` tanımlı mı bakın; yoksa ekleyin. Eski sürüm de bu anahtarla çalışır. Migration 1, anon erişimini kapatır.
+3. Deploy 1 migration'ları sırayla: **1, 2, 3, 4, 5, 6, 16**. Yeni kodun deploy'undan hemen önce uygulanır; aradaki süreyi kısa tutun.
+4. Yeni kod bayraklar kapalı deploy edilir; (d)'deki smoke test yapılır.
+5. Geri dönüş: (e). Hedef yeni kodun bayrakları kapalı sürümü. `90b8eae`'ye dönüş yalnız v2 verisi yoksa ve 2 yapıldıysa mümkündür. 1–4'ün down dosyası yok: veritabanının 1–4 öncesine dönmesi gerekirse yedekten.
+
+**(b) Canlı `5a02836`, 1–4 uygulanmış:**
+
+1. Yedek alın. Durum sorgusunda 1–4 `true`, 5–18 `false`, ön koşul kolonları `true` olmalı.
+2. Deploy 1 migration'ları sırayla: **5, 6, 16**, yeni koddan önce. `5a02836` bu nesneleri kullanmaz; eklenmeleri canlıyı bozmaz.
+3. Yeni kod bayraklar kapalı deploy edilir; (d)'deki smoke test yapılır.
+4. Geri dönüş: (e). Hedef yeni kodun bayrakları kapalı sürümü. `5a02836`'ya dönüş yalnız v2 verisi yoksa mümkündür. 5, 6 ve 16'nın geri alınması gerekmez; eski sürüm bunları kullanmaz.
+
+**İki durumda da:** v2 migration'ları (7–15, 17, 18; dosya adı sırasıyla) Deploy 1 oturduktan sonra ayrı bir yayında uygulanır. Bu sırada bayraklar kapalı kalır. Ardından (d2) yapılır.
 
 ## Çıkış sırası
 
 1. PR #3 ve bu PR incelenip `main`'e alınır.
 2. [RELEASE_READINESS.md](RELEASE_READINESS.md) ön koşulları kapatılır: Storage bucket, e-posta, 4,5 MB Functions sınırı, önizleme kabulü.
 3. Veritabanı yedeği alınır. (b)'deki salt okunur kontrol çalıştırılır; beklenmedik bir şey varsa durulur.
-4. Eksik migration'lar sırayla uygulanır.
+4. Eksik migration'lar (f)'deki duruma göre sırayla uygulanır: (a) 1–6 ve 16, (b) 5, 6 ve 16.
 5. (c)'deki değişkenler Production ortamına girilir; AWB bayrakları kapalı kalır.
 6. `vercel.json`'daki `"main": false` ayrı bir commit ile kaldırılır ve production, `main`'den Vercel'in production değişkenleriyle derlenir.
 7. (d)'deki smoke test yapılır. Sorun varsa (e)'ye geçilir.
-8. Deploy 1 oturduktan sonra, ayrı yayınlarla ve `FF_V2_FLOW` kapalıyken 7–15 uygulanır. Ardından (d2)'deki Preview denemesi yapılır; bayraklar yalnız Preview'da açılır.
+8. Deploy 1 oturduktan sonra, ayrı yayınlarla ve `FF_V2_FLOW` kapalıyken 7–15, 17 ve 18 uygulanır. Ardından (d2)'deki Preview denemesi yapılır; bayraklar yalnız Preview'da açılır.

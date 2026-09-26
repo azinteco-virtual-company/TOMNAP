@@ -121,6 +121,10 @@ jobs:
           for migration in supabase/migrations/*.sql; do
             psql -X -v ON_ERROR_STOP=1 -f "$migration"
           done
+          # Codex R3 F17: every down file in DEPLOY_1's documented order (one transaction),
+          # nothing left behind, every migration again, identical schema, status query all true.
+          # Runs before any test commits v2 data.
+          node tests/sql/tum-zincir-gidis-donus.mjs
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/security-rls.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/inbox-transactions.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/maintenance-transactions.sql
