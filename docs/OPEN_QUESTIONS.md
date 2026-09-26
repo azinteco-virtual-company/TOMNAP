@@ -526,3 +526,18 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **Kalan:** Eski gövdeyle (11) oluşturulmuş v2 siparişlerinin notu fiziksel kolonda
       kalır ve oradan okunur; ilk düzenlemede etikete geçer. Toplu taşıma yapılmadı (veri
       değiştirilmez).
+
+36. **Codex R3 F10–F13, F15, F18 kararları (varsayım).**
+    - **F15 işlem anahtarı:** "Kalıcı" = veritabanında saklanan ve kiracı başına benzersiz
+      (`odemeler.islem_anahtari`, migration 18). Anahtarı istemci üretir; form aynı niyet
+      için tekrar denemelerde aynı anahtarı yollar, alan değişince ya da kayıt başarılı olunca
+      yeniler. Sayfa yenilenirse anahtar kaybolur (tarayıcıda saklanmaz); o durumda yeni
+      deneme yeni niyettir. Tekrar 200 ve ilk ödemeyle döner; aynı anahtar başka ödeme için
+      409. Ters kayıt zaten ödeme başına bir kez yazılır; kasa teslimi RPC yanıtıyla döner.
+    - **F10:** v2 satırları ve ödeme defteri kesin sayımla sayfa sayfa okunur; ödenen toplam
+      SQL'in tuttuğu `alinan_tutar`. v2 sipariş listesi hâlâ en yeni 200 sipariştir (tasarım).
+    - **F12:** Bulgudan geniş: `demo_sandbox`'ta yalnız kurlar/ayarlar değil tüm v2 açıktı
+      (sipariş, ödeme, kasa, kaçaklar). Tek bir koruma bütün `/api/v2`'yi orada 404 yapar.
+    - **F13:** Sunucu artık bir gün pay bırakmıyor; Bakü'de başlamamış günün kuru reddedilir.
+    - **F18:** AWB paneli yalnız `VITE_FF_AWB_REVIEW` açıkken derlenir; derleme denetimi
+      artık iki bayraklı ekranı da kapsar. CI'ın açık-bayrak derlemesi iki bayrağı da açar.
