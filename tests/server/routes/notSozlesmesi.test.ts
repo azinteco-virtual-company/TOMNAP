@@ -117,7 +117,9 @@ function fakeDb(physicalNote: boolean) {
       // The contract of 20260925160000: the note goes into baku_tahsilat_notu.
       const siparis = args.p_siparis as Row;
       const satirlar = args.p_satirlar as Row[];
-      const note = typeof siparis.ozel_not === 'string' ? siparis.ozel_not.trim() : '';
+      const note = (typeof siparis.ozel_not === 'string' ? siparis.ozel_not.trim() : '')
+        .replace(/\[/g, '(')
+        .replace(/\]/g, ')');
       const toplam = satirlar.reduce(
         (sum, s) => sum + Number(s.adet) * Number(s.birim_satis_fiyati_azn),
         0

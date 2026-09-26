@@ -10,6 +10,7 @@ import {
 } from '../state';
 import { PLATFORM_ROLU, rolGrubunda } from '../../../shared/roller';
 import { v2GovdesiniAyikla, v2Tenant } from './ortak';
+import { talimatiAyir } from '../siparisFormatlama';
 
 /**
  * v2 siparişleri (durak 0; K1, K2, K20): başlık siparisler'de (model_surumu = 2),
@@ -92,8 +93,9 @@ const SATIR_ALANLARI = [
   'birim_satis_fiyati_azn',
   'kaynak_ulke',
 ] as const;
-const BASLIK_KOLONLARI =
-  'id,tenant_id,model_surumu,sahip_kullanici_id,musteri_adi,telefon_numarasi,instagram_kullanici_adi,teslimat_sehri,teslimat_adresi,siparis_kaynagi,ozel_not,toplam_tutar,alinan_tutar,kalan_tutar,finans_durumu,lojistik_durumu,ek_veriler,olusturma_tarihi';
+// Whole header rows: the note rule (tag, else a legacy physical ozel_not) must work
+// whatever columns the database has (Codex R3 F8), so no column is named here.
+const BASLIK_KOLONLARI = '*';
 const SATIR_KOLONLARI =
   'id,tenant_id,siparis_id,sira,urun_aciklamasi,beden,renk,adet,birim_satis_fiyati_azn,kaynak_ulke,iptal';
 
@@ -349,7 +351,9 @@ function basliktan(
     musteriId: yaziYaDaNull(ek.musteri_id),
     sahipKullaniciId: r.sahip_kullanici_id,
     siparisKaynagi: yaziYaDaNull(r.siparis_kaynagi),
-    ozelNot: yaziYaDaNull(r.ozel_not),
+    // One note contract with v1 (Codex R3 F8): the tag in baku_tahsilat_notu; the
+    // physical ozel_not only in memory rows (no database column is read for it).
+    ozelNot: talimatiAyir(r.baku_tahsilat_notu).ozelNot ?? yaziYaDaNull(r.ozel_not),
     toplamTutar: toplam,
     alinanTutar: alinan,
     kalanTutar: r.kalan_tutar === undefined ? toplam - alinan : Number(r.kalan_tutar),

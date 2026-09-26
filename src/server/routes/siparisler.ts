@@ -945,6 +945,11 @@ router.patch('/siparisler/:id', async (req, res) => {
         if (JSON.stringify(sonra[key]) !== JSON.stringify(once[key])) degisiklik[key] = sonra[key];
       for (const key of courierFields) delete degisiklik[key];
       if (v2) for (const key of v2DerivedFields) delete degisiklik[key];
+      // The note is the tag in baku_tahsilat_notu (Codex R3 F8). A legacy schema's
+      // physical ozel_not (the row read has the key) follows it, so a cleared note does
+      // not fall back to an older physical value.
+      if ('ozel_not' in updates && Object.hasOwn(existing, 'ozel_not'))
+        degisiklik.ozel_not = String(updates.ozel_not ?? '').trim() || null;
       if (Object.keys(degisiklik).length === 0)
         return res.json({ basarili: true, kaynak, siparis: formatted });
       // Optimistic lock: the edit applies only to the order it was based on.
