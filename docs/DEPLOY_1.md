@@ -428,3 +428,48 @@ Canlının hangi sürüm olduğu kesin değil. Codex'in kaydına göre 21 Eylül
 6. **Yayın yöntemi (karar 26 Eylül 2026, DEPLOY_1'den tek sapma):** `vercel.json`'daki `"main": false` **kalır**. "Merge ≠ yayın" kuralı korunur; `main`'e merge yetkisi buna dayanır. Production, `main`'in temiz bir worktree'sinden (`b85f297` ya da sonrası; içinde `.env` dosyası yok) Vercel CLI ile alınır: `vercel deploy --prod`. Bu yalnız proje sahibi "yayınla" dedikten sonra yapılır. CLI girişini proje sahibi kendisi yapar. Derleme, Vercel'in Production değişkenleriyle Vercel'de olur.
 7. (d)'deki smoke test yapılır. Sorun varsa (e)'ye geçilir.
 8. Deploy 1 oturduktan sonra, ayrı yayınlarla ve `FF_V2_FLOW` kapalıyken 7–15, 17 ve 18 uygulanır. Ardından (d2)'deki Preview denemesi yapılır; bayraklar yalnız Preview'da açılır.
+
+## Uygulama kaydı — 26 Eylül 2026
+
+Deploy 1 ve v2 veritabanı hazırlığı. Veritabanı ve Vercel panelindeki işlemleri proje sahibi yaptı; sıra, komutlar ve doğrulama bu oturumda hazırlandı. Plan: (f)(b).
+
+**Önce:** Canlı `5a02836` (deployment `tomnap-kjtp0qqnx`, 21 Eylül). Durum sorgusu: 1–4 var, 5–18 yok, gerekli kolonların hepsi var, `ozel_not` yok.
+
+**Yedek:** Supabase Free planında panel yedeği yok. Session pooler üzerinden `pg_dump` 17.5 ile elle döküm alındı: roller, şema ve veri (public şeması). Dosyalar repo dışında duruyor, SHA256 doğrulandı. Şemada 13 tablo ve 28 fonksiyon var; `siparisler` 24, `kullanicilar` 6 satır. Döküm için veritabanı parolası sıfırlandı; uygulama bu parolayı kullanmıyor (kod yalnız `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` okur).
+
+**Aşama 1 — Deploy 1:**
+
+1. Migration 5, 6 ve 16 SQL Editor'da çalıştırıldı. Durum: 1–6 ve 16 var.
+2. Production değişkenleri: zorunluların hepsi var, dört bayrak tanımlı değil. Yalnız adlar kontrol edildi.
+3. Yayın: `main` `4abd002`'nin temiz worktree'sinden `vercel deploy --prod`. Deployment `tomnap-n8n79hcpm`, 26 Eylül 11:20 (+04). Derleme günlüğü: v2 kabuğu ve AWB paneli pakette yok.
+4. Smoke test:
+
+| Adım                               | Sonuç                                                           |
+| ---------------------------------- | --------------------------------------------------------------- |
+| 1. Güvenlik başlıkları             | ✅ 200; `DENY`, `nosniff`, referrer ve permissions policy, HSTS |
+| 2. `/api/health` GET ve HEAD       | ✅ `{"basarili":true}`, 200                                     |
+| 3. Manifest                        | ✅ bir `rel="manifest"`, `short_name` TOMNAP                    |
+| 4. Tarayıcıda giriş (proje sahibi) | ✅ sipariş ve müşteri listesi açıldı                            |
+| 5. Oturumsuz API                   | ✅ 401                                                          |
+| 6. `X-Forwarded-Uri`               | ✅ yok sayıldı                                                  |
+| 7. Bayraklar kapalı                | ✅ `/api/v2/durum` 404; AWB paneli yok                          |
+| 8. Vercel Logs (proje sahibi)      | ✅ 90 istek, 5xx yok, error seviyesi kayıt yok                  |
+
+`GET /api/kargo/ayarlar` iki kez 400 döndü: firma seçimi "Tüm firmalar" iken bu uç "Kargo işlemi için firma seçin." der. PR #2'den beri böyle; yeni bir hata değil.
+
+**Aşama 2 — v2 veritabanı (bayraklar kapalı):**
+
+- Migration 7–15, 17 ve 18 dosya adı sırasıyla uygulandı. Durum: **18/18 var**. Production'da `/api/v2/durum`, `/api/v2/kurlar` ve `/api/v2/siparisler` 404; health 200.
+- **Kodlama olayı:** SQL'ler panoya `pbcopy` ile konuyordu. Ortamda dil ayarı boş olduğu için pano metni Mac Roman oldu; SQL Editor'a Türkçe ve Azerbaycan harfleri bozuk gitti.
+  - Yorumlar dışında ASCII olmayan metin yalnız `tomnap_v2_siparis_olustur`'da vardı: varsayılan şehir `'Bakü'` (10, 11, 17) ve not etiketi `'[TƏLİMAT: '` (17).
+  - Bayraklar kapalı olduğundan fonksiyon hiç çağrılmadı; bozuk veri yazılmadı.
+  - 17 (`CREATE OR REPLACE`) UTF-8 ile yeniden çalıştırıldı. Durum sorgusuna eklenen iki kontrol (`prosrc` içinde `'Bakü'` ve `'[TƏLİMAT: '`) `true` döndü.
+  - Sonraki yayınlarda pano için `LANG=en_US.UTF-8 pbcopy` kullanılır ve panodaki metin bayt sayısıyla dosyaya karşı doğrulanır.
+
+**Ertelenen:** (d2)'deki `v2-deneme` Preview değişkenleri ve Preview denemesi. Codex R4 düzeltmelerinden sonra Deploy 2 ile yapılacak. v2 bayrakları her ortamda kapalı.
+
+**Açık kalanlar:**
+
+- Vercel'deki Supabase entegrasyonu değişkenleri (`POSTGRES_*`) parola sıfırlandığı için eski. Kod bunları okumuyor.
+- Free planda otomatik yedek yok. Deploy 2 öncesinde aynı yolla yeni bir döküm alınır.
+- Vercel CLI 48.10.2 eski (güncel 60.x); yayın için sorun çıkarmadı.
