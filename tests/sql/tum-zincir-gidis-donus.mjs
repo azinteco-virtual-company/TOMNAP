@@ -129,6 +129,11 @@ const rows = psql(['-c', 'begin transaction read only', '-f', '-', '-c', 'rollba
 // Only the physical ozel_not column may be missing (the live siparisler has none; Codex R4).
 // guncellenme_tarihi is required: v2 SQL writes and reads it.
 const falses = rows.filter((line) => line.endsWith('|f') && !line.startsWith('ozel_not|'));
+for (const kontrol of ['kodlama: tomnap_* gövdelerinde', 'kodlama: tomnap_v2_siparis_olustur'])
+  assert.ok(
+    rows.some((line) => line.startsWith(kontrol)),
+    `the status query has no row "${kontrol}"`
+  );
 assert.ok(rows.length > order.length, 'the status query returned too few rows');
 assert.deepEqual(falses, [], 'status query rows not true after the round trip');
 console.log(

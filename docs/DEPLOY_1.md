@@ -187,6 +187,24 @@ from (values
 ) as k(kolon, gerekli)
 order by k.gerekli, k.kolon;
 
+-- Kodlama kalkanı (26 Eylül olayı): SQL panoya UTF-8 dışında konunca ASCII dışı harfler
+-- bozulur. tomnap_* gövdelerinde Mac Roman (√ ∆ º ƒ ≈) ya da Latin-1 (Ã Ä Å Æ) izi olmamalı;
+-- v2 sipariş fonksiyonu 'Bakü' ve '[TƏLİMAT: ' metnini birebir içermeli (10, 11 ve 17
+-- uygulanmadan ikinci satır false olur). Aranan harfler U& kaçışıyla yazıldı: çalışan kısım
+-- ASCII, bozuk bir pano aranan metni de bozup kontrolü yanlışlıkla geçiremez.
+select 'kodlama: tomnap_* gövdelerinde bozuk harf izi yok' as kontrol,
+  not exists (select 1 from pg_catalog.pg_proc p
+              join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.proname like 'tomnap\_%'
+                and p.prosrc ~ U&'[\221A\2206\00BA\0192\2248\00C3\00C4\00C5\00C6]') as dogru
+union all
+select 'kodlama: tomnap_v2_siparis_olustur metinleri birebir',
+  exists (select 1 from pg_catalog.pg_proc p
+          join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname = 'tomnap_v2_siparis_olustur'
+            and strpos(p.prosrc, U&'''Bak\00FC''') > 0
+            and strpos(p.prosrc, U&'''[T\018FL\0130MAT: ') > 0);
+
 select to_regclass('supabase_migrations.schema_migrations') is not null as gecmis_tablosu_var;
 -- Yalnız yukarıdaki true ise:
 -- select version, name from supabase_migrations.schema_migrations order by version;
@@ -200,11 +218,15 @@ psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "begin transaction read only" -f m
 
 Sorgu 25 Eylül'de, CI şemasının kurulu olduğu yerel bir veritabanında denendi: 15 satırın hepsi `true` döndü; 11'in ya da 15'in down dosyası bir transaction içinde uygulanınca yalnız o satır `false` oldu. 26 Eylül'de 17 satırla yeniden denendi: hepsi `true`; 17'nin down dosyası uygulanınca yalnız 17 `false` oldu. 18 satırla da denendi: hepsi `true`; 18'in down dosyası uygulanınca yalnız 18 `false` oldu. Ön koşul sorgusu aynı veritabanında 33 kolonun hepsi için `true` döndü. Canlıda (26 Eylül) `guncellenme_tarihi` var, `ozel_not` yok. CI bu sorguyu `ozel_not` kolonu olmayan ikinci bir veritabanında da çalıştırır; orada yalnız `ozel_not` satırı `false` olabilir.
 
+Kodlama kalkanının iki satırı CI'da her PR'da `true` döner. Yerelde 17'nin gövdesindeki `'Bakü'` Mac Roman'a çevrilip (`'Bak√º'`) yeniden oluşturulunca ikisi de `false` oldu.
+
 SQL Editor'da elle uygulanan migration'lar `schema_migrations` tablosuna yazılmaz. Bu yüzden asıl ölçü imza nesnesinin varlığıdır.
 
 ### Uygulama
 
 Eksik olanlar sırayla, her dosya tek transaction olarak uygulanır (CI ile aynı biçim):
+
+- **Pano (26 Eylül olayından sonra):** SQL Editor'a kopyalanacak dosya panoya yalnız `LANG=en_US.UTF-8 pbcopy < <dosya>.sql` ile konur; dil ayarı boş bir kabukta düz `pbcopy` metni Mac Roman yapar. Ardından `LANG=en_US.UTF-8 osascript -e 'the clipboard as text' | wc -c` dosyanın `wc -c` değeriyle karşılaştırılır (sonda en çok bir satır sonu fark eder). Her uygulamadan sonra durum sorgusundaki kodlama kalkanı satırları `true` olmalı.
 
 ```bash
 psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/migrations/<dosya>.sql
