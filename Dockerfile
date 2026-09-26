@@ -33,8 +33,9 @@ ENV PORT=3000
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-# Derlenmiş çıktıyı kopyala (Frontend statik varlıkları + Backend server.cjs)
+# Public frontend ve özel sunucu çıktıları ayrı dizinlerde kalır.
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/build ./build
 
 # Uploads dizini oluştur ve izinleri node kullanıcısına devret
 RUN mkdir -p /app/uploads && chown -R node:node /app
@@ -46,7 +47,7 @@ USER node
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/sistem-durum || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
 # Uygulamayı başlat
-CMD ["node", "dist/server.cjs"]
+CMD ["node", "build/server.cjs"]

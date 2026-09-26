@@ -1,10 +1,27 @@
+import fs from 'node:fs';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, type PluginOption } from 'vite';
 
 export default defineConfig(async ({ command }) => {
-  const plugins: PluginOption[] = [react(), tailwindcss()];
+  const plugins: PluginOption[] = [
+    react(),
+    tailwindcss(),
+    {
+      name: 'reject-public-private-uploads',
+      configResolved(config) {
+        const legacyUploads = path.join(config.root, 'public', 'uploads');
+        if (
+          fs.existsSync(legacyUploads) &&
+          fs.readdirSync(legacyUploads).some((name) => name !== '.gitkeep')
+        )
+          throw new Error(
+            'Move private files out of public/uploads before building. See docs/SESSION_SECURITY.md.'
+          );
+      },
+    },
+  ];
 
   // Only load VitePWA during production build to avoid createRequire('.') incompatibility in tsx dev server
   if (command === 'build') {
@@ -20,11 +37,15 @@ export default defineConfig(async ({ command }) => {
           'pwa-512x512.png',
           'pwa-maskable-512x512.png',
         ],
+        // The only web manifest: the build emits it and injects the single
+        // <link rel="manifest"> into index.html.
         manifest: {
           id: '/',
-          name: 'Kanada-Bakü Lojistik & Sipariş Yönetimi',
-          short_name: 'KanadaBaku',
-          description: 'Kanada-Bakü e-ticaret sipariş, kargo manifestosu, kurye ve tahsilat yönetim sistemi.',
+          name: 'TOMNAP — Global Cross-Border Commerce & Parcel Logistics Platform',
+          short_name: 'TOMNAP',
+          description:
+            'Global Cross-Border Commerce & Parcel Logistics Platform (Track, Order, Manage, Navigate, Automate, Parcel).',
+          lang: 'az',
           theme_color: '#0f172a',
           background_color: '#0f172a',
           display: 'standalone',
@@ -56,6 +77,9 @@ export default defineConfig(async ({ command }) => {
         workbox: {
           maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          // Optional export engines should not download during SW installation.
+          // Private API/upload data remains excluded from all application caches.
+          globIgnores: ['**/uploads/**', '**/optional-doc-*.js'],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -101,11 +125,23 @@ export default defineConfig(async ({ command }) => {
     build: {
       rollupOptions: {
         output: {
+          // Never move a shared dependency into a deferred document chunk just
+          // because that library imports it; this can make the chunk eager again.
+          onlyExplicitManualChunks: true,
           manualChunks(id) {
+            // CommonJS runtime and React's external-store/scheduler adapters must
+            // initialize with React, rather than form an eager inter-chunk cycle.
+            if (id.includes('commonjsHelpers')) return 'vendor-framework';
             if (id.includes('node_modules')) {
-              if (id.includes('xlsx') || id.includes('jspdf') || id.includes('html2canvas') || id.includes('canvg')) {
-                return 'vendor-documents';
-              }
+              if (id.includes('/xlsx/')) return 'optional-doc-spreadsheet';
+              if (id.includes('/jspdf/') || id.includes('/jspdf-autotable/'))
+                return 'optional-doc-pdf';
+              if (
+                id.includes('/html2canvas/') ||
+                id.includes('/canvg/') ||
+                id.includes('/dompurify/')
+              )
+                return 'optional-doc-html';
               if (id.includes('recharts') || id.includes('d3-')) {
                 return 'vendor-charts';
               }
@@ -115,7 +151,14 @@ export default defineConfig(async ({ command }) => {
               if (id.includes('motion')) {
                 return 'vendor-motion';
               }
-              if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom') || id.includes('zustand')) {
+              if (
+                id.includes('react') ||
+                id.includes('react-dom') ||
+                id.includes('react-router-dom') ||
+                id.includes('zustand') ||
+                id.includes('/scheduler/') ||
+                id.includes('/use-sync-external-store/')
+              ) {
                 return 'vendor-framework';
               }
             }
@@ -125,6 +168,22 @@ export default defineConfig(async ({ command }) => {
       chunkSizeWarningLimit: 1000,
     },
     server: {
+      host: '127.0.0.1',
+      fs: {
+        strict: true,
+        deny: [
+          '**/.env',
+          '**/.env.*',
+          '**/*.{crt,pem}',
+          '**/.git/**',
+          ...['data', 'build', 'src/server', 'api', 'scripts', 'tests', 'work'].map(
+            (name) => path.resolve(process.cwd(), name) + '/**'
+          ),
+          ...[process.env.DATA_DIR, process.env.UPLOADS_DIR]
+            .filter(Boolean)
+            .map((name) => path.resolve(name!) + '/**'),
+        ],
+      },
       proxy: {
         '/api': {
           target: 'http://localhost:3000',

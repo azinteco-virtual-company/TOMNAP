@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -15,17 +16,19 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { KullaniciRolu } from '../types';
+import type { EkipRolu } from '../shared/roller';
 
 export const SifreBelirleSayfasi: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { setSeciliFirmaId, setAktifRol, setBildirim } = useAppStore();
+  const { setBildirim } = useAppStore();
 
   const [token, setToken] = useState<string>('');
   const [tokenBilgisi, setTokenBilgisi] = useState<any>(null);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState<string | null>(null);
 
+  const [davetEmail, setDavetEmail] = useState('');
   const [sifre, setSifre] = useState('');
   const [sifreTekrar, setSifreTekrar] = useState('');
   const [gosterSifre, setGosterSifre] = useState(false);
@@ -34,7 +37,9 @@ export const SifreBelirleSayfasi: React.FC = () => {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const t = params.get('token') || location.pathname.replace('/sifre-belirle/', '').replace('/sifre-belirle', '');
+    const t =
+      params.get('token') ||
+      location.pathname.replace('/sifre-belirle/', '').replace('/sifre-belirle', '');
     if (!t || t.length < 5) {
       setHata('Təhlükəsizlik və aktivasiya kodu tapılmadı.');
       setYukleniyor(false);
@@ -42,7 +47,7 @@ export const SifreBelirleSayfasi: React.FC = () => {
     }
     setToken(t);
 
-    fetch(`/api/auth/token-kontrol/${encodeURIComponent(t)}`)
+    apiFetch(`/api/auth/token-kontrol/${encodeURIComponent(t)}`)
       .then((r) => r.json())
       .then((data) => {
         if (!data.basarili) {
@@ -70,13 +75,13 @@ export const SifreBelirleSayfasi: React.FC = () => {
 
     setGonderiliyor(true);
     try {
-      const res = await fetch('/api/auth/sifre-belirle', {
+      const res = await apiFetch('/api/auth/sifre-belirle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
           sifre,
-          email: tokenBilgisi?.email,
+          email: tokenBilgisi?.email || davetEmail.trim(),
           adSoyad: tokenBilgisi?.adSoyad,
           telefon: tokenBilgisi?.telefon,
         }),
@@ -89,19 +94,7 @@ export const SifreBelirleSayfasi: React.FC = () => {
 
       setTamamlandi(true);
 
-      const tid = data.kullanici?.tenantId || tokenBilgisi?.tenantId;
-      const rol = data.kullanici?.rol || tokenBilgisi?.rol || 'PATRON';
-
-      try {
-        sessionStorage.setItem('tomnap_access_granted', 'true');
-        localStorage.setItem('tomnap_access_granted', 'true');
-        if (tid) localStorage.setItem('tomnap_aktif_tenant', tid);
-        if (rol) localStorage.setItem('tomnap_aktif_rol', rol);
-      } catch {}
-
-      if (tid) setSeciliFirmaId(tid);
-      if (rol) setAktifRol(rol as KullaniciRolu);
-      setBildirim('Şifrəniz uğurla təyin edildi. İş masanıza xoş gəldiniz!');
+      setBildirim('Şifrəniz təyin edildi. Şəxsi hesabınızla daxil olun.');
     } catch (err: any) {
       alert(err.message || 'Xəta baş verdi');
     } finally {
@@ -109,9 +102,10 @@ export const SifreBelirleSayfasi: React.FC = () => {
     }
   };
 
-  const rolEtiketleri: Record<string, string> = {
+  const rolEtiketleri: Record<EkipRolu, string> = {
     PATRON: 'Butik Patronu (Yüksək İdarəçi)',
     KANADA_SATINALMA: 'Kanada Satınalma & Kargo Məsuliyyətlisi',
+    ABD_SATINALMA: 'ABD Satınalma & Anbar Məsuliyyətlisi',
     SATIS_SORUMLUSU: 'Satış & AI Sifariş Girişi',
     BAKU_FINANS: 'Bakı Maliyyə & Kassa Məsuliyyətlisi',
     BAKU_KURYE: 'Bakı Daxili Kuryer',
@@ -177,7 +171,7 @@ export const SifreBelirleSayfasi: React.FC = () => {
                 onClick={() => navigate('/app')}
                 className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
               >
-                <span>İş Masasına Keçid Et</span>
+                <span>Şəxsi hesabımla daxil ol</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -211,6 +205,26 @@ export const SifreBelirleSayfasi: React.FC = () => {
                   </span>
                 </div>
               </div>
+
+              {tokenBilgisi?.tip === 'davet' && !tokenBilgisi?.email && (
+                <div>
+                  <label
+                    htmlFor="invite-email"
+                    className="block text-xs font-semibold text-slate-300 mb-1"
+                  >
+                    Giriş üçün e-poçt ünvanınız *
+                  </label>
+                  <input
+                    id="invite-email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={davetEmail}
+                    onChange={(event) => setDavetEmail(event.target.value)}
+                    className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-indigo-500"
+                  />
+                </div>
+              )}
 
               {/* Şifrə Sahələri */}
               <div className="space-y-3">

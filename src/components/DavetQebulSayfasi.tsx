@@ -1,13 +1,29 @@
+import { apiFetch } from '../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, Building2, UserCheck, ShieldCheck, ArrowRight, Loader2, AlertCircle, CheckCircle2, Phone, User, Lock, Eye, EyeOff } from 'lucide-react';
+import {
+  Sparkles,
+  Building2,
+  UserCheck,
+  ShieldCheck,
+  ArrowRight,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  Phone,
+  User,
+  Lock,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { KullaniciRolu } from '../types';
+import type { EkipRolu } from '../shared/roller';
 
 export const DavetQebulSayfasi: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { setSeciliFirmaId, setAktifRol, setBildirim } = useAppStore();
+  const { setBildirim } = useAppStore();
 
   const [token, setToken] = useState<string>('');
   const [davet, setDavet] = useState<any>(null);
@@ -33,7 +49,7 @@ export const DavetQebulSayfasi: React.FC = () => {
     }
     setToken(t);
 
-    fetch(`/api/firmalar/davet/${encodeURIComponent(t)}`)
+    apiFetch(`/api/firmalar/davet/${encodeURIComponent(t)}`)
       .then((r) => r.json())
       .then((data) => {
         if (!data.basarili) {
@@ -66,7 +82,7 @@ export const DavetQebulSayfasi: React.FC = () => {
 
     setGonderiliyor(true);
     try {
-      const res = await fetch('/api/firmalar/davet/katil', {
+      const res = await apiFetch('/api/firmalar/davet/katil', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, adSoyad, telefon, sifre }),
@@ -77,16 +93,7 @@ export const DavetQebulSayfasi: React.FC = () => {
       }
 
       setTamamlandi(true);
-      try {
-        sessionStorage.setItem('tomnap_access_granted', 'true');
-        localStorage.setItem('tomnap_access_granted', 'true');
-        if (data.tenantId) localStorage.setItem('tomnap_aktif_tenant', data.tenantId);
-        if (data.rol) localStorage.setItem('tomnap_aktif_rol', data.rol);
-      } catch {}
-      // Global App Store rol və butikini avtomatik seç
-      if (data.tenantId) setSeciliFirmaId(data.tenantId);
-      if (data.rol) setAktifRol(data.rol as KullaniciRolu);
-      setBildirim(`Xoş gəldiniz! ${data.tenantAd} komandasına qoşuldunuz.`);
+      setBildirim('Dəvət qəbul edildi. Şəxsi hesabınızla daxil olun.');
     } catch (err: any) {
       alert(err.message || 'Xəta baş verdi');
     } finally {
@@ -94,9 +101,10 @@ export const DavetQebulSayfasi: React.FC = () => {
     }
   };
 
-  const rolEtiketleri: Record<string, string> = {
+  const rolEtiketleri: Record<EkipRolu, string> = {
     PATRON: 'Butik Patronu (Yüksək İdarəçi)',
     KANADA_SATINALMA: 'Kanada Satınalma & Kargo Məsuliyyətlisi',
+    ABD_SATINALMA: 'ABD Satınalma & Anbar Məsuliyyətlisi',
     SATIS_SORUMLUSU: 'Satış & AI Sifariş Girişi',
     BAKU_FINANS: 'Bakı Maliyyə, Kassa & Qalıq Borc Məsuliyyətlisi',
     BAKU_KURYE: 'Bakı Sahə Kuryesi (Sürətli Çatdırılma)',
@@ -154,7 +162,9 @@ export const DavetQebulSayfasi: React.FC = () => {
               <div className="space-y-1">
                 <h4 className="text-lg font-bold text-white">Komandaya Uğurla Qoşuldunuz!</h4>
                 <p className="text-xs text-slate-300">
-                  <strong>{firma?.ad}</strong> heyətində <strong>{rolEtiketleri[davet?.rol] || davet?.rol}</strong> vəzifəniz aktivləşdirildi.
+                  <strong>{firma?.ad}</strong> heyətində{' '}
+                  <strong>{rolEtiketleri[davet?.rol] || davet?.rol}</strong> vəzifəniz
+                  aktivləşdirildi.
                 </p>
               </div>
               <button
@@ -162,7 +172,7 @@ export const DavetQebulSayfasi: React.FC = () => {
                 onClick={() => navigate('/app')}
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
               >
-                <span>İş Masasına Daxil Ol</span>
+                <span>Şəxsi hesabımla daxil ol</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

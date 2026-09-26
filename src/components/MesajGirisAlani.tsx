@@ -1,17 +1,18 @@
+import { apiFetch } from '../lib/apiClient';
 import React, { useState } from 'react';
-import { 
-  Sparkles, 
-  Send, 
-  RefreshCw, 
-  CheckCircle2, 
-  AlertCircle, 
-  DollarSign, 
-  Truck, 
-  User, 
-  Phone, 
-  MapPin, 
+import {
+  Sparkles,
+  Send,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  DollarSign,
+  Truck,
+  User,
+  Phone,
+  MapPin,
   FileText,
-  HelpCircle
+  HelpCircle,
 } from 'lucide-react';
 import { HAZIR_TEST_MESAJLARI } from '../data/ornek-siparisler';
 import { Siparis } from '../types';
@@ -30,13 +31,16 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
   const [hataMesaji, setHataMesaji] = useState<string | null>(null);
   const [sonAyristirilan, setSonAyristirilan] = useState<Siparis | null>(null);
   const [basariMesaji, setBasariMesaji] = useState<string | null>(null);
+  // Saved without a payment this role may not write (Codex R4, F19 side effect).
+  const [uyari, setUyari] = useState<string | null>(null);
 
-  const ornekYukle = (ornek: typeof HAZIR_TEST_MESAJLARI[0]) => {
+  const ornekYukle = (ornek: (typeof HAZIR_TEST_MESAJLARI)[0]) => {
     setHamMesaj(ornek.mesaj);
     setSiparisKaynagi(ornek.kaynak);
     setMusteriIpucu(ornek.ipucu);
     setHataMesaji(null);
     setBasariMesaji(null);
+    setUyari(null);
   };
 
   const handleAyristir = async (e: React.FormEvent) => {
@@ -46,9 +50,10 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
     setYukleniyor(true);
     setHataMesaji(null);
     setBasariMesaji(null);
+    setUyari(null);
 
     try {
-      const yanit = await fetch('/api/ayristir-siparis', {
+      const yanit = await apiFetch('/api/ayristir-siparis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -65,6 +70,7 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
         setSonAyristirilan(sonuc.ayristirilan_veri);
         onSiparisEklendi(sonuc.ayristirilan_veri);
         setBasariMesaji('Sipariş Gemini AI ile başarıyla ayrıştırıldı ve veritabanına kaydedildi!');
+        setUyari(typeof sonuc.uyari === 'string' ? sonuc.uyari : null);
         setHamMesaj('');
         setMusteriIpucu('');
       } else {
@@ -109,9 +115,7 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
                   <div className="font-semibold text-slate-800 group-hover:text-blue-700 truncate">
                     {ornek.baslik}
                   </div>
-                  <div className="text-slate-500 line-clamp-1 text-[11px]">
-                    "{ornek.mesaj}"
-                  </div>
+                  <div className="text-slate-500 line-clamp-1 text-[11px]">"{ornek.mesaj}"</div>
                 </button>
               ))}
             </div>
@@ -144,7 +148,8 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
                   value={siparisKaynagi}
                   onChange={(e) =>
                     setSiparisKaynagi(
-                      e.target.value as 'INSTAGRAM_LIVE' | 'INSTAGRAM_REELS' | 'INSTAGRAM_DM' | 'WHATSAPP'
+                      e.target.value as
+                        'INSTAGRAM_LIVE' | 'INSTAGRAM_REELS' | 'INSTAGRAM_DM' | 'WHATSAPP'
                     )
                   }
                   className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -210,6 +215,15 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
               <span>{basariMesaji}</span>
             </div>
           )}
+          {uyari && (
+            <div
+              role="alert"
+              className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2"
+            >
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>{uyari}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -220,45 +234,43 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
           <span className="text-slate-500">JSON Schema</span>
         </div>
         <pre className="overflow-x-auto text-[11px] leading-relaxed text-slate-200 max-h-48">
-          {sonAyristirilan ? (
-            JSON.stringify(
-              {
-                musteri: sonAyristirilan.musteri_adi,
-                instagram: sonAyristirilan.instagram_kullanici_adi || null,
-                telefon: sonAyristirilan.telefon_numarasi || null,
-                urun: sonAyristirilan.urun_aciklamasi,
-                beden: sonAyristirilan.beden_veya_olcu || null,
-                renk: sonAyristirilan.renk || null,
-                adet: sonAyristirilan.adet,
-                toplam: `${sonAyristirilan.toplam_tutar} ${sonAyristirilan.para_birimi}`,
-                odenen: `${sonAyristirilan.alinan_tutar} ${sonAyristirilan.para_birimi}`,
-                kalan: `${sonAyristirilan.kalan_tutar} ${sonAyristirilan.para_birimi}`,
-                finans_durumu: sonAyristirilan.finans_durumu,
-                lojistik_durumu: sonAyristirilan.lojistik_durumu,
-                baku_tahsilat_notu: sonAyristirilan.baku_tahsilat_notu,
-                eksik_bilgiler: sonAyristirilan.eksik_bilgiler || [],
-              },
-              null,
-              2
-            )
-          ) : (
-            JSON.stringify(
-              {
-                musteri: "@ayten_baku",
-                urun: "Zara Trençkot",
-                beden: "M",
-                renk: "Bej",
-                toplam: "120 AZN",
-                odenen: "50 AZN (Kapora)",
-                kalan: "70 AZN (Maaşta)",
-                finans_durumu: "KISMI_ODEME",
-                lojistik_durumu: "KANADA_SATINALIM_BEKLIYOR",
-                baku_tahsilat_notu: "20 manat verildi, kalan maaşta"
-              },
-              null,
-              2
-            )
-          )}
+          {sonAyristirilan
+            ? JSON.stringify(
+                {
+                  musteri: sonAyristirilan.musteri_adi,
+                  instagram: sonAyristirilan.instagram_kullanici_adi || null,
+                  telefon: sonAyristirilan.telefon_numarasi || null,
+                  urun: sonAyristirilan.urun_aciklamasi,
+                  beden: sonAyristirilan.beden_veya_olcu || null,
+                  renk: sonAyristirilan.renk || null,
+                  adet: sonAyristirilan.adet,
+                  toplam: `${sonAyristirilan.toplam_tutar} ${sonAyristirilan.para_birimi}`,
+                  odenen: `${sonAyristirilan.alinan_tutar} ${sonAyristirilan.para_birimi}`,
+                  kalan: `${sonAyristirilan.kalan_tutar} ${sonAyristirilan.para_birimi}`,
+                  finans_durumu: sonAyristirilan.finans_durumu,
+                  lojistik_durumu: sonAyristirilan.lojistik_durumu,
+                  baku_tahsilat_notu: sonAyristirilan.baku_tahsilat_notu,
+                  eksik_bilgiler: sonAyristirilan.eksik_bilgiler || [],
+                },
+                null,
+                2
+              )
+            : JSON.stringify(
+                {
+                  musteri: '@ayten_baku',
+                  urun: 'Zara Trençkot',
+                  beden: 'M',
+                  renk: 'Bej',
+                  toplam: '120 AZN',
+                  odenen: '50 AZN (Kapora)',
+                  kalan: '70 AZN (Maaşta)',
+                  finans_durumu: 'KISMI_ODEME',
+                  lojistik_durumu: 'KANADA_SATINALIM_BEKLIYOR',
+                  baku_tahsilat_notu: '20 manat verildi, kalan maaşta',
+                },
+                null,
+                2
+              )}
         </pre>
       </div>
 
@@ -268,9 +280,7 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span className="text-xs font-bold text-slate-800">
-                Ayrıştırılan Sipariş Özeti
-              </span>
+              <span className="text-xs font-bold text-slate-800">Ayrıştırılan Sipariş Özeti</span>
             </div>
             <span className="text-[11px] text-slate-500">
               Güven Skoru: %{Math.round((sonAyristirilan.ai_guven_skoru || 0.95) * 100)}
@@ -280,15 +290,21 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-slate-50 p-2 rounded border border-slate-200">
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Müşteri</span>
-              <span className="font-bold text-slate-800 truncate block">{sonAyristirilan.musteri_adi}</span>
+              <span className="font-bold text-slate-800 truncate block">
+                {sonAyristirilan.musteri_adi}
+              </span>
               {sonAyristirilan.instagram_kullanici_adi && (
-                <span className="block text-blue-600 text-[11px]">{sonAyristirilan.instagram_kullanici_adi}</span>
+                <span className="block text-blue-600 text-[11px]">
+                  {sonAyristirilan.instagram_kullanici_adi}
+                </span>
               )}
             </div>
 
             <div className="bg-slate-50 p-2 rounded border border-slate-200">
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Ürün</span>
-              <span className="font-bold text-slate-800 truncate block">{sonAyristirilan.urun_aciklamasi}</span>
+              <span className="font-bold text-slate-800 truncate block">
+                {sonAyristirilan.urun_aciklamasi}
+              </span>
               <span className="text-slate-500 text-[11px]">
                 {sonAyristirilan.beden_veya_olcu || '-'} / {sonAyristirilan.renk || '-'}
               </span>

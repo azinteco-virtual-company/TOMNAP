@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { ApiError, apiFetch, getApiContextVersion } from './lib/apiClient';
+import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Siparis, KullaniciRolu } from './types';
 import { useAppStore } from './store/appStore';
@@ -19,11 +20,11 @@ import { MimariVeKodPaneli } from './components/MimariVeKodPaneli';
 import { GorselVeAiSiparisMasasi } from './components/GorselVeAiSiparisMasasi';
 import { MusteriRehberi } from './components/MusteriRehberi';
 import { KuryeTeslimatMasasi } from './components/KuryeTeslimatMasasi';
+import { KuryeCalismaAlani } from './components/KuryeCalismaAlani';
 import { KanbanGorunumu } from './components/KanbanGorunumu';
 import { MobilAltNav } from './components/MobilAltNav';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { VeritabaniYonetimModal } from './components/VeritabaniYonetimModal';
-import { IzolasyonDogrulamaModal } from './components/IzolasyonDogrulamaModal';
 import { KargoEntegrasyonModal } from './components/KargoEntegrasyonModal';
 import { LandingPage } from './components/landing/LandingPage';
 import { ButikQeydiyyatModal } from './components/landing/ButikQeydiyyatModal';
@@ -33,8 +34,24 @@ import { SifreBelirleSayfasi } from './components/SifreBelirleSayfasi';
 import { DavetOlusturModal } from './components/DavetOlusturModal';
 import { TenantOnayMerkeziModal } from './components/TenantOnayMerkeziModal';
 import { CheckCircle2, Trash2, X, Loader2, RotateCcw } from 'lucide-react';
+import { V2_FLOW_ENABLED } from './lib/featureFlags';
+import { rolGrubunda } from './shared/roller';
 
-type SekmeTipi = 'panel' | 'kanban' | 'gorsel-giris' | 'musteriler' | 'kargo-manifest' | 'kargo-merkezi' | 'baku-tahsilat' | 'inbox' | 'kodlar' | 'kurye-masasi';
+// v2 kabuğu (VITE_FF_V2_FLOW): ayrı bir parça. Bayrak kapalıyken import derlemeden
+// tamamen düşer; ilk yük paketinde v2 kodu yoktur (scripts/check-v2-bundle.ts).
+const V2Kabuk = V2_FLOW_ENABLED ? lazy(() => import('./components/v2/V2Kabuk')) : null;
+
+type SekmeTipi =
+  | 'panel'
+  | 'kanban'
+  | 'gorsel-giris'
+  | 'musteriler'
+  | 'kargo-manifest'
+  | 'kargo-merkezi'
+  | 'baku-tahsilat'
+  | 'inbox'
+  | 'kodlar'
+  | 'kurye-masasi';
 
 const pathMap: Record<string, SekmeTipi> = {
   '/': 'panel',
@@ -51,16 +68,16 @@ const pathMap: Record<string, SekmeTipi> = {
 };
 
 const sekmeToPath: Record<SekmeTipi, string> = {
-  'panel': '/app',
-  'kanban': '/kanban',
+  panel: '/app',
+  kanban: '/kanban',
   'gorsel-giris': '/gorsel-giris',
-  'musteriler': '/musteriler',
+  musteriler: '/musteriler',
   'kargo-manifest': '/kargo-manifest',
   'kargo-merkezi': '/kargo-merkezi',
   'baku-tahsilat': '/baku-tahsilat',
-  'inbox': '/inbox',
+  inbox: '/inbox',
   'kurye-masasi': '/kurye-masasi',
-  'kodlar': '/kodlar',
+  kodlar: '/kodlar',
 };
 
 export default function App() {
@@ -69,19 +86,27 @@ export default function App() {
 
   // Zustand Global Store
   const {
+    session,
+    sessionStatus,
+    sessionError,
+    restoreSession,
+    logout,
     siparisler,
     firmalar,
     seciliFirmaId,
     aktifRol,
     inboxSayisi,
     bildirim,
+    yukleniyor,
+    siparisYuklemeHatasi,
+    siparisListesiHazir,
+    inboxYuklemeHatasi,
     dbKaynak,
     menuDar,
     seciliKuryeId,
     firmaSiparisSayilariServer,
     setFirmalar,
     setSeciliFirmaId,
-    setAktifRol,
     setBildirim,
     setMenuDar,
     setSeciliKuryeId,
@@ -103,7 +128,6 @@ export default function App() {
 
   // Local UI State (Modallar ve Geçici Seçimler)
   const [veritabaniModalAcik, setVeritabaniModalAcik] = useState(false);
-  const [izolasyonModalAcik, setIzolasyonModalAcik] = useState(false);
   const [seciliKodSekmesi, setSeciliKodSekmesi] = useState<string>('kurulum');
   const [mobilMenuAcik, setMobilMenuAcik] = useState(false);
   const [seciliSiparis, setSeciliSiparis] = useState<Siparis | null>(null);
@@ -120,14 +144,7 @@ export default function App() {
   const [gateHedef, setGateHedef] = useState<'panel' | 'demo'>('panel');
   const [butikQeydiyyatAcik, setButikQeydiyyatAcik] = useState(false);
 
-  // Giriş icazəsi: sessionStorage və ya localStorage
-  const [hasAccess, setHasAccess] = useState<boolean>(() => {
-    try {
-      if (sessionStorage.getItem('tomnap_access_granted') === 'true') return true;
-      if (localStorage.getItem('tomnap_access_granted') === 'true') return true;
-    } catch {}
-    return false;
-  });
+  const hasAccess = sessionStatus === 'authenticated' && !!session;
 
   const bekleyenTenantSayisi = useMemo(() => {
     return firmalar.filter((f) => f.onayDurumu === 'BEKLEMEDE').length;
@@ -138,28 +155,40 @@ export default function App() {
   };
 
   useEffect(() => {
-    firmalariYukle();
+    void restoreSession();
   }, []);
-
   useEffect(() => {
-    siparisleriYukle(seciliFirmaId);
-    inboxSayisiGuncelle(seciliFirmaId);
-  }, [seciliFirmaId]);
+    if (!hasAccess || aktifRol === 'BAKU_KURYE') return;
+    void firmalariYukle();
+    void siparisleriYukle(seciliFirmaId);
+    void inboxSayisiGuncelle(seciliFirmaId);
+  }, [hasAccess, seciliFirmaId]);
+  useLayoutEffect(() => {
+    setSeciliSiparis(null);
+    setWhatsappSiparis(null);
+    setSilinecekSiparis(null);
+    setVeritabaniModalAcik(false);
+    setKargoManifestAcik(false);
+    setKargoModalAcik(false);
+    setBakuTahsilatAcik(false);
+    setInboxAcik(false);
+    setDavetModalAcik(false);
+    setTenantOnayModalAcik(false);
+  }, [session?.id, seciliFirmaId]);
 
   // Multi-Tenant Filtreleme: Seçili firmaya göre siparişleri izole et
   const goruntulenenSiparisler = useMemo(() => {
     if (seciliFirmaId === 'all') return siparisler;
-    return siparisler.filter((s) => (s.tenant_id || 'kanada_shopper_baku') === seciliFirmaId);
+    return siparisler.filter((s) => s.tenant_id === seciliFirmaId);
   }, [siparisler, seciliFirmaId]);
 
   // Her firmanın sipariş sayısı
   const firmaSiparisSayilari = useMemo(() => {
-    const counts: Record<string, number> = { ...firmaSiparisSayilariServer };
+    const counts: Record<string, number> = {};
     for (const s of siparisler) {
-      const tid = s.tenant_id || 'kanada_shopper_baku';
-      counts[tid] = (counts[tid] || 0) + 1;
+      if (s.tenant_id) counts[s.tenant_id] = (counts[s.tenant_id] || 0) + 1;
     }
-    return counts;
+    return { ...firmaSiparisSayilariServer, ...counts };
   }, [siparisler, firmaSiparisSayilariServer]);
 
   const bildirimGoster = (mesaj: string) => {
@@ -167,101 +196,74 @@ export default function App() {
     setTimeout(() => setBildirim(null), 3500);
   };
 
-  // URL query parameter token kontrolü: ?key=tomnap2026 və ya ?token=tomnap2026
-  useEffect(() => {
-    try {
-      const searchParams = new URLSearchParams(window.location.search);
-      const urlKey = (searchParams.get('key') || searchParams.get('token') || searchParams.get('access_code') || '').trim().toLowerCase();
-      const envCode = (import.meta.env.VITE_ACCESS_CODE || '').trim().toLowerCase();
-      const validCodes = new Set(['tomnap2026', 'admin2026', 'tomnap']);
-      if (envCode) validCodes.add(envCode);
-
-      if (urlKey && validCodes.has(urlKey)) {
-        sessionStorage.setItem('tomnap_access_granted', 'true');
-        localStorage.setItem('tomnap_access_granted', 'true');
-        setHasAccess(true);
-        // Parametri URL-dən təmizlə
-        const cleanUrl = window.location.pathname;
-        window.history.replaceState({}, document.title, cleanUrl);
-        bildirimGoster('Səlahiyyətli giriş təsdiqləndi! Xoş gəlmisiniz.');
-      }
-    } catch {}
-  }, []);
-
   const handlePanelGirisIsteyi = () => {
-    if (hasAccess) {
-      navigate('/app');
-    } else {
+    if (hasAccess) navigate('/app');
+    else {
       setGateHedef('panel');
       setAccessGateAcik(true);
     }
   };
-
   const handleDemoGirisIsteyi = () => {
-    if (hasAccess) {
-      setSeciliFirmaId('demo_sandbox');
-      bildirimGoster('Canlı Sandbox Demo Mühitinə keçid edildi! 109 nümunəvi sifariş aktivdir.');
-      navigate('/app');
-    } else {
-      setGateHedef('demo');
-      setAccessGateAcik(true);
-    }
+    setGateHedef('demo');
+    setAccessGateAcik(true);
   };
-
-  const handleBasariliGiris = (hedef: 'panel' | 'demo', firma?: any, rol?: KullaniciRolu) => {
-    try {
-      sessionStorage.setItem('tomnap_access_granted', 'true');
-      localStorage.setItem('tomnap_access_granted', 'true');
-    } catch {}
-    setHasAccess(true);
+  const handleBasariliGiris = () => {
     setAccessGateAcik(false);
-    if (hedef === 'demo') {
-      setSeciliFirmaId('demo_sandbox');
-      setAktifRol('SUPER_ADMIN');
-      bildirimGoster('Canlı Sandbox Demo Mühitinə keçid edildi! 109 nümunəvi sifariş aktivdir.');
-    } else if (firma) {
-      setSeciliFirmaId(firma.id);
-      setAktifRol(rol || 'PATRON');
-      firmalariYukle();
-      bildirimGoster(`Xoş gəldiniz! "${firma.ad}" idarəetmə masasına daxil oldunuz.`);
-    } else if (rol === 'SUPER_ADMIN') {
-      setSeciliFirmaId('all');
-      setAktifRol('SUPER_ADMIN');
-      bildirimGoster('Səlahiyyətli Super Admin panelinə giriş təsdiqləndi.');
-    } else {
-      bildirimGoster('İş masasına giriş təsdiqləndi.');
-    }
     navigate('/app');
   };
-
-  const handleBasariliKayit = (yeniFirma: any) => {
-    try {
-      sessionStorage.setItem('tomnap_access_granted', 'true');
-      localStorage.setItem('tomnap_access_granted', 'true');
-      if (yeniFirma?.id) localStorage.setItem('tomnap_aktif_tenant', yeniFirma.id);
-      localStorage.setItem('tomnap_aktif_rol', 'PATRON');
-    } catch {}
-    setHasAccess(true);
-    setAccessGateAcik(false);
+  const handleBasariliKayit = () => {
     setButikQeydiyyatAcik(false);
-    if (yeniFirma?.id) {
-      setSeciliFirmaId(yeniFirma.id);
+    setGateHedef('panel');
+    setAccessGateAcik(true);
+  };
+  const handleKilidle = async () => {
+    try {
+      await logout();
+      navigate('/');
+    } catch {
+      /* The retry screen retains the token needed to complete logout. */
     }
-    setAktifRol('PATRON');
-    firmalariYukle();
-    bildirimGoster(`Təbriklər! "${yeniFirma?.ad || 'Yeni Butik'}" iş sahəsinə daxil oldunuz.`);
-    navigate('/app');
   };
 
-  const handleKilidle = () => {
-    try {
-      sessionStorage.removeItem('tomnap_access_granted');
-      localStorage.removeItem('tomnap_access_granted');
-    } catch {}
-    setHasAccess(false);
-    bildirimGoster('İş masası kilidləndi.');
-    navigate('/');
-  };
+  if (sessionStatus === 'logout-pending' || sessionStatus === 'logout-error') {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6">
+        <p role={sessionStatus === 'logout-error' ? 'alert' : 'status'}>
+          {sessionStatus === 'logout-error' ? sessionError : 'Hesabdan çıxılır…'}
+        </p>
+        {sessionStatus === 'logout-error' && (
+          <button
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-white"
+            onClick={() => void handleKilidle()}
+          >
+            Çıxışı yenidən cəhd et
+          </button>
+        )}
+      </main>
+    );
+  }
+
+  if (sessionStatus === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center gap-3" role="status">
+        <Loader2 className="w-5 h-5 animate-spin" />
+        Oturum yoxlanılır…
+      </div>
+    );
+  }
+  if (sessionStatus === 'error') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <p role="alert">{sessionError}</p>
+        <button
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-white"
+          onClick={() => void restoreSession()}
+        >
+          Yenidən yoxla
+        </button>
+      </div>
+    );
+  }
 
   // 1. İctimai Landing Page (Vitrin) — tomnap.com ana səhifəsi
   if (location.pathname === '/' || location.pathname === '/landing') {
@@ -332,6 +334,29 @@ export default function App() {
     );
   }
 
+  // 4. v2 kabuğu (/v2): yalnız VITE_FF_V2_FLOW açıkken, girişten sonra ve /api/v2 ile aynı rollere.
+  if (
+    V2Kabuk &&
+    rolGrubunda(aktifRol, 'STAFF') &&
+    (location.pathname === '/v2' || location.pathname.startsWith('/v2/'))
+  ) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-slate-950" />}>
+        <V2Kabuk />
+      </Suspense>
+    );
+  }
+
+  if (aktifRol === 'BAKU_KURYE') {
+    return (
+      <KuryeCalismaAlani
+        key={`${session.id}:${session.tenantId}`}
+        userName={session.adSoyad}
+        onLogout={handleKilidle}
+      />
+    );
+  }
+
   // Yeni sipariş eklendiğinde
   const handleSiparisEklendi = (yeniSiparis: Siparis) => {
     siparisEkle(yeniSiparis);
@@ -339,24 +364,31 @@ export default function App() {
   };
 
   // Durum veya alan güncelleme
-  const handleDurumGuncelle = async (id: string, guncellemeler: Partial<Siparis>) => {
-    // 1. İyimser yerel güncelleme
-    siparisGuncelle(id, guncellemeler);
-
-    if (seciliSiparis && seciliSiparis.id === id) {
-      setSeciliSiparis((onceki) => (onceki ? { ...onceki, ...guncellemeler } : null));
-    }
-
+  // Sunucu kabul ettiyse true; red nedeni (yetki, 409 çakışma, geçersiz değer) bildirimde.
+  const handleDurumGuncelle = async (
+    id: string,
+    guncellemeler: Partial<Siparis>
+  ): Promise<boolean> => {
     // 2. Sunucuya bildirme
     try {
-      await fetch(`/api/siparisler/${id}`, {
+      const response = await apiFetch(`/api/siparisler/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(guncellemeler),
       });
+      const result = await response.json();
+      if (!result.siparis) throw new Error('Server sifarişin son vəziyyətini qaytarmadı.');
+      siparisGuncelle(id, result.siparis);
+      if (seciliSiparis?.id === id) setSeciliSiparis(result.siparis);
       bildirimGoster('Sipariş durumu güncellendi.');
+      return true;
     } catch (err) {
-      console.error('Güncelleme hatası:', err);
+      bildirimGoster(
+        err instanceof ApiError && err.status < 500
+          ? err.message
+          : 'Sifariş yenilənmədi. İcazələrinizi və bağlantını yoxlayın.'
+      );
+      return false;
     }
   };
 
@@ -376,41 +408,24 @@ export default function App() {
     setSilmeIslemiSuruyor(true);
 
     try {
-      await fetch(`/api/siparisler/${silinecekId}`, { method: 'DELETE' });
+      await apiFetch(`/api/siparisler/${silinecekId}`, { method: 'DELETE' });
       siparisSil(silinecekId);
       if (seciliSiparis?.id === silinecekId) setSeciliSiparis(null);
       setSilinecekSiparis(null);
       bildirimGoster(`"${musteriAdi}" adlı müşterinin siparişi başarıyla silindi.`);
     } catch (err) {
       console.error('Silme hatası:', err);
-      siparisSil(silinecekId);
-      setSilinecekSiparis(null);
-      bildirimGoster('Sipariş yerel listeden kaldırıldı.');
+      bildirimGoster('Sifariş silinmədi. İcazələrinizi və bağlantını yoxlayın.');
     } finally {
       setSilmeIslemiSuruyor(false);
     }
   };
 
-  // Demo Sandbox sıfırlama
-  const [demoSifirlanir, setDemoSifirlanir] = useState(false);
-  const handleDemoSifirla = async () => {
-    setDemoSifirlanir(true);
-    try {
-      const res = await fetch('/api/demo/sifirla', { method: 'POST' });
-      const data = await res.json();
-      if (data.basarili) {
-        bildirimGoster(data.mesaj);
-        siparisleriYukle('demo_sandbox');
-      }
-    } catch (e) {
-      bildirimGoster('Demo mühiti sıfırlanarkən xəta baş verdi.');
-    } finally {
-      setDemoSifirlanir(false);
-    }
-  };
-
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
+    <div
+      key={`${session?.id}:${seciliFirmaId}`}
+      className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden"
+    >
       {/* Sol Sidebar (Yan Menü) */}
       <YanMenu
         aktifSekme={aktifSekme}
@@ -448,15 +463,6 @@ export default function App() {
           onInboxAc={() => handleSekmeDegistir('inbox')}
           inboxSayisi={inboxSayisi}
           aktifRol={aktifRol}
-          onRolDegistir={(yeniRol) => {
-            setAktifRol(yeniRol);
-            if (yeniRol === 'BAKU_KURYE') {
-              handleSekmeDegistir('kurye-masasi');
-            } else if (yeniRol === 'PATRON' && aktifSekme === 'kodlar') {
-              handleSekmeDegistir('panel');
-            }
-            bildirimGoster(`Rol dəyişdirildi: ${yeniRol}`);
-          }}
           seciliKuryeId={seciliKuryeId}
           onKuryeSec={(id) => {
             setSeciliKuryeId(id);
@@ -466,13 +472,16 @@ export default function App() {
           seciliFirmaId={seciliFirmaId}
           onFirmaSec={(id) => {
             setSeciliFirmaId(id);
-            const secilenFirma = firmalar.find(f => f.id === id);
-            bildirimGoster(id === 'all' ? 'Bütün butiklərin sifarişləri göstərilir' : `İş sahəsi: ${secilenFirma?.ad || id}`);
+            const secilenFirma = firmalar.find((f) => f.id === id);
+            bildirimGoster(
+              id === 'all'
+                ? 'Bütün butiklərin sifarişləri göstərilir'
+                : `İş sahəsi: ${secilenFirma?.ad || id}`
+            );
           }}
           onVeritabaniModalAc={() => setVeritabaniModalAcik(true)}
           onYeniFirmaAc={() => setVeritabaniModalAcik(true)}
           firmaSiparisSayilari={firmaSiparisSayilari}
-          onIzolasyonModalAc={() => setIzolasyonModalAcik(true)}
           onKargoModalAc={() => setKargoModalAcik(true)}
           onVitrinAc={() => navigate('/')}
           onDavetModalAc={() => setDavetModalAcik(true)}
@@ -480,31 +489,6 @@ export default function App() {
           bekleyenTenantSayisi={bekleyenTenantSayisi}
           onKilidle={handleKilidle}
         />
-
-        {/* Canlı Demo Sandbox Xəbərdarlıq və Sıfırlama Paneli */}
-        {seciliFirmaId === 'demo_sandbox' && (
-          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between text-xs text-amber-900 shrink-0 shadow-2xs">
-            <div className="flex items-center space-x-2.5">
-              <span className="flex h-2.5 w-2.5 relative shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-              </span>
-              <span>
-                <strong className="font-semibold text-amber-950">🧪 Sınaq Sandbox Mühiti (Canlı Demo):</strong> Bu rejimdə istədiyiniz sifarişi əlavə edə, redaktə edə və ya silə bilərsiniz. Canlı verilənlər bazası 100% zirehli qorunur.
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleDemoSifirla}
-              disabled={demoSifirlanir}
-              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 disabled:opacity-50 text-white font-medium rounded-lg shadow-xs flex items-center space-x-1.5 transition-colors cursor-pointer shrink-0 ml-3"
-              title="Orijinal 96 qızıl sifariş məlumatını ilkin vəziyyətinə qaytar"
-            >
-              <RotateCcw className={`w-3.5 h-3.5 ${demoSifirlanir ? 'animate-spin' : ''}`} />
-              <span>{demoSifirlanir ? 'Sıfırlanır...' : 'Demo Məlumatlarını Sıfırla'}</span>
-            </button>
-          </div>
-        )}
 
         {/* Başarı / Bilgi Bildirim Toast */}
         {bildirim && (
@@ -516,7 +500,30 @@ export default function App() {
 
         {/* Ana İçerik Scroll Alanı */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 pb-24 lg:pb-8">
-          {aktifSekme === 'panel' ? (
+          {inboxYuklemeHatasi && (
+            <div role="alert" className="rounded-xl border border-amber-200 p-3 bg-amber-50">
+              {inboxYuklemeHatasi}{' '}
+              <button type="button" onClick={() => inboxSayisiGuncelle()} className="underline">
+                Yenidən yoxla
+              </button>
+            </div>
+          )}
+          {yukleniyor || (!siparisListesiHazir && !siparisYuklemeHatasi) ? (
+            <div role="status" className="rounded-xl border p-6 bg-white">
+              Sifarişlərin bütün səhifələri yoxlanılır…
+            </div>
+          ) : siparisYuklemeHatasi ? (
+            <div
+              role="alert"
+              className="rounded-xl border border-red-200 p-6 bg-red-50 text-red-900"
+            >
+              <p>Sifariş siyahısı tam yüklənmədi. Göstəricilər hazır deyil.</p>
+              <p>{siparisYuklemeHatasi}</p>
+              <button type="button" onClick={() => siparisleriYukle()} className="mt-3 underline">
+                Yenidən yüklə
+              </button>
+            </div>
+          ) : aktifSekme === 'panel' ? (
             <>
               {/* 1. Finans & Lojistik İstatistikleri (4 Metrik Kartı) */}
               <FinansLojistikOzet siparisler={goruntulenenSiparisler} />
@@ -528,9 +535,12 @@ export default function App() {
                     <span className="text-lg">📸</span>
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">WhatsApp Grubu & Görsel Sipariş Masası</h4>
+                    <h4 className="text-sm font-bold text-white">
+                      WhatsApp Grubu & Görsel Sipariş Masası
+                    </h4>
                     <p className="text-xs text-slate-300 mt-0.5">
-                      Gruptan gelen ürün fotoğraflarını ve konuşma notlarını tek hamlede yükleyip Gemini AI ile siparişe dönüştürün.
+                      Gruptan gelen ürün fotoğraflarını ve konuşma notlarını tek hamlede yükleyip
+                      Gemini AI ile siparişe dönüştürün.
                     </p>
                   </div>
                 </div>
@@ -551,13 +561,16 @@ export default function App() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-bold text-white">Kargo & Aramex Lojistika Mərkəzi</h4>
+                      <h4 className="text-sm font-bold text-white">
+                        Kargo & Aramex Lojistika Mərkəzi
+                      </h4>
                       <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-blue-500/30 text-blue-200 border border-blue-400/40 uppercase">
                         Canlı Aramex API
                       </span>
                     </div>
                     <p className="text-xs text-slate-300 mt-0.5">
-                      Toronto ➔ Bakı kargo uçuşları, AWB barkod izləməsi, gündəlik ixracat cədvəlləri və daşıyıcı tənzimləmələri.
+                      Toronto ➔ Bakı kargo uçuşları, AWB barkod izləməsi, gündəlik ixracat
+                      cədvəlləri və daşıyıcı tənzimləmələri.
                     </p>
                   </div>
                 </div>
@@ -601,7 +614,7 @@ export default function App() {
               onSiparisEklendi={handleSiparisEklendi}
               onSiparislereDon={() => handleSekmeDegistir('panel')}
               seciliFirmaId={seciliFirmaId}
-              seciliFirmaAd={firmalar.find(f => f.id === seciliFirmaId)?.ad}
+              seciliFirmaAd={firmalar.find((f) => f.id === seciliFirmaId)?.ad}
             />
           ) : aktifSekme === 'musteriler' ? (
             /* 3. Müşteri Veritabanı & CRM Rehberi */
@@ -609,7 +622,7 @@ export default function App() {
               onSiparislereGit={() => handleSekmeDegistir('panel')}
               onSiparisDetayAc={(siparis) => setSeciliSiparis(siparis)}
               seciliFirmaId={seciliFirmaId}
-              seciliFirmaAd={firmalar.find(f => f.id === seciliFirmaId)?.ad}
+              seciliFirmaAd={firmalar.find((f) => f.id === seciliFirmaId)?.ad}
             />
           ) : aktifSekme === 'kargo-manifest' ? (
             /* 4. Kanada ➔ Bakü Kargo Manifestosu & Çeki Listesi */
@@ -638,30 +651,26 @@ export default function App() {
               onSiparisOnaylandi={(yeniSiparis) => {
                 handleSiparisEklendi(yeniSiparis);
                 inboxSayisiGuncelle();
-                bildirimGoster(`✅ "${yeniSiparis.musteri_adi}" sifarişi təsdiqləndi və əsas bazaya əlavə edildi!`);
+                bildirimGoster(
+                  `✅ "${yeniSiparis.musteri_adi}" sifarişi təsdiqləndi və əsas bazaya əlavə edildi!`
+                );
               }}
               onSiparislereDon={() => handleSekmeDegistir('panel')}
               onYenile={inboxSayisiGuncelle}
               seciliFirmaId={seciliFirmaId}
-              seciliFirmaAd={firmalar.find(f => f.id === seciliFirmaId)?.ad}
+              seciliFirmaAd={firmalar.find((f) => f.id === seciliFirmaId)?.ad}
             />
           ) : aktifSekme === 'kurye-masasi' ? (
             /* 7. Bakü Kurye & Saha Dağıtım Masası (Mobil Uyumlu) */
             <KuryeTeslimatMasasi
+              key={`${session.id}:${seciliFirmaId}`}
               siparisler={goruntulenenSiparisler}
               seciliKuryeId={seciliKuryeId}
               onKuryeDegistir={setSeciliKuryeId}
-              onSiparisGuncelle={(guncel) => handleDurumGuncelle(guncel.id, guncel)}
               onSiparisDetayAc={(siparis) => setSeciliSiparis(siparis)}
               kullaniciRolu={aktifRol}
               seciliFirmaId={seciliFirmaId}
-              seciliFirmaAd={firmalar.find(f => f.id === seciliFirmaId)?.ad}
-              firmalar={firmalar}
-              onFirmaSec={(id) => {
-                setSeciliFirmaId(id);
-                const secilenFirma = firmalar.find(f => f.id === id);
-                bildirimGoster(id === 'all' ? 'Bütün butiklərin sifarişləri göstərilir' : `Aktiv butik: ${secilenFirma?.ad || id}`);
-              }}
+              seciliFirmaAd={firmalar.find((f) => f.id === seciliFirmaId)?.ad}
               onSiparisleriYukle={siparisleriYukle}
             />
           ) : (
@@ -675,9 +684,7 @@ export default function App() {
           {/* Alt Bilgi Footer */}
           <footer className="border-t border-slate-200 pt-4 mt-8">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
-              <div>
-                Kanada ➔ Bakü Instagram E-Ticaret & Lojistik Yönetim Platformu
-              </div>
+              <div>Kanada ➔ Bakü Instagram E-Ticaret & Lojistik Yönetim Platformu</div>
               <div className="flex items-center gap-3">
                 <span>Express Modüler Mimari</span>
                 <span>•</span>
@@ -695,14 +702,35 @@ export default function App() {
         siparis={seciliSiparis}
         onKapat={() => setSeciliSiparis(null)}
         onGuncelle={handleDurumGuncelle}
+        onAtamaKaydedildi={(order) => {
+          siparisGuncelle(order.id, order);
+          setSeciliSiparis(order);
+        }}
+        onSiparisYenile={async () => {
+          if (!seciliSiparis) return;
+          const id = seciliSiparis.id;
+          const context = getApiContextVersion();
+          await siparisleriYukle(seciliFirmaId);
+          if (context !== getApiContextVersion())
+            throw new DOMException('Oturum və ya butik dəyişdi.', 'AbortError');
+          const refreshed = useAppStore.getState();
+          if (
+            refreshed.yukleniyor ||
+            refreshed.siparisYuklemeHatasi ||
+            !refreshed.siparisListesiHazir
+          )
+            throw new Error(
+              refreshed.siparisYuklemeHatasi || 'Sifariş siyahısının yenilənməsi tamamlanmadı.'
+            );
+          const latest = refreshed.siparisler.find((order) => order.id === id);
+          if (!latest) throw new Error('Sifariş yenilənə bilmədi və ya artıq əlçatan deyil.');
+          setSeciliSiparis(latest);
+        }}
         onWhatsAppAc={(siparis) => setWhatsappSiparis(siparis)}
       />
 
       {/* 2. Müşteriye WhatsApp Bildirim Modalı */}
-      <WhatsAppBildirimModal
-        siparis={whatsappSiparis}
-        onKapat={() => setWhatsappSiparis(null)}
-      />
+      <WhatsAppBildirimModal siparis={whatsappSiparis} onKapat={() => setWhatsappSiparis(null)} />
 
       {/* 3. Kanada ➔ Bakü Kargo Manifestosu & Çeki Listesi Modalı */}
       {kargoManifestAcik && (
@@ -725,7 +753,7 @@ export default function App() {
       {inboxAcik && (
         <OnayBekleyenlerModal
           seciliFirmaId={seciliFirmaId}
-          seciliFirmaAd={firmalar.find(f => f.id === seciliFirmaId)?.ad}
+          seciliFirmaAd={firmalar.find((f) => f.id === seciliFirmaId)?.ad}
           onKapat={() => {
             setInboxAcik(false);
             inboxSayisiGuncelle();
@@ -733,7 +761,9 @@ export default function App() {
           onSiparisOnaylandi={(yeniSiparis) => {
             handleSiparisEklendi(yeniSiparis);
             inboxSayisiGuncelle();
-            setBildirim(`✅ "${yeniSiparis.musteri_adi}" siparişi onaylandı ve resmi listeye eklendi!`);
+            setBildirim(
+              `✅ "${yeniSiparis.musteri_adi}" siparişi onaylandı ve resmi listeye eklendi!`
+            );
             setTimeout(() => setBildirim(null), 4000);
           }}
         />
@@ -749,8 +779,12 @@ export default function App() {
                   <Trash2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Siparişi Silmek İstiyor musunuz?</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Bu işlem siparişi ve bağlı verileri veritabanından silecektir.</p>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Siparişi Silmek İstiyor musunuz?
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Bu işlem siparişi ve bağlı verileri veritabanından silecektir.
+                  </p>
                 </div>
               </div>
               <button
@@ -831,14 +865,6 @@ export default function App() {
         bildirimGoster={bildirimGoster}
         seciliFirmaId={seciliFirmaId}
         onFirmaSec={setSeciliFirmaId}
-      />
-
-      {/* Tenant İzolasiya & Təhlükəsizlik Testi Modalı */}
-      <IzolasyonDogrulamaModal
-        acik={izolasyonModalAcik}
-        onKapat={() => setIzolasyonModalAcik(false)}
-        seciliFirmaId={seciliFirmaId}
-        firmalar={firmalar}
       />
 
       {/* Çoxlu Kargo (Multi-Carrier) & Aramex API İnteqrasiya Modalı */}

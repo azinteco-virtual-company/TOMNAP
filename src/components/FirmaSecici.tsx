@@ -8,7 +8,6 @@ interface FirmaSeciciProps {
   onFirmaSec: (firmaId: string) => void;
   onYeniFirmaAc?: () => void;
   siparisSayilari?: Record<string, number>;
-  onIzolasyonModalAc?: () => void;
 }
 
 export const FirmaSecici: React.FC<FirmaSeciciProps> = ({
@@ -17,7 +16,6 @@ export const FirmaSecici: React.FC<FirmaSeciciProps> = ({
   onFirmaSec,
   onYeniFirmaAc,
   siparisSayilari = {},
-  onIzolasyonModalAc,
 }) => {
   const [acik, setAcik] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -32,7 +30,7 @@ export const FirmaSecici: React.FC<FirmaSeciciProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const seciliFirma = firmalar.find((f) => f.id === seciliFirmaId) || firmalar[0];
+  const seciliFirma = firmalar.find((f) => f.id === seciliFirmaId);
 
   return (
     <div className="relative" ref={containerRef}>
@@ -43,14 +41,21 @@ export const FirmaSecici: React.FC<FirmaSeciciProps> = ({
         className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer shadow-2xs text-left"
         title="Aktiv Firma / Butik Seçimi"
       >
-        <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 relative ${
-          seciliFirma?.isDemo
-            ? 'bg-amber-100 text-amber-700'
-            : 'bg-blue-100 text-blue-700'
-        }`}>
-          {seciliFirma?.isDemo ? <Sparkles className="w-3.5 h-3.5" /> : <Store className="w-3.5 h-3.5" />}
+        <div
+          className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 relative ${
+            seciliFirma?.isDemo ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+          }`}
+        >
+          {seciliFirma?.isDemo ? (
+            <Sparkles className="w-3.5 h-3.5" />
+          ) : (
+            <Store className="w-3.5 h-3.5" />
+          )}
           {seciliFirmaId !== 'all' && (
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" title="İzolyasiya aktivdir" />
+            <span
+              className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"
+              title="İzolyasiya aktivdir"
+            />
           )}
         </div>
         <div className="hidden sm:flex flex-col min-w-0 max-w-[130px] lg:max-w-[160px]">
@@ -59,7 +64,7 @@ export const FirmaSecici: React.FC<FirmaSeciciProps> = ({
             {seciliFirmaId !== 'all' && <ShieldCheck className="w-2.5 h-2.5 text-emerald-600" />}
           </span>
           <span className="text-xs font-semibold text-slate-800 truncate leading-tight mt-0.5">
-            {seciliFirma?.ad || 'Kanada Shopper Bakı'}
+            {seciliFirmaId === 'all' ? 'Bütün Butiklər (Qlobal)' : seciliFirma?.ad || 'Butik seçin'}
           </span>
         </div>
         <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-0.5" />
@@ -69,8 +74,12 @@ export const FirmaSecici: React.FC<FirmaSeciciProps> = ({
         <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2">
           <div className="px-3.5 py-2 border-b border-slate-100">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">İş Sahəsi / Butik</span>
-              <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">Multi-Tenant SaaS</span>
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                İş Sahəsi / Butik
+              </span>
+              <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">
+                Multi-Tenant SaaS
+              </span>
             </div>
             <p className="text-[11px] text-slate-500 mt-0.5">
               Hər butikin özünəməxsus müştəri bazası və sifarişləri izolyasiya edilir.
@@ -124,12 +133,16 @@ export const FirmaSecici: React.FC<FirmaSeciciProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                      firma.isDemo
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-slate-100 text-slate-700'
-                    }`}>
-                      {firma.isDemo ? <Sparkles className="w-3.5 h-3.5" /> : <Store className="w-3.5 h-3.5" />}
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        firma.isDemo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {firma.isDemo ? (
+                        <Sparkles className="w-3.5 h-3.5" />
+                      ) : (
+                        <Store className="w-3.5 h-3.5" />
+                      )}
                     </div>
                     <div className="min-w-0">
                       <div className="truncate font-semibold text-slate-900 flex items-center gap-1.5">
@@ -154,24 +167,9 @@ export const FirmaSecici: React.FC<FirmaSeciciProps> = ({
           </div>
 
           <div className="pt-1.5 px-2 border-t border-slate-100 space-y-1">
-            {onIzolasyonModalAc && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAcik(false);
-                  onIzolasyonModalAc();
-                }}
-                className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                  <span>İzolyasiya & Baza Yoxlaması</span>
-                </span>
-                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                  100% İzolyasiya
-                </span>
-              </button>
-            )}
+            <p className="px-3 py-1.5 text-[11px] text-slate-500">
+              Tenant izolasyonu: otomatik testlerle doğrulanıyor (CI)
+            </p>
 
             {onYeniFirmaAc && (
               <button

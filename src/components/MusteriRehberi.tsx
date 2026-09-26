@@ -1,19 +1,20 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Users, 
-  Search, 
-  Phone, 
-  MapPin, 
-  ShoppingBag, 
-  CreditCard, 
-  Clock, 
-  CheckCircle2, 
-  Sparkles, 
-  Plus, 
-  MessageCircle, 
-  UserCheck, 
-  HeartHandshake, 
-  Crown, 
+import { loadCompleteList, newestFirst } from '../lib/completeList';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  Users,
+  Search,
+  Phone,
+  MapPin,
+  ShoppingBag,
+  CreditCard,
+  Clock,
+  CheckCircle2,
+  Sparkles,
+  Plus,
+  MessageCircle,
+  UserCheck,
+  HeartHandshake,
+  Crown,
   Filter,
   ArrowUpDown,
   FileText,
@@ -25,7 +26,7 @@ import {
   Calendar,
   DollarSign,
   Store,
-  RefreshCw
+  RefreshCw,
 } from 'lucide-react';
 import { Musteri, MusteriTipi, Siparis } from '../types';
 
@@ -36,16 +37,21 @@ interface MusteriRehberiProps {
   seciliFirmaAd?: string;
 }
 
-type SiralamaTuru = 'SON_SIPARIS' | 'AD_AZ' | 'AD_ZA' | 'SIPARIS_SAYISI' | 'TOPLAM_HARCAMA' | 'KALAN_BORC';
+type SiralamaTuru =
+  'SON_SIPARIS' | 'AD_AZ' | 'AD_ZA' | 'SIPARIS_SAYISI' | 'TOPLAM_HARCAMA' | 'KALAN_BORC';
 
 export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
   onSiparislereGit,
   onSiparisDetayAc,
   seciliFirmaId,
-  seciliFirmaAd
+  seciliFirmaAd,
 }) => {
   const [musteriler, setMusteriler] = useState<Musteri[]>([]);
   const [yukleniyor, setYukleniyor] = useState(true);
+  const loadRun = useRef(0);
+  const historyRun = useRef(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [aramaMetni, setAramaMetni] = useState('');
   const [tipFiltresi, setTipFiltresi] = useState<string>('TUMU');
   const [siralama, setSiralama] = useState<SiralamaTuru>('SON_SIPARIS');
@@ -55,23 +61,21 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
 
   // Müşterileri API'den yükle (Zorunlu Tenant İzolasyonlu Veritabanı Sorgusu)
   const musterileriGetir = async () => {
+    const run = ++loadRun.current;
+    setLoadError(null);
     try {
       setYukleniyor(true);
       // tenant_id filtresini veritabanı sorgusu için her zaman zorunlu kıl
       const aktifTenant = seciliFirmaId || 'all';
       const url = `/api/musteriler?tenant_id=${encodeURIComponent(aktifTenant)}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.basarili && Array.isArray(data.musteriler)) {
-        setMusteriler(data.musteriler);
-      } else {
-        setMusteriler([]);
-      }
+      const data = await loadCompleteList<Musteri>(url, 'musteriler');
+      if (run === loadRun.current) setMusteriler(data.items.sort(newestFirst));
     } catch (e) {
       console.error('Müşteriler alınamadı:', e);
-      setMusteriler([]);
+      if (run === loadRun.current)
+        setLoadError(e instanceof Error ? e.message : 'Müştərilər tam yüklənmədi.');
     } finally {
-      setYukleniyor(false);
+      if (run === loadRun.current) setYukleniyor(false);
     }
   };
 
@@ -83,51 +87,57 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
     setAramaMetni('');
     // Seçili firma verilerini anında veritabanından yeniden yükle
     musterileriGetir();
+    return () => {
+      loadRun.current++;
+      historyRun.current++;
+    };
   }, [seciliFirmaId]);
 
   // Seçili müşterinin sipariş geçmişini yükle (Zorunlu tenant_id filtresi ile)
   const musteriGecmisiAc = async (musteri: Musteri) => {
     setSeciliMusteri(musteri);
+    const run = ++historyRun.current;
+    setHistoryError(null);
+    setMusteriSiparisleri([]);
     try {
       setGecmisYukleniyor(true);
       const aktifTenant = seciliFirmaId || 'all';
       const url = `/api/musteriler/${encodeURIComponent(musteri.id)}/siparisler?tenant_id=${encodeURIComponent(aktifTenant)}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.basarili && Array.isArray(data.siparisler)) {
-        setMusteriSiparisleri(data.siparisler);
-      } else {
-        setMusteriSiparisleri([]);
-      }
+      const data = await loadCompleteList<Siparis>(url, 'siparisler');
+      if (run === historyRun.current) setMusteriSiparisleri(data.items.sort(newestFirst));
     } catch (e) {
       console.error('Sipariş geçmişi hatası:', e);
-      setMusteriSiparisleri([]);
+      if (run === historyRun.current)
+        setHistoryError(e instanceof Error ? e.message : 'Tarixçə tam yüklənmədi.');
     } finally {
-      setGecmisYukleniyor(false);
+      if (run === historyRun.current) setGecmisYukleniyor(false);
     }
   };
 
   // Filtreleme ve Sıralama
   const islenmisMusteriler = useMemo(() => {
     // 1. Filtrele
-    let sonuc = musteriler.filter(m => {
+    let sonuc = musteriler.filter((m) => {
       // Çift katmanlı Tenant İzolasyonu
       if (seciliFirmaId && seciliFirmaId !== 'all') {
-        const tid = m.tenant_id || 'kanada_shopper_baku';
+        const tid = m.tenant_id;
         if (tid !== seciliFirmaId) return false;
       }
 
       const arama = aramaMetni.toLowerCase().trim();
-      const aramaUygun = !arama || 
+      const aramaUygun =
+        !arama ||
         m.ad_soyad.toLowerCase().includes(arama) ||
         (m.telefon && m.telefon.includes(arama)) ||
         (m.sehir && m.sehir.toLowerCase().includes(arama)) ||
         (m.adres && m.adres.toLowerCase().includes(arama)) ||
         (m.son_urun_aciklamasi && m.son_urun_aciklamasi.toLowerCase().includes(arama));
 
-      const tipUygun = 
-        tipFiltresi === 'TUMU' || 
-        (tipFiltresi === 'BORCLU' ? (m.kalan_toplam_borc || 0) > 0 : m.musteri_tipi === tipFiltresi);
+      const tipUygun =
+        tipFiltresi === 'TUMU' ||
+        (tipFiltresi === 'BORCLU'
+          ? (m.kalan_toplam_borc || 0) > 0
+          : m.musteri_tipi === tipFiltresi);
 
       return aramaUygun && tipUygun;
     });
@@ -147,7 +157,10 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
           return (b.kalan_toplam_borc || 0) - (a.kalan_toplam_borc || 0);
         case 'SON_SIPARIS':
         default:
-          return new Date(b.son_siparis_tarihi || 0).getTime() - new Date(a.son_siparis_tarihi || 0).getTime();
+          return (
+            new Date(b.son_siparis_tarihi || 0).getTime() -
+            new Date(a.son_siparis_tarihi || 0).getTime()
+          );
       }
     });
 
@@ -156,10 +169,10 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
 
   // İstatistikler
   const toplamMusteriSayisi = musteriler.length;
-  const sadikSayisi = musteriler.filter(m => m.musteri_tipi === 'SADIK_MUSTERI').length;
-  const akrabaSayisi = musteriler.filter(m => m.musteri_tipi === 'AKRABA_YAKIN').length;
-  const vipSayisi = musteriler.filter(m => m.musteri_tipi === 'VIP').length;
-  const borcluMusteriSayisi = musteriler.filter(m => (m.kalan_toplam_borc || 0) > 0).length;
+  const sadikSayisi = musteriler.filter((m) => m.musteri_tipi === 'SADIK_MUSTERI').length;
+  const akrabaSayisi = musteriler.filter((m) => m.musteri_tipi === 'AKRABA_YAKIN').length;
+  const vipSayisi = musteriler.filter((m) => m.musteri_tipi === 'VIP').length;
+  const borcluMusteriSayisi = musteriler.filter((m) => (m.kalan_toplam_borc || 0) > 0).length;
   const toplamKalanBorc = musteriler.reduce((acc, m) => acc + (m.kalan_toplam_borc || 0), 0);
 
   const getTipRozet = (tip: string) => {
@@ -194,15 +207,35 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
   const getLojistikRozet = (durum: string) => {
     switch (durum) {
       case 'TESLIM_EDILDI':
-        return <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">✅ Təhvil Verildi</span>;
+        return (
+          <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+            ✅ Təhvil Verildi
+          </span>
+        );
       case 'BAKU_DAGITIM_ARKADAS':
-        return <span className="px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-800 text-[10px] font-bold">🛵 Bakı Paylaşımda</span>;
+        return (
+          <span className="px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-800 text-[10px] font-bold">
+            🛵 Bakı Paylaşımda
+          </span>
+        );
       case 'ULUSLARARASI_KARGO':
-        return <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-bold">✈️ Təyyarədə (Yolda)</span>;
+        return (
+          <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-bold">
+            ✈️ Təyyarədə (Yolda)
+          </span>
+        );
       case 'KANADA_DEPO':
-        return <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold">📦 Kanada Anbarda</span>;
+        return (
+          <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold">
+            📦 Kanada Anbarda
+          </span>
+        );
       default:
-        return <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold">⏳ Satınalma Gözləyir</span>;
+        return (
+          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold">
+            ⏳ Satınalma Gözləyir
+          </span>
+        );
     }
   };
 
@@ -220,6 +253,22 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
       return '';
     }
   };
+
+  if (yukleniyor)
+    return (
+      <div role="status" className="p-6">
+        Müştərilərin bütün səhifələri yoxlanılır…
+      </div>
+    );
+  if (loadError)
+    return (
+      <div role="alert" className="p-6 text-red-800">
+        Müştəri göstəriciləri hazır deyil. {loadError}{' '}
+        <button onClick={musterileriGetir} className="underline">
+          Yenidən yüklə
+        </button>
+      </div>
+    );
 
   return (
     <div className="space-y-6">
@@ -241,7 +290,8 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Kişi bazında toplanmış sipariş geçmişi, son alınan ürünler, kalan borçlar ve sadakat seviyeleri.
+                Kişi bazında toplanmış sipariş geçmişi, son alınan ürünler, kalan borçlar ve sadakat
+                seviyeleri.
               </p>
             </div>
           </div>
@@ -255,7 +305,9 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
             className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             title="Müştəri siyahısını yenilə"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${yukleniyor ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 text-slate-600 ${yukleniyor ? 'animate-spin' : ''}`}
+            />
             <span className="hidden sm:inline">Yenilə</span>
           </button>
           <button
@@ -271,27 +323,39 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
       {/* İstatistik Metrik Kartları */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Kayıtlı Müşteri</div>
+          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            Kayıtlı Müşteri
+          </div>
           <div className="text-2xl font-black text-slate-900 mt-1">{toplamMusteriSayisi}</div>
           <div className="text-[11px] text-slate-500 mt-0.5">Aktif CRM Portföyü</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs">
-          <div className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Sadık & VIP</div>
+          <div className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+            Sadık & VIP
+          </div>
           <div className="text-2xl font-black text-emerald-700 mt-1">{sadikSayisi + vipSayisi}</div>
           <div className="text-[11px] text-emerald-600 mt-0.5">Tekrar sipariş verenler</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-amber-100 shadow-xs">
-          <div className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Akraba & Yakın</div>
+          <div className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
+            Akraba & Yakın
+          </div>
           <div className="text-2xl font-black text-amber-700 mt-1">{akrabaSayisi}</div>
           <div className="text-[11px] text-amber-600 mt-0.5">Elden / özel tahsilat</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-rose-100 shadow-xs">
-          <div className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">Kalan Toplam Borç</div>
-          <div className="text-2xl font-black text-rose-700 mt-1">{toplamKalanBorc.toFixed(0)} AZN</div>
-          <div className="text-[11px] text-rose-600 mt-0.5">{borcluMusteriSayisi} müşteride borç var</div>
+          <div className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">
+            Kalan Toplam Borç
+          </div>
+          <div className="text-2xl font-black text-rose-700 mt-1">
+            {toplamKalanBorc.toFixed(0)} AZN
+          </div>
+          <div className="text-[11px] text-rose-600 mt-0.5">
+            {borcluMusteriSayisi} müşteride borç var
+          </div>
         </div>
       </div>
 
@@ -302,7 +366,10 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
           <span>Akıllı Müşteri Eşleştirme & Otomatik Yazım Düzeltme (AI Autocorrect)</span>
         </div>
         <p className="text-xs text-slate-300 leading-relaxed">
-          Instagram Live, DM veya WhatsApp mesajlarında müşteri adı yanlış yazılsa bile (örneğin <strong>"Kemake"</strong>), sistem telefon numarası (+994 50 694 25 25) veya adresinden müşterinin <strong>Kəmalə Bədirbəyli</strong> olduğunu anlar; yeni kopya kayıt açmak yerine doğrudan bu müşterinin kartına bağlar.
+          Instagram Live, DM veya WhatsApp mesajlarında müşteri adı yanlış yazılsa bile (örneğin{' '}
+          <strong>"Kemake"</strong>), sistem telefon numarası (+994 50 694 25 25) veya adresinden
+          müşterinin <strong>Kəmalə Bədirbəyli</strong> olduğunu anlar; yeni kopya kayıt açmak
+          yerine doğrudan bu müşterinin kartına bağlar.
         </p>
       </div>
 
@@ -396,7 +463,9 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                         <Users className="w-6 h-6" />
                       </div>
                       <div className="font-bold text-slate-700 text-sm">
-                        {aramaMetni ? 'Axtarışa uyğun müştəri tapılmadı' : `"${seciliFirmaAd || 'Seçilmiş butik'}" üçün hələ müştəri qeydiyyatı yoxdur`}
+                        {aramaMetni
+                          ? 'Axtarışa uyğun müştəri tapılmadı'
+                          : `"${seciliFirmaAd || 'Seçilmiş butik'}" üçün hələ müştəri qeydiyyatı yoxdur`}
                       </div>
                       <p className="text-xs text-slate-400">
                         {aramaMetni
@@ -408,10 +477,7 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                 </tr>
               ) : (
                 islenmisMusteriler.map((m) => (
-                  <tr 
-                    key={m.id} 
-                    className="hover:bg-slate-50/80 transition-colors group"
-                  >
+                  <tr key={m.id} className="hover:bg-slate-50/80 transition-colors group">
                     {/* Müşteri Adı */}
                     <td className="py-3 px-4">
                       <div className="font-extrabold text-slate-900 flex items-center gap-1.5">
@@ -438,7 +504,9 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                           </div>
                           <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
                             {m.son_siparis_tutari ? (
-                              <span className="font-semibold text-slate-700">{m.son_siparis_tutari} AZN</span>
+                              <span className="font-semibold text-slate-700">
+                                {m.son_siparis_tutari} AZN
+                              </span>
                             ) : null}
                             {m.son_siparis_tarihi && (
                               <span>• {tarihFormatla(m.son_siparis_tarihi)}</span>
@@ -451,9 +519,7 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                     </td>
 
                     {/* Tip */}
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      {getTipRozet(m.musteri_tipi)}
-                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">{getTipRozet(m.musteri_tipi)}</td>
 
                     {/* İletişim & Şehir */}
                     <td className="py-3 px-4">
@@ -474,13 +540,15 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
 
                     {/* Sipariş Sayısı */}
                     <td className="py-3 px-4 text-center">
-                      <span className={`px-2.5 py-1 font-black rounded-lg text-xs ${
-                        m.toplam_siparis_sayisi >= 3 
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                          : m.toplam_siparis_sayisi > 1
-                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                          : 'bg-slate-100 text-slate-800'
-                      }`}>
+                      <span
+                        className={`px-2.5 py-1 font-black rounded-lg text-xs ${
+                          m.toplam_siparis_sayisi >= 3
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : m.toplam_siparis_sayisi > 1
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-slate-100 text-slate-800'
+                        }`}
+                      >
                         {m.toplam_siparis_sayisi || 1} Adet
                       </span>
                     </td>
@@ -535,14 +603,21 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base font-black text-slate-900">{seciliMusteri.ad_soyad}</h3>
+                    <h3 className="text-base font-black text-slate-900">
+                      {seciliMusteri.ad_soyad}
+                    </h3>
                     {getTipRozet(seciliMusteri.musteri_tipi)}
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-3">
                     <span>📞 {seciliMusteri.telefon || 'Telefon belirtilmemiş'}</span>
-                    <span>📍 {seciliMusteri.sehir || 'Bakü'} {seciliMusteri.adres ? `(${seciliMusteri.adres})` : ''}</span>
+                    <span>
+                      📍 {seciliMusteri.sehir || 'Bakü'}{' '}
+                      {seciliMusteri.adres ? `(${seciliMusteri.adres})` : ''}
+                    </span>
                     {seciliMusteri.instagram_kullanici_adi && (
-                      <span className="text-purple-600 font-semibold">{seciliMusteri.instagram_kullanici_adi}</span>
+                      <span className="text-purple-600 font-semibold">
+                        {seciliMusteri.instagram_kullanici_adi}
+                      </span>
                     )}
                   </p>
                 </div>
@@ -561,19 +636,28 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
             <div className="px-5 pt-4 pb-2 bg-slate-50/50 border-b border-slate-100">
               <div className="grid grid-cols-3 gap-3">
                 <div className="p-3 bg-white rounded-xl border border-slate-200 text-center shadow-2xs">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Toplam Sipariş Adedi</div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">
+                    Toplam Sipariş Adedi
+                  </div>
                   <div className="text-lg font-black text-slate-900 mt-0.5">
-                    {musteriSiparisleri.length > 0 ? musteriSiparisleri.length : seciliMusteri.toplam_siparis_sayisi} Adet
+                    {musteriSiparisleri.length > 0
+                      ? musteriSiparisleri.length
+                      : seciliMusteri.toplam_siparis_sayisi}{' '}
+                    Adet
                   </div>
                 </div>
                 <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-center shadow-2xs">
-                  <div className="text-[10px] font-bold text-emerald-700 uppercase">Toplam Harcama (Ciro)</div>
+                  <div className="text-[10px] font-bold text-emerald-700 uppercase">
+                    Toplam Harcama (Ciro)
+                  </div>
                   <div className="text-lg font-black text-emerald-800 mt-0.5">
                     {seciliMusteri.toplam_harcama.toFixed(0)} AZN
                   </div>
                 </div>
                 <div className="p-3 bg-rose-50 rounded-xl border border-rose-100 text-center shadow-2xs">
-                  <div className="text-[10px] font-bold text-rose-700 uppercase">Bakü Kalan Borç</div>
+                  <div className="text-[10px] font-bold text-rose-700 uppercase">
+                    Bakü Kalan Borç
+                  </div>
                   <div className="text-lg font-black text-rose-700 mt-0.5">
                     {seciliMusteri.kalan_toplam_borc.toFixed(0)} AZN
                   </div>
@@ -593,7 +677,11 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                 </span>
               </div>
 
-              {gecmisYukleniyor ? (
+              {historyError ? (
+                <div role="alert" className="p-6 text-red-800">
+                  Tarixçə tam yüklənmədi. {historyError}
+                </div>
+              ) : gecmisYukleniyor ? (
                 <div className="p-12 text-center text-slate-400 text-xs">
                   <span className="inline-block w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mr-2" />
                   Sipariş geçmişi getiriliyor...
@@ -617,7 +705,12 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                           </span>
                           <span className="font-extrabold text-xs text-slate-900">{sip.id}</span>
                           <span className="text-[11px] text-slate-400">
-                            • {new Date(sip.olusturma_tarihi).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            •{' '}
+                            {new Date(sip.olusturma_tarihi).toLocaleDateString('tr-TR', {
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric',
+                            })}
                             ({tarihFormatla(sip.olusturma_tarihi)})
                           </span>
                         </div>
@@ -643,9 +736,19 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                             {sip.urun_aciklamasi}
                           </div>
                           <div className="text-xs text-slate-600 flex flex-wrap items-center gap-3">
-                            <span>Adet: <strong>{sip.adet}</strong></span>
-                            {sip.beden_veya_olcu && <span>Beden/Ölçü: <strong>{sip.beden_veya_olcu}</strong></span>}
-                            {sip.renk && <span>Renk: <strong>{sip.renk}</strong></span>}
+                            <span>
+                              Adet: <strong>{sip.adet}</strong>
+                            </span>
+                            {sip.beden_veya_olcu && (
+                              <span>
+                                Beden/Ölçü: <strong>{sip.beden_veya_olcu}</strong>
+                              </span>
+                            )}
+                            {sip.renk && (
+                              <span>
+                                Renk: <strong>{sip.renk}</strong>
+                              </span>
+                            )}
                             {sip.kanada_takip_kodu && (
                               <span className="font-mono text-[10px] bg-slate-200/60 px-1.5 py-0.5 rounded">
                                 Kanada: {sip.kanada_takip_kodu}
@@ -673,7 +776,8 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                             </div>
                             {sip.alinan_tutar > 0 && sip.kalan_tutar > 0 && (
                               <div className="text-[11px] text-slate-500">
-                                Behdə: {sip.alinan_tutar} AZN • Qalıq: <strong className="text-rose-600">{sip.kalan_tutar} AZN</strong>
+                                Behdə: {sip.alinan_tutar} AZN • Qalıq:{' '}
+                                <strong className="text-rose-600">{sip.kalan_tutar} AZN</strong>
                               </div>
                             )}
                           </div>
@@ -712,7 +816,9 @@ export const MusteriRehberi: React.FC<MusteriRehberiProps> = ({
                   <MessageCircle className="w-4 h-4 text-emerald-600" />
                   <span>WhatsApp ile İletişim Aç</span>
                 </a>
-              ) : <div />}
+              ) : (
+                <div />
+              )}
 
               <button
                 type="button"

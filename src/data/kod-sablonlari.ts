@@ -175,24 +175,12 @@ ALTER TABLE public.siparisler ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.musteriler ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.kuryeler ENABLE ROW LEVEL SECURITY;
 
--- Service Role ve Oturum Açmış Yöneticiler İçin Tam Erişim
-CREATE POLICY "Yöneticiler firmaları yönetebilir"
-    ON public.firmalar FOR ALL TO authenticated, service_role
-    USING (true) WITH CHECK (true);
+-- Browser roles have no direct table access. Server service_role is required.
+REVOKE ALL ON public.firmalar, public.siparisler, public.musteriler, public.kuryeler FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.firmalar, public.siparisler, public.musteriler, public.kuryeler TO service_role;
+-- Existing installations: also apply the canonical migration in supabase/migrations.
+-- It removes prior permissive policies and column grants and creates sessions.
 
-CREATE POLICY "Yöneticiler tüm siparişleri görüntüleyebilir ve yönetebilir"
-    ON public.siparisler FOR ALL TO authenticated, service_role
-    USING (true) WITH CHECK (true);
-
-CREATE POLICY "Yöneticiler müşteri rehberini yönetebilir"
-    ON public.musteriler FOR ALL TO authenticated, service_role
-    USING (true) WITH CHECK (true);
-
-CREATE POLICY "Yöneticiler kuryeleri yönetebilir"
-    ON public.kuryeler FOR ALL TO authenticated, service_role
-    USING (true) WITH CHECK (true);
-
--- Açıklama: Supabase Dashboard SQL Editor sekmesine yapıştırıp doğrudan "Run" butonuna basarak tüm çoklu kiracı (multi-tenant) şemanızı saniyeler içinde ayağa kaldırabilirsiniz.
 `;
 
 export const GEMINI_SYSTEM_INSTRUCTION = `Sen Kanada'dan Azerbaycan'a (Bakü) Instagram Live, Reels, DM ve WhatsApp üzerinden ürün satışı yapan uluslararası bir e-ticaret ve lojistik operasyonunun Uzman Sipariş Ayrıştırma Yapay Zekasısın.
@@ -230,111 +218,115 @@ Sana verilen ham müşteri mesajını dikkatle analiz etmek, ürün, müşteri, 
 ÇIKTI: Yalnızca ve sadece belirtilen JSON formatında yanıt ver, fazladan açıklama veya markdown ekleme.`;
 
 export const GEMINI_JSON_SCHEMA = {
-  type: "OBJECT",
-  description: "Dağınık müşteri mesajından ayrıştırılmış Türkçe sipariş nesnesi",
+  type: 'OBJECT',
+  description: 'Dağınık müşteri mesajından ayrıştırılmış Türkçe sipariş nesnesi',
   properties: {
     musteri_adi: {
-      type: "STRING",
-      description: "Müşterinin adı soyadı (mesajda yoksa 'Bilinmeyen Müşteri' veya Instagram rumuzu)"
+      type: 'STRING',
+      description:
+        "Müşterinin adı soyadı (mesajda yoksa 'Bilinmeyen Müşteri' veya Instagram rumuzu)",
     },
     instagram_kullanici_adi: {
-      type: "STRING",
-      description: "Müşterinin Instagram kullanıcı adı (örn: @ayten_baku veya boş)"
+      type: 'STRING',
+      description: 'Müşterinin Instagram kullanıcı adı (örn: @ayten_baku veya boş)',
     },
     telefon_numarasi: {
-      type: "STRING",
-      description: "Müşterinin telefon veya WhatsApp numarası (örn: +994 50 123 45 67 veya boş)"
+      type: 'STRING',
+      description: 'Müşterinin telefon veya WhatsApp numarası (örn: +994 50 123 45 67 veya boş)',
     },
     teslimat_sehri: {
-      type: "STRING",
-      description: "Teslimat yapılacak şehir (varsayılan: Bakü)"
+      type: 'STRING',
+      description: 'Teslimat yapılacak şehir (varsayılan: Bakü)',
     },
     teslimat_adresi: {
-      type: "STRING",
-      description: "Müşterinin açık teslimat adresi veya teslim alacağı metro istasyonu/semt"
+      type: 'STRING',
+      description: 'Müşterinin açık teslimat adresi veya teslim alacağı metro istasyonu/semt',
     },
     urun_aciklamasi: {
-      type: "STRING",
-      description: "Sipariş edilen ürünün açık tanımı (örn: Dünkü canlı yayındaki kırmızı mini elbise)"
+      type: 'STRING',
+      description:
+        'Sipariş edilen ürünün açık tanımı (örn: Dünkü canlı yayındaki kırmızı mini elbise)',
     },
     beden_veya_olcu: {
-      type: "STRING",
-      description: "Beden, numara veya ölçü bilgisi (örn: M, 38, 50ml veya belirtilmedi)"
+      type: 'STRING',
+      description: 'Beden, numara veya ölçü bilgisi (örn: M, 38, 50ml veya belirtilmedi)',
     },
     renk: {
-      type: "STRING",
-      description: "Ürünün rengi (örn: Kırmızı, Siyah, Bej)"
+      type: 'STRING',
+      description: 'Ürünün rengi (örn: Kırmızı, Siyah, Bej)',
     },
     adet: {
-      type: "INTEGER",
-      description: "Sipariş edilen ürün adedi (varsayılan: 1)"
+      type: 'INTEGER',
+      description: 'Sipariş edilen ürün adedi (varsayılan: 1)',
     },
     toplam_tutar: {
-      type: "NUMBER",
-      description: "Ürünün toplam satış bedeli (bilinmiyorsa alinan_tutar veya 0)"
+      type: 'NUMBER',
+      description: 'Ürünün toplam satış bedeli (bilinmiyorsa alinan_tutar veya 0)',
     },
     alinan_tutar: {
-      type: "NUMBER",
-      description: "Bakü'deki akrabaya ödenen, kapora veya avans miktarı"
+      type: 'NUMBER',
+      description: "Bakü'deki akrabaya ödenen, kapora veya avans miktarı",
     },
     kalan_tutar: {
-      type: "NUMBER",
-      description: "Kalan borç tutarı (toplam_tutar - alinan_tutar)"
+      type: 'NUMBER',
+      description: 'Kalan borç tutarı (toplam_tutar - alinan_tutar)',
     },
     para_birimi: {
-      type: "STRING",
-      enum: ["AZN", "CAD", "USD"],
-      description: "Para birimi"
+      type: 'STRING',
+      enum: ['AZN', 'CAD', 'USD'],
+      description: 'Para birimi',
     },
     finans_durumu: {
-      type: "STRING",
-      enum: ["ODENDI", "KISMI_ODEME", "BEKLIYOR"],
-      description: "Finans tahsilat durumu"
+      type: 'STRING',
+      enum: ['ODENDI', 'KISMI_ODEME', 'BEKLIYOR'],
+      description: 'Finans tahsilat durumu',
     },
     lojistik_durumu: {
-      type: "STRING",
+      type: 'STRING',
       enum: [
-        "KANADA_SATINALIM_BEKLIYOR",
-        "KANADA_DEPO",
-        "ULUSLARARASI_KARGO",
-        "BAKU_DAGITIM_ARKADAS",
-        "TESLIM_EDILDI"
+        'KANADA_SATINALIM_BEKLIYOR',
+        'KANADA_DEPO',
+        'ULUSLARARASI_KARGO',
+        'BAKU_DAGITIM_ARKADAS',
+        'TESLIM_EDILDI',
       ],
-      description: "Lojistik teslimat aşaması"
+      description: 'Lojistik teslimat aşaması',
     },
     baku_tahsilat_notu: {
-      type: "STRING",
-      description: "Bakü'deki akrabanın tahsilatına veya borç vadesine dair özel not"
+      type: 'STRING',
+      description: "Bakü'deki akrabanın tahsilatına veya borç vadesine dair özel not",
     },
     ozel_not: {
-      type: "STRING",
-      description: "Müşterinin veya siparişi iletenin kargo, teslimat, sürücü veya paketleme özel talimatı (Örn: 'Bakıya çatanda xəbər edilsin sürücümüz özü gedib götürəcək')"
+      type: 'STRING',
+      description:
+        "Müşterinin veya siparişi iletenin kargo, teslimat, sürücü veya paketleme özel talimatı (Örn: 'Bakıya çatanda xəbər edilsin sürücümüz özü gedib götürəcək')",
     },
     eksik_bilgiler: {
-      type: "ARRAY",
-      items: { type: "STRING" },
-      description: "Müşteriden talep edilmesi gereken eksik bilgilerin listesi (örn: telefon_numarasi, teslimat_adresi)"
+      type: 'ARRAY',
+      items: { type: 'STRING' },
+      description:
+        'Müşteriden talep edilmesi gereken eksik bilgilerin listesi (örn: telefon_numarasi, teslimat_adresi)',
     },
     ai_guven_skoru: {
-      type: "NUMBER",
-      description: "Yapay zekanın ayrıştırma doğruluk güven skoru (0.00 ile 1.00 arası)"
+      type: 'NUMBER',
+      description: 'Yapay zekanın ayrıştırma doğruluk güven skoru (0.00 ile 1.00 arası)',
     },
     siparis_kaynagi: {
-      type: "STRING",
-      enum: ["INSTAGRAM_LIVE", "INSTAGRAM_REELS", "INSTAGRAM_DM", "WHATSAPP"],
-      description: "Siparişin iletildiği iletişim kanalı"
-    }
+      type: 'STRING',
+      enum: ['INSTAGRAM_LIVE', 'INSTAGRAM_REELS', 'INSTAGRAM_DM', 'WHATSAPP'],
+      description: 'Siparişin iletildiği iletişim kanalı',
+    },
   },
   required: [
-    "musteri_adi",
-    "urun_aciklamasi",
-    "adet",
-    "toplam_tutar",
-    "alinan_tutar",
-    "finans_durumu",
-    "lojistik_durumu",
-    "eksik_bilgiler"
-  ]
+    'musteri_adi',
+    'urun_aciklamasi',
+    'adet',
+    'toplam_tutar',
+    'alinan_tutar',
+    'finans_durumu',
+    'lojistik_durumu',
+    'eksik_bilgiler',
+  ],
 };
 
 export const NEXTJS_API_ROUTE_KODU = `// app/api/siparis-isle/route.ts

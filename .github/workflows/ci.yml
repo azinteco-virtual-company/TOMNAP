@@ -2,9 +2,9 @@ name: TOMNAP CI / CD Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   test-and-build:
@@ -31,14 +31,168 @@ jobs:
       - name: TypeScript Statik Tip Kontrolü
         run: npx tsc --noEmit
 
-      - name: Vitest Birim ve Entegrasyon Testlerini Çalıştır
-        run: npm test
-
       - name: Production Bundle Derlemesi (Vite + esbuild)
         run: npm run build
 
+      - name: Vitest Birim ve Entegrasyon Testlerini Çalıştır
+        run: npm run test:coverage
+
+      - name: Testlerin depo verisini değiştirmediğini doğrula
+        run: test -z "$(git status --porcelain -- data public/uploads)"
+
+      - name: Production bağımlılık güvenlik denetimi
+        run: npm audit --omit=dev --audit-level=moderate
+
       - name: Dağıtım Paketi Kontrolü
         run: |
-          test -f dist/server.cjs || exit 1
+          test -f build/server.cjs || exit 1
           test -f dist/index.html || exit 1
+          npm run check:client-artifacts
           echo "✅ Production derlemesi başarıyla doğrulandı."
+
+      # npm run build, bayraklar kapalıyken v2 kabuğunun ve AWB panelinin pakette hiç
+      # olmadığını denetler (Codex R3 F18); bu adım açıkken ilk yükün dışında olduklarını.
+      - name: v2 kabuğu ve AWB paneli bayrak açıkken ilk yük paketinin dışında
+        run: |
+          export VITE_FF_V2_FLOW=true VITE_FF_AWB_REVIEW=true
+          npx vite build --outDir "$RUNNER_TEMP/dist-v2" --emptyOutDir
+          npm run check:v2-bundle -- "$RUNNER_TEMP/dist-v2" acik
+
+  browser-security:
+    name: Chromium UI and authorization acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Install the pinned Chromium runtime
+        run: npm run test:e2e:install -- --with-deps
+      - name: Build the production UI
+        run: npm run build
+      - name: Run isolated real-browser security scenarios
+        run: npm run test:e2e
+      - name: Check repository fixtures remained unchanged
+        if: always()
+        run: test -z "$(git status --porcelain -- data public/uploads)"
+      - name: Preserve synthetic failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromium-security-failure
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  database-security:
+    name: PostgreSQL access, transactions and concurrency
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: tomnap_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: isolated-ci-only
+      PGDATABASE: tomnap_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - name: Synthetic schema, migration and access regression checks
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/base-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase_saas_schema.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-access-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/storage-fixture.sql
+          for migration in supabase/migrations/*.sql; do
+            psql -X -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          # Codex R3 F17: every down file in DEPLOY_1's documented order (one transaction),
+          # nothing left behind, every migration again, identical schema, status query all true.
+          # Runs before any test commits v2 data.
+          node tests/sql/tum-zincir-gidis-donus.mjs
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/security-rls.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/inbox-transactions.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/maintenance-transactions.sql
+          # Backup columns: the list the export/restore round-trip test relies on.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/siparis-yedek-kolonlari.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/onboarding-transactions.sql
+          # Role catalog (A4) and ABD_SATINALMA (A5); then the role migrations
+          # up -> down -> up, and the same tests again on the rebuilt schema.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/rol-katalogu.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/abd-satinalma.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/rol-migration-roundtrip.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/rol-katalogu.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/abd-satinalma.sql
+          # Rates and v2 settings (A7): access, append-only, upsert, up -> down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/kurlar-ve-v2-ayarlari.sql
+          # Order lines (A8): RPC, trigger, up -> down -> up; then the races, which
+          # commit v2 orders (so they run after the round trip).
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/siparis-satirlari.sql
+          # Owner rule (O-24): SUPER_ADMIN names the owner, never owns; down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/siparis-sahibi-kurali.sql
+          # Payment ledger (A10): access, append-only, RPCs, K20 columns, down -> up;
+          # then the races, which commit payments (so they run last).
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/odemeler.sql
+          # Courier cash and cash desk (A11): collection, hand-over, balance, down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/kasa-teslimleri.sql
+          # Leak board v0 (A12): Q4, Q5 read-only and tenant-filtered; down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/kacaklar.sql
+          # Money writes (20260925140000): SUPER_ADMIN records no payment, reversal or hand-over.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/para-yazma-yetkisi.sql
+          # Order edit RPC (Codex R3 F1/F2/F9): changed columns only, optimistic lock; down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/siparis-guncelle.sql
+          # Note contract (Codex R3 F8): the v2 RPC writes the note tag, no ozel_not; down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/not-sozlesmesi.sql
+          # Payment operation key (Codex R3 F15): one payment per key, replay, PT412; down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/odeme-islem-anahtari.sql
+          node tests/sql/siparis-satirlari-concurrency.mjs
+          node tests/sql/odemeler-concurrency.mjs
+          node tests/sql/kasa-concurrency.mjs
+          node tests/sql/siparis-guncelle-concurrency.mjs
+          node tests/sql/odeme-islem-anahtari-concurrency.mjs
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/cargo-settings.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/courier-access.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-upload-migrations.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/private-storage.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/list-pagination.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/awb-match-approvals.sql
+          node tests/sql/inbox-concurrency.mjs
+          node tests/sql/courier-concurrency.mjs
+          node tests/sql/list-pagination-concurrency.mjs
+          node tests/sql/awb-confirmation-concurrency.mjs
+          # AWB migrations: up -> down -> up, then the AWB tests again on the rebuilt schema.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/awb-migration-roundtrip.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/awb-match-approvals.sql
+          node tests/sql/awb-confirmation-concurrency.mjs
+      - name: Live-like schema without the physical ozel_not column (Codex R4)
+        env:
+          PGDATABASE: tomnap_test_canli
+        run: |
+          createdb tomnap_test_canli
+          # The live siparisler has no ozel_not column; the roles exist cluster-wide already.
+          sed -e '/^    ozel_not TEXT,$/d' -e '/^CREATE ROLE /d' tests/sql/base-fixture.sql > "$RUNNER_TEMP/base-canli.sql"
+          if grep -q 'ozel_not' "$RUNNER_TEMP/base-canli.sql"; then exit 1; fi
+          psql -X -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/base-canli.sql"
+          psql -X -v ON_ERROR_STOP=1 -f supabase_saas_schema.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-access-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/storage-fixture.sql
+          for migration in supabase/migrations/*.sql; do
+            psql -X -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          node tests/sql/tum-zincir-gidis-donus.mjs
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/canli-sema-ozel-notsuz.sql

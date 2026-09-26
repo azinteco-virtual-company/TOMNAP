@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import { Siparis } from '../types';
 import { UrunGorselleriGalerisi } from './UrunGorselleriGalerisi';
-import { BAKU_KURYELER } from '../data/kuryeler';
-import { 
-  X, 
-  Sparkles, 
-  MessageSquare, 
-  Send, 
-  Phone, 
-  MapPin, 
-  Calendar, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Copy, 
+import { KuryeAtamaAlani } from './KuryeAtamaAlani';
+import { useAppStore } from '../store/appStore';
+import {
+  X,
+  Sparkles,
+  MessageSquare,
+  Send,
+  Phone,
+  MapPin,
+  Calendar,
+  CheckCircle2,
+  AlertTriangle,
+  Copy,
   Check,
   Truck,
   DollarSign,
@@ -23,16 +24,20 @@ import {
   Receipt,
   Store,
   Upload,
-  RefreshCw
+  RefreshCw,
 } from 'lucide-react';
 import { useDil } from '../context/DilKonteksti';
 import { uretKanadaTakipKodu, uretUluslararasiKargoKodu } from '../utils/pdfHelpers';
+import { detayFormuDegisiklikleri, FATURA_GORSELI_AZAMI_BAYT } from './siparisDetayFormu';
 
 interface SiparisDetayModalProps {
   siparis: Siparis | null;
   onKapat: () => void;
-  onGuncelle: (id: string, guncellemeler: Partial<Siparis>) => void;
+  /** Sunucu kaydı kabul ettiyse true. */
+  onGuncelle: (id: string, guncellemeler: Partial<Siparis>) => Promise<boolean>;
   onWhatsAppAc?: (siparis: Siparis) => void;
+  onAtamaKaydedildi: (siparis: Siparis) => void;
+  onSiparisYenile: () => Promise<void>;
 }
 
 export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
@@ -40,10 +45,16 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
   onKapat,
   onGuncelle,
   onWhatsAppAc,
+  onAtamaKaydedildi,
+  onSiparisYenile,
 }) => {
   const { t } = useDil();
+  const role = useAppStore((state) => state.aktifRol);
+  const tenantId = useAppStore((state) => state.seciliFirmaId);
   const [kopyalandi, setKopyalandi] = useState(false);
   const [kaydedildi, setKaydedildi] = useState(false);
+  const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [formMesaji, setFormMesaji] = useState('');
   const [kanadaTakip, setKanadaTakip] = useState(siparis?.kanada_takip_kodu || '');
   const [kargoKodu, setKargoKodu] = useState(siparis?.uluslararasi_kargo_kodu || '');
   const [tahsilatNotu, setTahsilatNotu] = useState(siparis?.baku_tahsilat_notu || '');
@@ -51,11 +62,12 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
 
   // Yeni Lojistik ve Satınalma Alanları
   const [magazaAdi, setMagazaAdi] = useState(siparis?.kanada_magaza_adi || '');
-  const [alisFiyatiCad, setAlisFiyatiCad] = useState(siparis?.kanada_alis_fiyati_cad?.toString() || '');
+  const [alisFiyatiCad, setAlisFiyatiCad] = useState(
+    siparis?.kanada_alis_fiyati_cad?.toString() || ''
+  );
   const [faturaGorseli, setFaturaGorseli] = useState(siparis?.kanada_fatura_gorseli || '');
-  const [bakuKuryeId, setBakuKuryeId] = useState(siparis?.baku_kurye_id || '');
-  const [finKodu, setFinKodu] = useState(siparis?.gumruk_fin_kodu || '');
-  const [pasaportNo, setPasaportNo] = useState(siparis?.gumruk_pasaport_no || '');
+  const [finKodu, setFinKodu] = useState(siparis?.kanada_gumruk_fin_kodu || '');
+  const [pasaportNo, setPasaportNo] = useState(siparis?.kanada_gumruk_pasaport_no || '');
 
   React.useEffect(() => {
     if (siparis) {
@@ -66,9 +78,9 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
       setMagazaAdi(siparis.kanada_magaza_adi || '');
       setAlisFiyatiCad(siparis.kanada_alis_fiyati_cad?.toString() || '');
       setFaturaGorseli(siparis.kanada_fatura_gorseli || '');
-      setBakuKuryeId(siparis.baku_kurye_id || '');
-      setFinKodu(siparis.gumruk_fin_kodu || '');
-      setPasaportNo(siparis.gumruk_pasaport_no || '');
+      setFinKodu(siparis.kanada_gumruk_fin_kodu || '');
+      setPasaportNo(siparis.kanada_gumruk_pasaport_no || '');
+      setFormMesaji('');
     }
   }, [siparis]);
 
@@ -76,7 +88,9 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
 
   // Eksik bilgi varsa müşteriye yazılacak hazır WhatsApp şablonu
   const whatsappEksikBilgiMesaji = `Salam hörmətli ${siparis.musteri_adi}, sifarişiniz (${siparis.urun_aciklamasi}) qeydə alındı. Lakin çatdırılmanı tamamlamaq üçün aşağıdakı məlumatlar lazımdır: ${
-    siparis.eksik_bilgiler?.length > 0 ? siparis.eksik_bilgiler.join(', ') : 'ünvan və əlaqə nömrəsi'
+    siparis.eksik_bilgiler?.length > 0
+      ? siparis.eksik_bilgiler.join(', ')
+      : 'ünvan və əlaqə nömrəsi'
   }. Zəhmət olmasa qeyd edərdiniz.`;
 
   // Bakü teslimat bildirimi şablonu
@@ -90,7 +104,9 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
 
   const handleFaturaYukle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (file && file.size > FATURA_GORSELI_AZAMI_BAYT) {
+      setFormMesaji('Fatura görseli en fazla 3 MB olabilir.');
+    } else if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setFaturaGorseli(reader.result as string);
@@ -99,22 +115,27 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
     }
   };
 
-  const kaydetDetaylar = () => {
-    const seciliKurye = BAKU_KURYELER.find(k => k.id === bakuKuryeId);
-
-    onGuncelle(siparis.id, {
-      kanada_takip_kodu: kanadaTakip,
-      uluslararasi_kargo_kodu: kargoKodu,
-      baku_tahsilat_notu: tahsilatNotu,
-      ozel_not: ozelNot,
-      kanada_magaza_adi: magazaAdi,
-      kanada_alis_fiyati_cad: alisFiyatiCad ? parseFloat(alisFiyatiCad) : undefined,
-      kanada_fatura_gorseli: faturaGorseli,
-      baku_kurye_id: bakuKuryeId || undefined,
-      baku_kurye_adi: seciliKurye ? seciliKurye.ad_soyad : undefined,
-      gumruk_fin_kodu: finKodu,
-      gumruk_pasaport_no: pasaportNo
+  // Yalnız değişen alanlar gider; "kaydedildi" sunucu kabul ettikten sonra (Codex R3 F14).
+  const kaydetDetaylar = async () => {
+    const sonuc = detayFormuDegisiklikleri(siparis, {
+      kanadaTakip,
+      kargoKodu,
+      tahsilatNotu,
+      ozelNot,
+      magazaAdi,
+      alisFiyatiCad,
+      faturaGorseli,
+      finKodu,
+      pasaportNo,
     });
+    if (sonuc.hata !== undefined) return setFormMesaji(sonuc.hata);
+    if (Object.keys(sonuc.degisiklikler).length === 0) return setFormMesaji('Değişiklik yok.');
+    setFormMesaji('');
+    setKaydediliyor(true);
+    const kabul = await onGuncelle(siparis.id, sonuc.degisiklikler).finally(() =>
+      setKaydediliyor(false)
+    );
+    if (!kabul) return setFormMesaji('Kaydedilmedi. Bildirimdeki nedene bakın.');
     setKaydedildi(true);
     setTimeout(() => setKaydedildi(false), 3000);
   };
@@ -133,7 +154,8 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
                 Sipariş Detayı: {siparis.musteri_adi}
               </h3>
               <p className="text-xs text-slate-500">
-                Oluşturulma: {new Date(siparis.olusturma_tarihi).toLocaleString('tr-TR')} • Kanal: {siparis.siparis_kaynagi}
+                Oluşturulma: {new Date(siparis.olusturma_tarihi).toLocaleString('tr-TR')} • Kanal:{' '}
+                {siparis.siparis_kaynagi}
               </p>
             </div>
           </div>
@@ -171,24 +193,35 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
                 <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                   <DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Finans Durumu
                 </span>
-                <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                  siparis.finans_durumu === 'ODENDI'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : siparis.finans_durumu === 'KISMI_ODEME'
-                    ? 'bg-amber-100 text-amber-800'
-                    : 'bg-rose-100 text-rose-800'
-                }`}>
+                <span
+                  className={`px-2 py-0.5 rounded text-xs font-bold ${
+                    siparis.finans_durumu === 'ODENDI'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : siparis.finans_durumu === 'KISMI_ODEME'
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-rose-100 text-rose-800'
+                  }`}
+                >
                   {siparis.finans_durumu}
                 </span>
               </div>
               <div className="text-sm">
-                Toplam Tutar: <strong>{siparis.toplam_tutar} {siparis.para_birimi}</strong>
+                Toplam Tutar:{' '}
+                <strong>
+                  {siparis.toplam_tutar} {siparis.para_birimi}
+                </strong>
               </div>
               <div className="text-sm text-emerald-700">
-                Tahsil Edilen (Bakü Akraba): <strong>{siparis.alinan_tutar} {siparis.para_birimi}</strong>
+                Tahsil Edilen (Bakü Akraba):{' '}
+                <strong>
+                  {siparis.alinan_tutar} {siparis.para_birimi}
+                </strong>
               </div>
               <div className="text-sm text-amber-700 font-semibold">
-                Kalan Borç: <strong>{siparis.kalan_tutar} {siparis.para_birimi}</strong>
+                Kalan Borç:{' '}
+                <strong>
+                  {siparis.kalan_tutar} {siparis.para_birimi}
+                </strong>
               </div>
             </div>
 
@@ -247,7 +280,9 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
                   Kanada Alış Tutarı (CAD $)
                 </label>
                 <div className="relative">
-                  <span className="text-slate-400 text-xs font-bold absolute left-3 top-1/2 -translate-y-1/2">$</span>
+                  <span className="text-slate-400 text-xs font-bold absolute left-3 top-1/2 -translate-y-1/2">
+                    $
+                  </span>
                   <input
                     type="number"
                     step="0.01"
@@ -278,12 +313,14 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
                 </label>
                 {faturaGorseli ? (
                   <div className="flex items-center gap-2">
-                    <img 
-                      src={faturaGorseli} 
-                      alt="Fatura" 
-                      className="w-10 h-10 object-cover rounded-lg border border-slate-300 shadow-xs" 
+                    <img
+                      src={faturaGorseli}
+                      alt="Fatura"
+                      className="w-10 h-10 object-cover rounded-lg border border-slate-300 shadow-xs"
                     />
-                    <span className="text-[11px] text-emerald-700 font-semibold">✓ Fiş Yüklendi</span>
+                    <span className="text-[11px] text-emerald-700 font-semibold">
+                      ✓ Fiş Yüklendi
+                    </span>
                     <button
                       type="button"
                       onClick={() => setFaturaGorseli('')}
@@ -312,27 +349,14 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Kurye Atama */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Atanan Bakü Kuryesi / Təhvilatçı
-                </label>
-                <select
-                  value={bakuKuryeId}
-                  onChange={(e) => setBakuKuryeId(e.target.value)}
-                  className="w-full text-xs p-2.5 border border-purple-300 rounded-lg bg-white font-medium text-slate-800 outline-none focus:ring-2 focus:ring-purple-500/20"
-                >
-                  <option value="">-- Henüz Kurye Atanmadı --</option>
-                  {BAKU_KURYELER.map(k => (
-                    <option key={k.id} value={k.id}>
-                      {k.ad_soyad} ({k.bolge})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  * Kurye sadece kendine atanan paketleri kendi teslimat ekranında görür.
-                </p>
-              </div>
+              <KuryeAtamaAlani
+                key={siparis.id}
+                order={siparis}
+                role={role}
+                tenantId={tenantId}
+                onSaved={onAtamaKaydedildi}
+                onRefresh={onSiparisYenile}
+              />
 
               {/* Gümrük FIN Kodu */}
               <div>
@@ -366,7 +390,11 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
                   </label>
                   <button
                     type="button"
-                    onClick={() => setKanadaTakip(uretKanadaTakipKodu(magazaAdi || siparis.urun_aciklamasi, 'TOR'))}
+                    onClick={() =>
+                      setKanadaTakip(
+                        uretKanadaTakipKodu(magazaAdi || siparis.urun_aciklamasi, 'TOR')
+                      )
+                    }
                     className="text-[10px] text-rose-600 hover:text-rose-800 font-bold flex items-center gap-1 cursor-pointer hover:underline"
                     title="Yeni Kanada takip kodu yarat"
                   >
@@ -427,7 +455,8 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
                 className="w-full text-xs p-2.5 border border-amber-300 rounded-lg bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 font-medium"
               />
               <p className="text-[10px] text-amber-800 italic">
-                * Bu not kargo manifestosunda ve Bakü teslimat raporunda görünür, şoför/kurye ve Baküdeki arkadaş tarafından dikkate alınır.
+                * Bu not kargo manifestosunda ve Bakü teslimat raporunda görünür, şoför/kurye ve
+                Baküdeki arkadaş tarafından dikkate alınır.
               </p>
             </div>
 
@@ -444,6 +473,12 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
               />
             </div>
           </div>
+
+          {formMesaji && (
+            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-bold">
+              {formMesaji}
+            </div>
+          )}
 
           {/* Kaydedildi Başarı Bildirimi */}
           {kaydedildi && (
@@ -470,7 +505,8 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
             {siparis.eksik_bilgiler && siparis.eksik_bilgiler.length > 0 ? (
               <div className="space-y-1.5">
                 <p className="text-xs text-emerald-800">
-                  Yapay zeka bu siparişte <strong>{siparis.eksik_bilgiler.join(', ')}</strong> bilgilerinin eksik olduğunu tespit etti:
+                  Yapay zeka bu siparişte <strong>{siparis.eksik_bilgiler.join(', ')}</strong>{' '}
+                  bilgilerinin eksik olduğunu tespit etti:
                 </p>
                 <div className="flex items-center gap-2">
                   <input
@@ -534,7 +570,8 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
             </button>
             <button
               onClick={kaydetDetaylar}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-sm cursor-pointer"
+              disabled={kaydediliyor}
+              className="px-4 py-2 disabled:opacity-60 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors shadow-sm cursor-pointer"
             >
               {kaydedildi ? t.kopyalandi : t.yaddaSaxla}
             </button>

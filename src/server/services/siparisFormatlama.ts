@@ -22,6 +22,39 @@ export function uretUluslararasiKargoKodu(): string {
   return `${p}-${randomNum}-YYZ`;
 }
 
+// Business fields without dedicated physical columns. Identity, tenant and
+// access-control fields must never be hydrated from this JSON object.
+export const SIPARIS_EK_ALANLAR = [
+  'guncellenme_tarihi',
+  'musteri_id',
+  'musteri_tipi',
+  'kanada_magaza_adi',
+  'kanada_alis_fiyati_cad',
+  'kanada_alis_fiyati_azn',
+  'kargo_agirligi_kg',
+  'kargo_ucreti_azn',
+  'kanada_fatura_no',
+  'kanada_fatura_gorseli',
+  'kanada_gumruk_fin_kodu',
+  'kanada_gumruk_pasaport_no',
+  'islem_gecmisi',
+] as const;
+
+/** Preserve unedited extras while explicit top-level edits (including null)
+ * take precedence. Unknown nested fields never become order properties. */
+export function siparisEkVerileriniAl(input: any): Record<string, unknown> {
+  const stored =
+    input.ek_veriler && typeof input.ek_veriler === 'object' && !Array.isArray(input.ek_veriler)
+      ? input.ek_veriler
+      : {};
+  const result: Record<string, unknown> = {};
+  for (const field of SIPARIS_EK_ALANLAR) {
+    if (Object.hasOwn(stored, field) && stored[field] !== undefined) result[field] = stored[field];
+    if (Object.hasOwn(input, field) && input[field] !== undefined) result[field] = input[field];
+  }
+  return result;
+}
+
 // Supabase tablosunda tanımlı fiziksel ve yazılabilir kolonlar (Tenant İzolasyonlu)
 export const SUPABASE_GECERLI_KOLONLAR = new Set([
   'tenant_id',
@@ -52,17 +85,50 @@ export const SUPABASE_GECERLI_KOLONLAR = new Set([
   'eksik_bilgiler',
   'ai_guven_skoru',
   'is_demo',
+  'ek_veriler',
 ]);
+
+/**
+ * Sipariş notu sözleşmesi (Codex R3 F8): teslimat notu (ozel_not) veritabanında
+ * baku_tahsilat_notu'nun başında "[TƏLİMAT: …]" etiketi olarak durur; v1 ve v2 aynı
+ * yeri okur ve yazar. Hiçbir migration fiziksel bir ozel_not kolonu oluşturmaz; eski bir
+ * şemada varsa yalnız etiket yokken okunur (ve v1 düzenlemesi onu da eşitler).
+ * Köşeli parantez etiketi bölmesin diye nottaki [ ] yuvarlak paranteze çevrilir;
+ * tomnap_v2_siparis_olustur (20260925160000) aynısını yapar.
+ */
+const TALIMAT_ETIKETI = /\[(?:TƏLİMAT|TALİMAT):\s*([\s\S]*?)\]/i;
+const TALIMAT_ETIKETLERI = /\[(?:TƏLİMAT|TALİMAT):\s*[\s\S]*?\]/gi;
+
+/** baku_tahsilat_notu'ndan teslimat notunu ayırır; etiket yoksa ozelNot null. */
+export function talimatiAyir(bakuTahsilatNotu: unknown): {
+  ozelNot: string | null;
+  tahsilatNotu: string;
+} {
+  const metin = typeof bakuTahsilatNotu === 'string' ? bakuTahsilatNotu.trim() : '';
+  const eslesme = metin.match(TALIMAT_ETIKETI);
+  if (!eslesme) return { ozelNot: null, tahsilatNotu: metin };
+  return {
+    ozelNot: eslesme[1].trim(),
+    tahsilatNotu: metin.replace(TALIMAT_ETIKETLERI, '').trim(),
+  };
+}
+
+/** Teslimat notunu tahsilat notunun başına etiket olarak ekler (boş not: etiket yok). */
+export function talimatiKatla(tahsilatNotu: string, ozelNot: unknown): string {
+  const not = typeof ozelNot === 'string' ? ozelNot.trim() : '';
+  if (!not) return tahsilatNotu;
+  const guvenli = not.replace(/\[/g, '(').replace(/\]/g, ')');
+  return `[TƏLİMAT: ${guvenli}] ${tahsilatNotu}`.trim();
+}
 
 // Supabase'e yazarken payload'ı filtreleyen, özel teslimat notunu ve metadata'yı koruyan yardımcı
 export function hazirlaSupabasePayload(input: any): Record<string, any> {
-  let tahsilatNotu = (input.baku_tahsilat_notu || '').trim();
-  if (input.ozel_not && typeof input.ozel_not === 'string' && input.ozel_not.trim()) {
-    const ozelNotTemiz = input.ozel_not.trim();
-    if (!tahsilatNotu.includes('[TƏLİMAT:') && !tahsilatNotu.includes('[TALİMAT:')) {
-      tahsilatNotu = `[TƏLİMAT: ${ozelNotTemiz}] ${tahsilatNotu}`.trim();
-    }
-  }
+  const ayrik = talimatiAyir(input.baku_tahsilat_notu);
+  // An input that still carries its tag (a raw database row) keeps it.
+  const tahsilatNotu =
+    ayrik.ozelNot === null
+      ? talimatiKatla(ayrik.tahsilatNotu, input.ozel_not)
+      : (input.baku_tahsilat_notu || '').trim();
 
   // Eksik bilgiler ve çoklu ürün/görsel metadata'sı
   let eksikBilgiler: any[] = Array.isArray(input.eksik_bilgiler) ? [...input.eksik_bilgiler] : [];
@@ -82,10 +148,13 @@ export function hazirlaSupabasePayload(input: any): Record<string, any> {
 
   const raw: Record<string, any> = {
     ...input,
+    ek_veriler: siparisEkVerileriniAl(input),
     tenant_id: input.tenant_id || 'kanada_shopper_baku',
     baku_tahsilat_notu: tahsilatNotu,
     eksik_bilgiler: eksikBilgiler,
-    ham_mesaj: input.ham_mesaj || (input.ozel_not ? `Talimat: ${input.ozel_not}` : (input.urun_aciklamasi || '')),
+    ham_mesaj:
+      input.ham_mesaj ||
+      (input.ozel_not ? `Talimat: ${input.ozel_not}` : input.urun_aciklamasi || ''),
     adet: Number(input.adet || 1),
     toplam_tutar: Number(input.toplam_tutar || 0),
     alinan_tutar: Number(input.alinan_tutar || 0),
@@ -105,17 +174,12 @@ export function hazirlaSupabasePayload(input: any): Record<string, any> {
 
 // Supabase'den veya bellekten gelen veriyi normalize eden yardımcı
 export function formatlaSiparis(s: any): any {
-  let bakuTahsilatNotu = (s.baku_tahsilat_notu || '').trim();
-  let ozelNot = (s.ozel_not || '').trim();
-
-  // baku_tahsilat_notu içindeki [TƏLİMAT: ...] veya [TALİMAT: ...] etiketini ayrıştır
-  const talimatMatch = bakuTahsilatNotu.match(/\[(?:TƏLİMAT|TALİMAT):\s*([\s\S]*?)\]/i);
-  if (talimatMatch) {
-    if (!ozelNot) {
-      ozelNot = talimatMatch[1].trim();
-    }
-    bakuTahsilatNotu = bakuTahsilatNotu.replace(/\[(?:TƏLİMAT|TALİMAT):\s*[\s\S]*?\]/gi, '').trim();
-  }
+  const extra = siparisEkVerileriniAl(s);
+  s = { ...extra, ...s, ek_veriler: extra };
+  // The tag is the note; a physical ozel_not (older schemas, memory rows) only without it.
+  const ayrik = talimatiAyir(s.baku_tahsilat_notu);
+  const bakuTahsilatNotu = ayrik.tahsilatNotu;
+  const ozelNot = ayrik.ozelNot ?? (typeof s.ozel_not === 'string' ? s.ozel_not.trim() : '');
 
   // eksik_bilgiler içindeki META: verilerini ayıkla
   let urunler = Array.isArray(s.urunler) ? s.urunler : [];
@@ -163,13 +227,14 @@ export function formatlaSiparis(s: any): any {
   // Urunler dizisini normalize et ve alanları eşitle
   urunler = urunler.map((u: any, idx: number) => {
     const adi = u.urun_adi || u.urun_aciklamasi || `Ürün #${idx + 1}`;
-    const fiyati = u.tutar !== undefined ? Number(u.tutar) : (u.birim_fiyat !== undefined ? Number(u.birim_fiyat) : undefined);
+    const fiyati =
+      u.tutar !== undefined
+        ? Number(u.tutar)
+        : u.birim_fiyat !== undefined
+          ? Number(u.birim_fiyat)
+          : undefined;
 
-    let gorsel = u.urun_gorseli || u.gorsel_url || undefined;
-    // Özel durum: Könül İsaq siparişiyse ve Karl Lagerfeld çantalarıysa, hazırladığımız kaliteli görselleri bağla
-    if (!gorsel && (s.musteri_adi?.includes('Könül') || s.musteri_adi?.includes('Konul'))) {
-      gorsel = idx === 0 ? '/uploads/karl_lagerfeld_canta_1.svg' : '/uploads/karl_lagerfeld_canta_2.svg';
-    }
+    const gorsel = u.urun_gorseli || u.gorsel_url || undefined;
 
     return {
       ...u,
@@ -182,20 +247,12 @@ export function formatlaSiparis(s: any): any {
     };
   });
 
-  // Eğer Könül İsaq siparişiyse ve gorselUrlleri eski dosya adıysa, geçerli görsel yollarına güncelle
-  if (s.musteri_adi?.includes('Könül') || s.musteri_adi?.includes('Konul')) {
-    if (!gorselUrlleri || gorselUrlleri.length === 0 || gorselUrlleri.some((g: string) => typeof g === 'string' && g.includes('Panodan_'))) {
-      gorselUrlleri = [
-        '/uploads/whatsapp_konul_screenshot.svg',
-        '/uploads/karl_lagerfeld_canta_1.svg',
-        '/uploads/karl_lagerfeld_canta_2.svg',
-      ];
-    }
-  }
-
   const toplam = Number(s.toplam_tutar || 0);
   const alinan = Number(s.alinan_tutar || 0);
-  const kalan = s.kalan_tutar !== undefined && s.kalan_tutar !== null ? Number(s.kalan_tutar) : Math.max(0, toplam - alinan);
+  const kalan =
+    s.kalan_tutar !== undefined && s.kalan_tutar !== null
+      ? Number(s.kalan_tutar)
+      : Math.max(0, toplam - alinan);
 
   return {
     ...s,

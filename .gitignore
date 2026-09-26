@@ -10,3 +10,19 @@ coverage/
 data/kargo_ayarlari.json
 uploads/
 scratch/
+
+data/oturumlar.json
+data/oturumlar.json.*.tmp
+
+supabase/.temp/
+
+# Local identity snapshot contains password hashes, invitation tokens and email jobs.
+data/identity.json
+data/identity.json.*
+data/.identity.json.*.tmp
+
+# Private courier roster and generated browser test evidence.
+data/couriers.json
+data/couriers.json.*
+playwright-report/
+test-results/

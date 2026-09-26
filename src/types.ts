@@ -90,6 +90,7 @@ export interface Siparis {
   birden_fazla_urun?: boolean;
   // Bölgesel Kurye & Dağıtım Sorumlusu (Bakü)
   baku_kurye_id?: string;
+  kurye_atama_surumu?: number; // Server version for explicit courier assignment.
   baku_kurye_adi?: string; // Örn: 'Elvin M. (Nərimanov/Mərkəz)', 'Rəşad K. (Yasamal/Elmlər)', 'Vüqar T. (Gəncə/Rayonlar)', 'Ofis / Evdən Təhvil'
   baku_kurye_bolgesi?: string; // 'Nərimanov', 'Yasamal', 'Nəsimi', 'Xətai', 'Gəncə / Rayon', 'Ofis'
   teslim_tarihi?: string;
@@ -103,8 +104,14 @@ export interface Siparis {
   kanada_fatura_no?: string; // Mağaza fiş/fatura no
   kanada_fatura_gorseli?: string; // Yüklenen fiş/fatura fotoğrafı
   kanada_gumruk_fin_kodu?: string; // Müşteri FIN Kodu (SmartCustoms gümrük beyannamesi için)
+  kanada_gumruk_pasaport_no?: string; // Müşteri pasaport no (gümrük; yazma: OPEN_QUESTIONS 34)
   tenant_id?: string; // Firma / Butik İdentifikatoru (Multi-Tenant SaaS)
   is_demo?: boolean; // Demo / Sınaq qeydi olub-olmadığı
+  /** 2 = v2 order with order lines (A8); its totals come from the lines, not v1 fields. */
+  model_surumu?: number;
+  sahip_kullanici_id?: string | null;
+  /** Request-only: reason the patron gives when lowering a recorded collection. */
+  duzeltme_gerekcesi?: string;
   islem_gecmisi?: {
     tarih: string;
     yapan_rol: string;
@@ -114,13 +121,9 @@ export interface Siparis {
   }[];
 }
 
-export type KullaniciRolu = 
-  | 'SUPER_ADMIN'       // Biz / Geliştirici (Her şeyi görür, sistem mimarisi dahil)
-  | 'PATRON'            // Şirket Sahibi / Baş Yönetici (Finans, kurye, sipariş tam kontrol; kod devir gizli)
-  | 'SATIS_SORUMLUSU'   // Görsel & WhatsApp sipariş girer, onay bekleyenleri işler
-  | 'KANADA_SATINALMA'  // Kanada satınalma fişleri, kargo firması belgeleri, kurye atama
-  | 'BAKU_FINANS'       // Bakü tahsilat, kasa ve kalan borç kapama
-  | 'BAKU_KURYE';       // Bakü saha kuryesi (Sadece kendi bölgesindeki paketleri görür ve teslim eder)
+// Roller ve kotalar rol kataloğundan gelir (src/shared/roller.ts).
+import type { KullaniciRolu, RolLimitleri } from './shared/roller';
+export type { KullaniciRolu, RolLimitleri };
 
 export interface BakuKuryeProfili {
   id: string;
@@ -173,14 +176,6 @@ export interface OnayBekleyenMesaj {
   durum: 'BEKLEMEDE' | 'ONAYLANDI' | 'REDDEDILDI';
 }
 
-export interface RolLimitleri {
-  PATRON: number;
-  KANADA_SATINALMA: number;
-  SATIS_SORUMLUSU: number;
-  BAKU_FINANS: number;
-  BAKU_KURYE: number;
-}
-
 export interface FirmaTenant {
   id: string; // örn: 'kanada_shopper_baku', 'ayla_boutique', 'luxury_brand_baku', 'demo_sandbox'
   ad: string;
@@ -196,7 +191,7 @@ export interface FirmaTenant {
   sahipTelefon?: string;
   kayitTarihi?: string;
   menseiUlke?: string;
-  rolLimitleri?: RolLimitleri;
+  rolLimitleri?: Partial<RolLimitleri>;
   aktifKullaniciSayilari?: Partial<RolLimitleri>;
 }
 
@@ -211,5 +206,3 @@ export interface DavetLinkiItem {
   kullanildiMi: boolean;
   kullananKisi?: string;
 }
-
-

@@ -1,255 +1,207 @@
-import { Router } from 'express';
+import { Router, Request } from 'express';
+import { randomUUID } from 'node:crypto';
+import {
+  listRequest,
+  customerSnapshot,
+  memoryPage,
+  customerKey,
+  compareKeys,
+} from '../services/listPagination';
 import { supabase } from '../services/supabase';
 import { formatlaSiparis } from '../services/siparisFormatlama';
-import { musterilerVeritabani, siparislerVeritabani } from '../services/state';
+import {
+  musterilerVeritabani,
+  siparislerVeritabani,
+  demoSiparislerVeritabani,
+} from '../services/state';
 import { MusteriKaydi } from '../types';
+import {
+  MusteriIndeksi,
+  eslesir as matches,
+  satirTenanti as rowTenant,
+  siparisGecmisleri,
+} from '../services/musteriGecmisi';
 
 const router = Router();
+const belongs = (row: any, tenant: string) => tenant === 'all' || rowTenant(row) === tenant;
+function tenantFor(req: Request, mutation = false): string {
+  const tenant = (req as any).tenantId;
+  if (!tenant || (mutation && tenant === 'all'))
+    throw Object.assign(new Error('Bir butik seçilmelidir.'), { status: 400 });
+  return tenant;
+}
+async function ownedCustomer(tenant: string, id: unknown) {
+  if (typeof id !== 'string') return undefined;
+  if (supabase && tenant !== 'demo_sandbox') {
+    const { data, error } = await supabase
+      .from('musteriler')
+      .select('*')
+      .eq('tenant_id', tenant)
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    return data && belongs(data, tenant) ? data : undefined;
+  }
+  return musterilerVeritabani.find((customer) => customer.id === id && belongs(customer, tenant));
+}
+function localSnapshot(tenant: string) {
+  return {
+    customers: musterilerVeritabani.filter((r) => belongs(r, tenant)),
+    orders: (tenant === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani).filter(
+      (r) => belongs(r, tenant)
+    ),
+  };
+}
+const newestFirst = (a: any, b: any) =>
+  (Date.parse(b.olusturma_tarihi) || 0) - (Date.parse(a.olusturma_tarihi) || 0) ||
+  compareKeys(String(a.id), String(b.id));
+const fail = (res: any, error: any) =>
+  res.status(error.status || 503).json({
+    basarili: false,
+    hata: error.status ? error.message : 'Müşteri verilerine erişilemedi.',
+  });
 
-// GET /api/musteriler — Müşteriler Listesi (CRM & Müşteri Geçmişi - Tenant İzolasyonlu)
 router.get('/musteriler', async (req, res) => {
   try {
-    const seciliTenant = req.query.tenant_id as string | undefined;
-
-    // 1. Tüm siparişleri topla (Supabase veya in-memory)
-    let tumSiparisler: any[] = [];
-    let supabaseOkundu = false;
-    if (supabase) {
-      try {
-        let query = supabase.from('siparisler').select('*');
-        if (seciliTenant && seciliTenant !== 'all') {
-          query = query.eq('tenant_id', seciliTenant);
-        }
-        const { data, error } = await query;
-        if (!error && data) {
-          tumSiparisler = data.map(s => formatlaSiparis(s));
-          supabaseOkundu = true;
-        }
-      } catch (err) {
-        console.warn('Supabase siparişleri okunamadı:', err);
-      }
-    }
-    if (!supabaseOkundu) {
-      tumSiparisler = siparislerVeritabani.map(s => formatlaSiparis(s));
-    }
-
-    // Seçili butike göre siparişleri filtrele
-    const ilgiliSiparisler = (seciliTenant && seciliTenant !== 'all')
-      ? tumSiparisler.filter(s => (s.tenant_id || 'kanada_shopper_baku') === seciliTenant)
-      : tumSiparisler;
-
-    // 2. Bu butik için müşteri havuzunu belirle (Supabase + In-memory senkron)
-    let tumMusteriler: MusteriKaydi[] = [...musterilerVeritabani];
-    if (supabase) {
-      try {
-        const { data: dbMusteriler, error } = await supabase.from('musteriler').select('*');
-        if (!error && dbMusteriler && dbMusteriler.length > 0) {
-          for (const dbm of dbMusteriler) {
-            const idx = tumMusteriler.findIndex(m => m.id === dbm.id);
-            if (idx !== -1) {
-              tumMusteriler[idx] = { ...tumMusteriler[idx], ...dbm };
-            } else {
-              tumMusteriler.push(dbm);
-            }
-          }
-        }
-      } catch (sbMusteriErr) {
-        // In-memory fallback
-      }
-    }
-
-    let tenantMusteriListesi: MusteriKaydi[] = [];
-
-    if (seciliTenant && seciliTenant !== 'all') {
-      if (seciliTenant === 'kanada_shopper_baku' || seciliTenant === 'demo_sandbox') {
-        tenantMusteriListesi = tumMusteriler.filter(m => !m.tenant_id || m.tenant_id === seciliTenant);
-      } else {
-        // Yeni veya özel butik: Sadece bu butik için kaydedilmiş müşteriler
-        tenantMusteriListesi = tumMusteriler.filter(m => m.tenant_id === seciliTenant);
-      }
-
-      // Ayrıca bu butik için siparişi olan ama listede henüz olmayan kişileri dinamik ekle
-      for (const s of ilgiliSiparisler) {
-        if (!s.musteri_adi) continue;
-        const telNo = (s.telefon_numarasi || '').replace(/\s+/g, '');
-        const varMi = tenantMusteriListesi.some(m =>
-          (telNo && m.telefon && m.telefon.replace(/\s+/g, '') === telNo) ||
-          m.ad_soyad.toLowerCase().trim() === s.musteri_adi.toLowerCase().trim()
-        );
-        if (!varMi) {
-          tenantMusteriListesi.push({
-            id: s.musteri_id || `mus-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-            ad_soyad: s.musteri_adi,
-            telefon: s.telefon_numarasi || '',
-            instagram_kullanici_adi: s.instagram_kullanici_adi || '',
-            sehir: s.teslimat_sehri || 'Bakı',
-            adres: s.teslimat_adresi || '',
-            musteri_tipi: s.musteri_tipi || 'TANIMADIK',
-            toplam_siparis_sayisi: 0,
-            toplam_harcama: 0,
-            kalan_toplam_borc: 0,
-            olusturma_tarihi: s.olusturma_tarihi || new Date().toISOString(),
-            son_siparis_tarihi: s.olusturma_tarihi || new Date().toISOString(),
-            son_urun_aciklamasi: s.urun_aciklamasi,
-            son_siparis_tutari: s.toplam_tutar,
-            tenant_id: seciliTenant,
-          });
-        }
-      }
-    } else {
-      // Tümü / Global görünüm
-      tenantMusteriListesi = [...musterilerVeritabani];
-    }
-
-    // 3. Her müşterinin seçili butik siparişlerine göre harcama, borç ve son siparişini hesapla
-    const zenginlestirilmis = tenantMusteriListesi.map(m => {
-      const telNo = (m.telefon || '').replace(/\s+/g, '');
-      const eslesenSiparisler = ilgiliSiparisler.filter(s =>
-        s.musteri_id === m.id ||
-        (telNo && s.telefon_numarasi && s.telefon_numarasi.replace(/\s+/g, '') === telNo) ||
-        s.musteri_adi.toLowerCase().trim() === m.ad_soyad.toLowerCase().trim()
-      ).sort((a, b) => new Date(b.olusturma_tarihi).getTime() - new Date(a.olusturma_tarihi).getTime());
-
-      const sonSiparis = eslesenSiparisler[0];
-      const toplamHarcama = eslesenSiparisler.reduce((toplam, s) => toplam + (Number(s.toplam_tutar) || 0), 0);
-      const toplamBorc = eslesenSiparisler.reduce((toplam, s) => toplam + (Number(s.kalan_tutar) || 0), 0);
-
-      return {
-        ...m,
-        toplam_siparis_sayisi: eslesenSiparisler.length > 0 ? eslesenSiparisler.length : (seciliTenant && seciliTenant !== 'all' ? 0 : m.toplam_siparis_sayisi),
-        toplam_harcama: eslesenSiparisler.length > 0 ? toplamHarcama : (seciliTenant && seciliTenant !== 'all' ? 0 : m.toplam_harcama),
-        kalan_toplam_borc: toplamBorc,
-        son_urun_aciklamasi: sonSiparis ? sonSiparis.urun_aciklamasi : (seciliTenant && seciliTenant !== 'all' ? 'Bu butikdə sifariş yoxdur' : (m.son_urun_aciklamasi || 'Sipariş yoxdur')),
-        son_siparis_tutari: sonSiparis ? sonSiparis.toplam_tutar : (seciliTenant && seciliTenant !== 'all' ? 0 : (m.son_siparis_tutari || 0)),
-        son_siparis_tarihi: sonSiparis ? sonSiparis.olusturma_tarihi : (seciliTenant && seciliTenant !== 'all' ? m.olusturma_tarihi : m.son_siparis_tarihi),
+    const tenant = tenantFor(req);
+    const request = listRequest(req, tenant, 'musteriler');
+    const snapshot = await customerSnapshot(request, () => localSnapshot(tenant));
+    const customers = snapshot.customers;
+    const orders = snapshot.orders.map(formatlaSiparis).sort(newestFirst);
+    // Build missing customer cards only from orders already inside this authority scope.
+    // Indexed once per request (linear); see services/musteriGecmisi.ts.
+    const known = new MusteriIndeksi(customers);
+    for (const order of orders) {
+      if (!order.musteri_adi || known.eslesenVar(order)) continue;
+      const card = {
+        id: order.musteri_id || `order:${order.id}`,
+        ad_soyad: order.musteri_adi,
+        telefon: order.telefon_numarasi || '',
+        instagram_kullanici_adi: order.instagram_kullanici_adi || '',
+        sehir: order.teslimat_sehri || '',
+        adres: order.teslimat_adresi || '',
+        musteri_tipi: order.musteri_tipi || 'TANIMADIK',
+        tenant_id: rowTenant(order),
+        olusturma_tarihi: order.olusturma_tarihi,
       };
-    });
-
-    // Yeni bir butik seçilmişse ve o butike ait müşteri yoksa, liste boş döner
-    const filtrelenmis = zenginlestirilmis.filter(m => {
-      if (seciliTenant && seciliTenant !== 'all' && seciliTenant !== 'kanada_shopper_baku' && seciliTenant !== 'demo_sandbox') {
-        return m.tenant_id === seciliTenant || m.toplam_siparis_sayisi > 0;
-      }
-      return true;
-    });
-
-    filtrelenmis.sort((a, b) => new Date(b.son_siparis_tarihi || 0).getTime() - new Date(a.son_siparis_tarihi || 0).getTime());
-
+      customers.push(card);
+      known.ekle(card);
+    }
+    // Histories keep the newest-first order of `orders`.
+    const histories = siparisGecmisleri(customers, orders);
+    const enriched = customers
+      .map((customer, index) => {
+        const history = histories[index];
+        const latest = history[0];
+        return {
+          ...customer,
+          toplam_siparis_sayisi: history.length,
+          toplam_harcama: history.reduce((sum, order) => sum + Number(order.toplam_tutar || 0), 0),
+          kalan_toplam_borc: history.reduce(
+            (sum, order) => sum + Number(order.kalan_tutar || 0),
+            0
+          ),
+          son_siparis_tarihi: latest?.olusturma_tarihi || customer.olusturma_tarihi,
+          son_urun_aciklamasi: latest?.urun_aciklamasi || 'Sipariş yoxdur',
+          son_siparis_tutari: latest?.toplam_tutar || 0,
+        };
+      })
+      .sort((a, b) => Date.parse(b.son_siparis_tarihi) - Date.parse(a.son_siparis_tarihi));
+    const page = memoryPage(request, enriched, snapshot.revision, customerKey);
     res.json({
       basarili: true,
-      toplam: filtrelenmis.length,
-      musteriler: filtrelenmis,
+      toplam: page.pagination.total,
+      musteriler: page.items,
+      pagination: page.pagination,
     });
-  } catch (err: any) {
-    res.status(500).json({ basarili: false, hata: err.message });
+  } catch (error) {
+    fail(res, error);
   }
 });
 
-// GET /api/musteriler/:id/siparisler — Tek Müşteri ve Sipariş Geçmişi
 router.get('/musteriler/:id/siparisler', async (req, res) => {
-  const { id } = req.params;
-  const seciliTenant = req.query.tenant_id as string | undefined;
-
-  let tumSiparisler: any[] = [];
-  if (supabase) {
-    try {
-      let query = supabase.from('siparisler').select('*');
-      if (seciliTenant && seciliTenant !== 'all') {
-        query = query.eq('tenant_id', seciliTenant);
-      }
-      const { data } = await query;
-      if (data && data.length > 0) {
-        tumSiparisler = data.map(s => formatlaSiparis(s));
-      }
-    } catch {}
-  }
-  if (tumSiparisler.length === 0) {
-    tumSiparisler = siparislerVeritabani.map(s => formatlaSiparis(s));
-  }
-
-  const musteri = musterilerVeritabani.find(m => m.id === id);
-  const telNo = musteri ? (musteri.telefon || '').replace(/\s+/g, '') : '';
-  const musteriAdi = musteri ? musteri.ad_soyad.toLowerCase().trim() : '';
-
-  let musteriSiparisleri = tumSiparisler.filter(s => 
-    s.musteri_id === id || 
-    (telNo && s.telefon_numarasi && s.telefon_numarasi.replace(/\s+/g, '') === telNo) ||
-    (musteriAdi && s.musteri_adi.toLowerCase().trim() === musteriAdi)
-  );
-
-  if (seciliTenant && seciliTenant !== 'all') {
-    musteriSiparisleri = musteriSiparisleri.filter(s => (s.tenant_id || 'kanada_shopper_baku') === seciliTenant);
-  }
-
-  musteriSiparisleri.sort((a, b) => new Date(b.olusturma_tarihi).getTime() - new Date(a.olusturma_tarihi).getTime());
-
-  res.json({
-    basarili: true,
-    musteri: musteri || { id, ad_soyad: 'Müştəri' },
-    siparisler: musteriSiparisleri,
-  });
-});
-
-// POST /api/musteriler — Müşteri Ekle / Güncelle
-router.post('/musteriler', async (req, res) => {
-  const { id, ad_soyad, telefon, instagram_kullanici_adi, sehir, adres, musteri_tipi, notlar, tenant_id } = req.body;
-  if (!ad_soyad) {
-    return res.status(400).json({ basarili: false, hata: 'Müşteri adı zorunludur.' });
-  }
-
-  let musteri = id ? musterilerVeritabani.find(m => m.id === id) : null;
-  if (musteri) {
-    musteri.ad_soyad = ad_soyad;
-    if (telefon !== undefined) musteri.telefon = telefon;
-    if (instagram_kullanici_adi !== undefined) musteri.instagram_kullanici_adi = instagram_kullanici_adi;
-    if (sehir !== undefined) musteri.sehir = sehir;
-    if (adres !== undefined) musteri.adres = adres;
-    if (musteri_tipi !== undefined) musteri.musteri_tipi = musteri_tipi;
-    if (notlar !== undefined) musteri.notlar = notlar;
-    if (tenant_id !== undefined) musteri.tenant_id = tenant_id;
-  } else {
-    musteri = {
-      id: 'mus-' + Date.now().toString(36),
-      ad_soyad,
-      telefon: telefon || '',
-      instagram_kullanici_adi: instagram_kullanici_adi || '',
-      sehir: sehir || 'Bakı',
-      adres: adres || '',
-      musteri_tipi: musteri_tipi || 'TANIMADIK',
-      toplam_siparis_sayisi: 0,
-      toplam_harcama: 0,
-      kalan_toplam_borc: 0,
-      notlar: notlar || '',
-      olusturma_tarihi: new Date().toISOString(),
-      son_siparis_tarihi: new Date().toISOString(),
-      tenant_id: tenant_id || 'kanada_shopper_baku',
-    };
-    musterilerVeritabani.unshift(musteri);
-  }
-
-  // Supabase kalıcılığı
-  if (supabase) {
-    try {
-      await supabase.from('musteriler').upsert({
-        id: musteri.id,
-        ad_soyad: musteri.ad_soyad,
-        telefon: musteri.telefon,
-        instagram_kullanici_adi: musteri.instagram_kullanici_adi,
-        sehir: musteri.sehir,
-        adres: musteri.adres,
-        musteri_tipi: musteri.musteri_tipi,
-        notlar: musteri.notlar,
-        tenant_id: musteri.tenant_id,
-        toplam_siparis_sayisi: musteri.toplam_siparis_sayisi,
-        toplam_harcama: musteri.toplam_harcama,
-        kalan_toplam_borc: musteri.kalan_toplam_borc,
-      });
-    } catch (errDb) {
-      console.warn('Müşteri Supabase kaydetme uyarısı:', errDb);
+  try {
+    const tenant = tenantFor(req);
+    const request = listRequest(req, tenant, `musteri-siparisler:${req.params.id}`);
+    const snapshot = await customerSnapshot(request, () => localSnapshot(tenant));
+    const customers = snapshot.customers;
+    const orders = snapshot.orders.map(formatlaSiparis).sort(newestFirst);
+    let customer = customers.find((c) => c.id === req.params.id);
+    if (!customer) {
+      const order = orders.find(
+        (o) => o.musteri_id === req.params.id || `order:${o.id}` === req.params.id
+      );
+      if (order)
+        customer = {
+          id: req.params.id,
+          ad_soyad: order.musteri_adi,
+          telefon: order.telefon_numarasi,
+          tenant_id: rowTenant(order),
+        };
     }
+    if (!customer) return res.status(404).json({ basarili: false, hata: 'Müşteri bulunamadı.' });
+    const page = memoryPage(
+      request,
+      orders.filter((o) => matches(customer, o)),
+      snapshot.revision
+    );
+    res.json({
+      basarili: true,
+      musteri: customer,
+      siparisler: page.items,
+      toplam: page.pagination.total,
+      pagination: page.pagination,
+    });
+  } catch (error) {
+    fail(res, error);
   }
-
-  res.json({ basarili: true, musteri });
 });
 
+router.post('/musteriler', async (req, res) => {
+  try {
+    const tenant = tenantFor(req, true);
+    const { id, ad_soyad, telefon, instagram_kullanici_adi, sehir, adres, musteri_tipi, notlar } =
+      req.body;
+    if (typeof ad_soyad !== 'string' || !ad_soyad.trim())
+      return res.status(400).json({ basarili: false, hata: 'Müşteri adı zorunludur.' });
+    const existing = id ? await ownedCustomer(tenant, id) : undefined;
+    if (id && !existing)
+      return res.status(404).json({ basarili: false, hata: 'Müşteri bulunamadı.' });
+    const customer: MusteriKaydi = {
+      ...(existing || {
+        id: 'mus-' + randomUUID(),
+        toplam_siparis_sayisi: 0,
+        toplam_harcama: 0,
+        kalan_toplam_borc: 0,
+        olusturma_tarihi: new Date().toISOString(),
+        son_siparis_tarihi: new Date().toISOString(),
+      }),
+      ad_soyad: ad_soyad.trim(),
+      tenant_id: tenant,
+      musteri_tipi: musteri_tipi || existing?.musteri_tipi || 'TANIMADIK',
+    };
+    for (const [key, value] of Object.entries({
+      telefon,
+      instagram_kullanici_adi,
+      sehir,
+      adres,
+      notlar,
+    }))
+      if (value !== undefined) (customer as any)[key] = value;
+    if (supabase && tenant !== 'demo_sandbox') {
+      const query = existing
+        ? supabase.from('musteriler').update(customer).eq('id', existing.id).eq('tenant_id', tenant)
+        : supabase.from('musteriler').insert(customer);
+      const { data, error } = await query.select('*').single();
+      if (error || !data) throw error || new Error('Müşteri kaydedilmedi.');
+      return res.json({ basarili: true, musteri: data });
+    }
+    const index = musterilerVeritabani.findIndex((c) => c.id === customer.id && belongs(c, tenant));
+    if (index >= 0) musterilerVeritabani[index] = customer;
+    else musterilerVeritabani.unshift(customer);
+    res.json({ basarili: true, musteri: customer });
+  } catch (error) {
+    fail(res, error);
+  }
+});
 export default router;

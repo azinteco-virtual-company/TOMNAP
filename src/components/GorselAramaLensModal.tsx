@@ -1,3 +1,4 @@
+import { apiFetch } from '../lib/apiClient';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Scan,
@@ -171,7 +172,15 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
     if (!etkilesimModu) return;
 
     const handlePointerMove = (e: MouseEvent | TouchEvent) => {
-      const { mod, startX, startY, xmin: sXmin, ymin: sYmin, xmax: sXmax, ymax: sYmax } = etkilesimRef.current;
+      const {
+        mod,
+        startX,
+        startY,
+        xmin: sXmin,
+        ymin: sYmin,
+        xmax: sXmax,
+        ymax: sYmax,
+      } = etkilesimRef.current;
       if (!mod || !containerRef.current) return;
 
       if (e.cancelable) {
@@ -251,16 +260,22 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
   // Aktif imleç türü
   const getImlecSinifi = () => {
     switch (etkilesimModu) {
-      case 'move': return 'cursor-grabbing';
+      case 'move':
+        return 'cursor-grabbing';
       case 'nw':
-      case 'se': return 'cursor-nwse-resize';
+      case 'se':
+        return 'cursor-nwse-resize';
       case 'ne':
-      case 'sw': return 'cursor-nesw-resize';
+      case 'sw':
+        return 'cursor-nesw-resize';
       case 'n':
-      case 's': return 'cursor-ns-resize';
+      case 's':
+        return 'cursor-ns-resize';
       case 'w':
-      case 'e': return 'cursor-ew-resize';
-      default: return '';
+      case 'e':
+        return 'cursor-ew-resize';
+      default:
+        return '';
     }
   };
 
@@ -283,7 +298,7 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
       setTarananKirpinti(kirpintiBase64);
 
       // 2. Backend'deki multimodal Lens servisine gönder
-      const res = await fetch('/api/gorselden-urun-ara', {
+      const res = await apiFetch('/api/gorselden-urun-ara', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -313,7 +328,12 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
 
   // Katalog stüdyo görseli doğrudan yüklenemezse vekil sunucuyu (proxy) dene
   const handleKatalogGorselHata = () => {
-    if (!proxyDendiMi && denenenGorselSrc && denenenGorselSrc.startsWith('http') && !denenenGorselSrc.includes('/api/proxy-gorsel')) {
+    if (
+      !proxyDendiMi &&
+      denenenGorselSrc &&
+      denenenGorselSrc.startsWith('http') &&
+      !denenenGorselSrc.includes('/api/proxy-gorsel')
+    ) {
       console.log('[Lens] Görsel doğrudan yüklenemedi, vekil sunucu (proxy) deneniyor...');
       setProxyDendiMi(true);
       setDenenenGorselSrc(`/api/proxy-gorsel?url=${encodeURIComponent(denenenGorselSrc)}`);
@@ -323,7 +343,11 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
   };
 
   // Bulunan Görseli Ürüne Tanımla
-  const handleSecVeKaydet = async (gorselSecilenUrl: string, urunSayfasi?: string, resmiAd?: string) => {
+  const handleSecVeKaydet = async (
+    gorselSecilenUrl: string,
+    urunSayfasi?: string,
+    resmiAd?: string
+  ) => {
     if (!gorselSecilenUrl) return;
     setKaydediliyor(true);
     try {
@@ -345,7 +369,11 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
     reader.onload = async (ev) => {
       const base64 = ev.target?.result as string;
       if (base64) {
-        await handleSecVeKaydet(base64, aramaSonucu?.sonuc?.urun_sayfasi_url, aramaSonucu?.sonuc?.resmi_urun_adi);
+        await handleSecVeKaydet(
+          base64,
+          aramaSonucu?.sonuc?.urun_sayfasi_url,
+          aramaSonucu?.sonuc?.resmi_urun_adi
+        );
       }
     };
     reader.readAsDataURL(file);
@@ -370,7 +398,8 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
                 </h3>
               </div>
               <p className="text-[11px] text-slate-300">
-                Görseldeki ürünü çerçeve içine alıp aratın; yapay zeka orijinal stüdyo fotoğrafını ve mağaza linkini bulsun.
+                Görseldeki ürünü çerçeve içine alıp aratın; yapay zeka orijinal stüdyo fotoğrafını
+                ve mağaza linkini bulsun.
               </p>
             </div>
           </div>
@@ -454,7 +483,7 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
                       {/* Şeffaf iç alan */}
                       <div className="w-full h-full bg-white/5 backdrop-contrast-125 relative">
                         {/* 4 Köşede Tutulabilir & Boyutlandırılabilir Google Lens Köşe Tutamaçları */}
-                        
+
                         {/* Sol-Üst Köşe (NW) */}
                         <div
                           onMouseDown={(e) => handleEtkilesimBaslat('nw', e)}
@@ -567,9 +596,12 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
                       <AlertTriangle className="w-6 h-6" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-white">Görsel Yüklenemedi veya Dosya Bulunamadı</p>
+                      <p className="text-xs font-bold text-white">
+                        Görsel Yüklenemedi veya Dosya Bulunamadı
+                      </p>
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        Aşağıdaki butona basarak cihazınızdan fotoğraf yükleyebilir veya sağdaki alandan ürün linki verebilirsiniz.
+                        Aşağıdaki butona basarak cihazınızdan fotoğraf yükleyebilir veya sağdaki
+                        alandan ürün linki verebilirsiniz.
                       </p>
                     </div>
                     <button
@@ -641,13 +673,19 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
                   <span>Ek Ürün İpucu (İsteğe Bağlı):</span>
-                  <span className="text-[10px] text-slate-400 font-normal">ör: "Karl Lagerfeld terlik", "Siyah çanta"</span>
+                  <span className="text-[10px] text-slate-400 font-normal">
+                    ör: "Karl Lagerfeld terlik", "Siyah çanta"
+                  </span>
                 </label>
                 <input
                   type="text"
                   value={ekIpucu}
                   onChange={(e) => setEkIpucu(e.target.value)}
-                  placeholder={urun.urun_adi || urun.urun_aciklamasi || 'Model veya marka ipucu girebilirsiniz...'}
+                  placeholder={
+                    urun.urun_adi ||
+                    urun.urun_aciklamasi ||
+                    'Model veya marka ipucu girebilirsiniz...'
+                  }
                   className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
               </div>
@@ -704,7 +742,8 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
                     <div className="font-bold">Eşleşme Bulunamadı</div>
                     <div className="text-[11px] text-rose-700 mt-0.5">{aramaHatasi}</div>
                     <p className="text-[10px] text-rose-600 mt-1">
-                      İpucu: Soldaki çerçeveyi doğrudan ürünün logosuna veya gövdesine odaklayıp tekrar deneyebilirsiniz.
+                      İpucu: Soldaki çerçeveyi doğrudan ürünün logosuna veya gövdesine odaklayıp
+                      tekrar deneyebilirsiniz.
                     </p>
                   </div>
                 </div>
@@ -720,9 +759,12 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <div className="text-xs font-bold text-slate-800">Yapay Zeka Görseli İnceliyor</div>
+                    <div className="text-xs font-bold text-slate-800">
+                      Yapay Zeka Görseli İnceliyor
+                    </div>
                     <p className="text-[11px] text-slate-500">
-                      Görseldeki desen, logo ve model analiz edilip Google arama dizininde eşleştiriliyor...
+                      Görseldeki desen, logo ve model analiz edilip Google arama dizininde
+                      eşleştiriliyor...
                     </p>
                   </div>
                 </div>
@@ -748,7 +790,8 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
                     </h4>
                     {aramaSonucu.sonuc.belirgin_ozellikler && (
                       <p className="text-[11px] text-slate-600">
-                        <span className="font-semibold">Detaylar:</span> {aramaSonucu.sonuc.belirgin_ozellikler}
+                        <span className="font-semibold">Detaylar:</span>{' '}
+                        {aramaSonucu.sonuc.belirgin_ozellikler}
                       </p>
                     )}
                   </div>
@@ -775,16 +818,19 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
                         </div>
                         <div className="flex-1 space-y-1.5">
                           <p className="text-[10px] text-slate-600 leading-tight">
-                            WhatsApp ekranındaki mesaj ve gereksiz alanları kırparak yalnızca bu ürünü kaydeder.
+                            WhatsApp ekranındaki mesaj ve gereksiz alanları kırparak yalnızca bu
+                            ürünü kaydeder.
                           </p>
                           <button
                             type="button"
                             disabled={kaydediliyor}
-                            onClick={() => handleSecVeKaydet(
-                              tarananKirpinti,
-                              aramaSonucu?.sonuc?.urun_sayfasi_url,
-                              aramaSonucu?.sonuc?.resmi_urun_adi
-                            )}
+                            onClick={() =>
+                              handleSecVeKaydet(
+                                tarananKirpinti,
+                                aramaSonucu?.sonuc?.urun_sayfasi_url,
+                                aramaSonucu?.sonuc?.resmi_urun_adi
+                              )
+                            }
                             className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                           >
                             <Check className="w-3.5 h-3.5" />
@@ -828,21 +874,26 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
                           </div>
                           {sonucGorselGecerli === false ? (
                             <p className="text-[10px] text-amber-800 leading-tight">
-                              Bu mağaza görsel linkini harici erişime kapatmış. Yukarıdaki <strong>Kırpılan Görseli Ata</strong> seçeneğini veya aşağıdaki <strong>Google Görseller</strong> aramasını kullanabilirsiniz.
+                              Bu mağaza görsel linkini harici erişime kapatmış. Yukarıdaki{' '}
+                              <strong>Kırpılan Görseli Ata</strong> seçeneğini veya aşağıdaki{' '}
+                              <strong>Google Görseller</strong> aramasını kullanabilirsiniz.
                             </p>
                           ) : (
                             <>
                               <p className="text-[10px] text-slate-500 leading-tight">
-                                İnternetten bulunan orijinal ürün fotoğrafını siparişteki ürün fotoğrafı olarak kaydeder.
+                                İnternetten bulunan orijinal ürün fotoğrafını siparişteki ürün
+                                fotoğrafı olarak kaydeder.
                               </p>
                               <button
                                 type="button"
                                 disabled={kaydediliyor || sonucGorselGecerli === false}
-                                onClick={() => handleSecVeKaydet(
-                                  denenenGorselSrc,
-                                  aramaSonucu.sonuc.urun_sayfasi_url,
-                                  aramaSonucu.sonuc.resmi_urun_adi
-                                )}
+                                onClick={() =>
+                                  handleSecVeKaydet(
+                                    denenenGorselSrc,
+                                    aramaSonucu.sonuc.urun_sayfasi_url,
+                                    aramaSonucu.sonuc.resmi_urun_adi
+                                  )
+                                }
                                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                               >
                                 <Check className="w-3.5 h-3.5" />
@@ -860,7 +911,9 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
                         <span>Doğrudan Stüdyo Fotoğrafı Linki Alınamadı</span>
                       </div>
                       <p className="text-[11px] text-amber-800">
-                        Ürün bilgileri başarıyla tespit edildi. Yukarıdaki kırpılan görseli atayabilir veya aşağıdaki Google Görseller linkinden dilediğiniz fotoğrafın adresini ekleyebilirsiniz.
+                        Ürün bilgileri başarıyla tespit edildi. Yukarıdaki kırpılan görseli
+                        atayabilir veya aşağıdaki Google Görseller linkinden dilediğiniz fotoğrafın
+                        adresini ekleyebilirsiniz.
                       </p>
                     </div>
                   )}
@@ -913,9 +966,13 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
                   <Scan className="w-8 h-8 text-sky-600 mx-auto opacity-75" />
                   <div className="text-xs font-bold text-slate-800">Nasıl Kullanılır?</div>
                   <p className="text-[11px] text-slate-500 leading-relaxed">
-                    1. Soldaki vizör çerçevesini fareyle aramak istediğiniz ürünün (terlik, çanta, saat vb.) üzerine sürükleyin.
+                    1. Soldaki vizör çerçevesini fareyle aramak istediğiniz ürünün (terlik, çanta,
+                    saat vb.) üzerine sürükleyin.
                     <br />
-                    2. <strong>Çerçevenin 4 köşesindeki veya kenarlarındaki tutamaçlardan</strong> tutarak alanı büyütüp küçültebilirsiniz.
+                    2. <strong>
+                      Çerçevenin 4 köşesindeki veya kenarlarındaki tutamaçlardan
+                    </strong>{' '}
+                    tutarak alanı büyütüp küçültebilirsiniz.
                     <br />
                     3. <strong>"İnternette Ara"</strong> butonuna tıklayın.
                   </p>
@@ -924,7 +981,9 @@ export const GorselAramaLensModal: React.FC<GorselAramaLensModalProps> = ({
 
               {/* Manuel Resim Linki Yapıştırma veya Cihazdan Yükleme */}
               <div className="pt-2 border-t border-slate-100 space-y-2">
-                <div className="text-[11px] font-bold text-slate-600">Alternatif: Manuel Resim Tanımla</div>
+                <div className="text-[11px] font-bold text-slate-600">
+                  Alternatif: Manuel Resim Tanımla
+                </div>
                 <div className="flex gap-1.5">
                   <input
                     type="url"

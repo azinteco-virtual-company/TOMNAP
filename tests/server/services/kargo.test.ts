@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { siparislerVeritabani } from '../../../src/server/services/state';
+import { loginFixture } from '../helpers/session';
+import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import * as XLSX from 'xlsx';
 import { AramexProvider } from '../../../src/server/services/kargo/providers/aramex';
@@ -12,24 +14,42 @@ describe('Multi-Carrier & Multi-Country Kargo Entegrasyonu Testleri', () => {
     const aramex = new AramexProvider();
 
     it('DLV ve Delivered açıklaması TESLIM_EDILDI durumuna dönüştürülmeli', () => {
-      expect(aramex.mapStatus('DLV', 'Shipment delivered to customer', 'Baku')).toBe('TESLIM_EDILDI');
+      expect(aramex.mapStatus('DLV', 'Shipment delivered to customer', 'Baku')).toBe(
+        'TESLIM_EDILDI'
+      );
       expect(aramex.mapStatus('', 'Package delivered successfully', 'Baku')).toBe('TESLIM_EDILDI');
       expect(aramex.mapStatus('SH005', 'Proof of delivery signed', 'Baku')).toBe('TESLIM_EDILDI');
     });
 
     it('Bakü, kurye, gümrük veya GYD konumları BAKU_DAGITIM_ARKADAS durumuna dönüştürülmeli', () => {
-      expect(aramex.mapStatus('SH008', 'Out for delivery with courier', 'Baku, Azerbaijan')).toBe('BAKU_DAGITIM_ARKADAS');
-      expect(aramex.mapStatus('SH068', 'Customs clearance completed at airport', 'Heydar Aliyev Int Airport (GYD)')).toBe('BAKU_DAGITIM_ARKADAS');
+      expect(aramex.mapStatus('SH008', 'Out for delivery with courier', 'Baku, Azerbaijan')).toBe(
+        'BAKU_DAGITIM_ARKADAS'
+      );
+      expect(
+        aramex.mapStatus(
+          'SH068',
+          'Customs clearance completed at airport',
+          'Heydar Aliyev Int Airport (GYD)'
+        )
+      ).toBe('BAKU_DAGITIM_ARKADAS');
     });
 
     it('Tranzit, Dubai hub ve uçuş aşamaları ULUSLARARASI_KARGO durumuna dönüştürülmeli', () => {
-      expect(aramex.mapStatus('SH014', 'Departed operations facility', 'Dubai Hub (DXB)')).toBe('ULUSLARARASI_KARGO');
-      expect(aramex.mapStatus('SH069', 'In transit flight connection', 'Frankfurt')).toBe('ULUSLARARASI_KARGO');
+      expect(aramex.mapStatus('SH014', 'Departed operations facility', 'Dubai Hub (DXB)')).toBe(
+        'ULUSLARARASI_KARGO'
+      );
+      expect(aramex.mapStatus('SH069', 'In transit flight connection', 'Frankfurt')).toBe(
+        'ULUSLARARASI_KARGO'
+      );
     });
 
     it('Toronto kabul ve ilk çıkış aşamaları KANADA_DEPO durumuna dönüştürülmeli', () => {
-      expect(aramex.mapStatus('SH001', 'Record created at origin facility', 'Toronto (YYZ)')).toBe('KANADA_DEPO');
-      expect(aramex.mapStatus('SH005', 'Shipment collected from merchant', 'Toronto, Canada')).toBe('KANADA_DEPO');
+      expect(aramex.mapStatus('SH001', 'Record created at origin facility', 'Toronto (YYZ)')).toBe(
+        'KANADA_DEPO'
+      );
+      expect(aramex.mapStatus('SH005', 'Shipment collected from merchant', 'Toronto, Canada')).toBe(
+        'KANADA_DEPO'
+      );
     });
   });
 
@@ -40,7 +60,14 @@ describe('Multi-Carrier & Multi-Country Kargo Entegrasyonu Testleri', () => {
       // Bellekte sanal Aramex Excel'i oluştur
       const wb = XLSX.utils.book_new();
       const veriler = [
-        ['Waybill Number', 'Consignee Name', 'Telephone', 'Destination', 'Weight (kg)', 'Dispatch Date'],
+        [
+          'Waybill Number',
+          'Consignee Name',
+          'Telephone',
+          'Destination',
+          'Weight (kg)',
+          'Dispatch Date',
+        ],
         ['37349392426', 'Aytən Məmmədova', '+994502145588', 'Baku', '1.45', '2026-09-12'],
         ['37349392427', 'Kəmalə Bədirbəyli', '+994506942525', 'Ganja', '2.80', '2026-09-12'],
         ['37349392428', 'Nigar Əliyeva', '+994559871122', 'Baku', '0.65', '2026-09-12'],
@@ -73,11 +100,11 @@ describe('Multi-Carrier & Multi-Country Kargo Entegrasyonu Testleri', () => {
       expect(ups.tip).toBe('UPS');
     });
 
-    it('Tenant ayarlarını doğru getirmeli ve şifreleri maskelemeli', () => {
-      const ayar = kargoMerkezi.getAyarlar('kanada_shopper_baku');
+    it('Tenant ayarlarını doğru getirmeli ve şifreleri maskelemeli', async () => {
+      const ayar = await kargoMerkezi.getAyarlar('kanada_shopper_baku');
       expect(ayar.tenantId).toBe('kanada_shopper_baku');
       expect(ayar.saglayici).toBe('ARAMEX');
-      expect(ayar.kimlikBilgileri.hesapNo).toBe('72470858');
+      expect(ayar.kimlikBilgileri.hesapNo).toBe('');
 
       const maskeli = kargoMerkezi.maskeleAyarlar(ayar);
       expect(maskeli.kimlikBilgileri.sifre).toBe('');
@@ -86,9 +113,14 @@ describe('Multi-Carrier & Multi-Country Kargo Entegrasyonu Testleri', () => {
 
   describe('Kargo API Rotaları (Supertest Entegrasyon)', () => {
     const app = createApp();
+    let authenticated: any;
+    beforeAll(async () => {
+      authenticated = (await loginFixture(app)).agent;
+      authenticated.set('x-tenant-id', 'kanada_shopper_baku');
+    });
 
     it('GET /api/kargo/ayarlar — aktif ayarları ve desteklenen sağlayıcıları dönmeli', async () => {
-      const res = await request(app).get('/api/kargo/ayarlar?tenant_id=kanada_shopper_baku');
+      const res = await authenticated.get('/api/kargo/ayarlar?tenant_id=kanada_shopper_baku');
       expect(res.status).toBe(200);
       expect(res.body.basarili).toBe(true);
       expect(res.body.desteklenenSaglayicilar).toBeInstanceOf(Array);
@@ -96,30 +128,27 @@ describe('Multi-Carrier & Multi-Country Kargo Entegrasyonu Testleri', () => {
       expect(res.body.ayarlar.saglayici).toBe('ARAMEX');
     });
 
-    it('POST /api/kargo/test — bağlantı testi başarılı yanıt vermeli', async () => {
-      const res = await request(app)
-        .post('/api/kargo/test')
-        .send({
-          tenantId: 'kanada_shopper_baku',
-          ayarlar: {
-            saglayici: 'ARAMEX',
-            kimlikBilgileri: { testModu: true, hesapNo: '72470858' },
-          },
-        });
+    it('POST /api/kargo/test — eksik kimlik bilgileriyle bağlantıyı doğrulanmış göstermemeli', async () => {
+      const res = await authenticated.post('/api/kargo/test').send({
+        tenantId: 'kanada_shopper_baku',
+        ayarlar: {
+          saglayici: 'ARAMEX',
+          kimlikBilgileri: { testModu: true, hesapNo: '72470858' },
+        },
+      });
 
       expect(res.status).toBe(200);
-      expect(res.body.basarili).toBe(true);
+      expect(res.body.basarili).toBe(false);
       expect(res.body.saglayici).toBe('ARAMEX');
+      expect(res.body.detay.mod).toBe('UNCONFIGURED');
       expect(res.body.gecikmeMs).toBeGreaterThanOrEqual(0);
     });
 
     it('POST /api/kargo/takip — AWB listesini sorgulamalı ve konum dönmeli', async () => {
-      const res = await request(app)
-        .post('/api/kargo/takip')
-        .send({
-          takipNolari: ['37349392426', '37349392428'],
-          tenantId: 'kanada_shopper_baku',
-        });
+      const res = await authenticated.post('/api/kargo/takip').send({
+        takipNolari: ['37349392426', '37349392428'],
+        tenantId: 'kanada_shopper_baku',
+      });
 
       expect(res.status).toBe(200);
       expect(res.body.basarili).toBe(true);
@@ -128,14 +157,16 @@ describe('Multi-Carrier & Multi-Country Kargo Entegrasyonu Testleri', () => {
       expect(res.body.sonuclar[0].durum).toBeDefined();
     });
 
-    it('POST /api/kargo/senkronize-et — aktif siparişleri senkronize etmeli', async () => {
-      const res = await request(app)
+    it('POST /api/kargo/senkronize-et — simülasyon siparişleri değiştirmemeli', async () => {
+      const before = JSON.stringify(siparislerVeritabani);
+      const res = await authenticated
         .post('/api/kargo/senkronize-et')
-        .send({ tenantId: 'all' });
+        .send({ tenantId: 'kanada_shopper_baku' });
 
       expect(res.status).toBe(200);
       expect(res.body.basarili).toBe(true);
-      expect(res.body.sorgulananSayi).toBeGreaterThanOrEqual(0);
+      expect(res.body.sorgulananSayi).toBe(0);
+      expect(JSON.stringify(siparislerVeritabani)).toBe(before);
     });
   });
 });

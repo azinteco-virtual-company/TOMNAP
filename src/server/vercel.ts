@@ -1,6 +1,8 @@
 import { createApp } from './index';
 
-const app = createApp();
+// Vercel overwrites X-Forwarded-For with the client's IP and does not forward
+// client-supplied entries, so exactly one hop (Vercel's) is trusted.
+const app = createApp({ trustProxy: 1 });
 
 export default function handler(req: any, res: any) {
   try {
@@ -9,10 +11,9 @@ export default function handler(req: any, res: any) {
     const queryIndex = originalUrl.indexOf('?');
     const queryString = queryIndex !== -1 ? originalUrl.substring(queryIndex) : '';
 
-    const forwardedUri = req.headers?.['x-forwarded-uri'];
-    if (forwardedUri && typeof forwardedUri === 'string' && (forwardedUri.startsWith('/api') || forwardedUri.startsWith('/uploads'))) {
-      req.url = forwardedUri;
-    } else if (req.url && !req.url.startsWith('/api') && !req.url.startsWith('/uploads')) {
+    // The path comes only from req.url. Vercel does not set X-Forwarded-Uri, so
+    // that header is client-controlled and must never re-route a request.
+    if (req.url && !req.url.startsWith('/api') && !req.url.startsWith('/uploads')) {
       req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
     }
 

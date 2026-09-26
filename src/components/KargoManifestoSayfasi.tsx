@@ -1,19 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { lazy, Suspense, useState, useMemo } from 'react';
 import { Siparis } from '../types';
-import { 
-  FileText, 
-  Printer, 
-  Plane, 
-  Package, 
-  Copy, 
-  Check, 
-  Calendar, 
-  Search, 
-  Filter, 
-  DollarSign, 
-  FileSpreadsheet, 
-  Layers, 
-  MapPin, 
+import {
+  FileText,
+  Printer,
+  Plane,
+  Package,
+  Copy,
+  Check,
+  Calendar,
+  Search,
+  Filter,
+  DollarSign,
+  FileSpreadsheet,
+  Layers,
+  MapPin,
   RotateCcw,
   ArrowLeft,
   ExternalLink,
@@ -25,16 +25,22 @@ import {
   SlidersHorizontal,
   Activity,
   CheckCircle2,
-  X
+  X,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { loadSpreadsheet, loadPdf, reportDocumentError } from '../utils/documentLibraries';
 import { useDil } from '../context/DilKonteksti';
 import { cleanPdfText, safePrintHtml } from '../utils/pdfHelpers';
+import { html } from '../utils/guvenliHtml';
 import { useAppStore } from '../store/appStore';
 import { fetchWithRetry } from '../lib/apiClient';
 import { KargoEntegrasyonModal } from './KargoEntegrasyonModal';
+import { AWB_REVIEW_ENABLED } from '../lib/featureFlags';
+
+// Manifest AWB review: a separate chunk, built and loaded only when VITE_FF_AWB_REVIEW
+// is on; with the flag off the import is not in the build at all (Codex R3 F18).
+const ManifestEslestirmePaneli = AWB_REVIEW_ENABLED
+  ? lazy(() => import('./awb-eslestirme/ManifestEslestirmePaneli'))
+  : null;
 
 interface KargoManifestoSayfasiProps {
   siparisler: Siparis[];
@@ -42,7 +48,7 @@ interface KargoManifestoSayfasiProps {
   onSiparisDetayAc?: (siparis: Siparis) => void;
 }
 
-type LojistikFiltreTipi = 
+type LojistikFiltreTipi =
   | 'kargo_ve_depo'
   | 'KANADA_DEPO'
   | 'ULUSLARARASI_KARGO'
@@ -63,22 +69,29 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
   const [finansFiltre, setFinansFiltre] = useState<FinansFiltreTipi>('tumu');
   const [sehirFiltre, setSehirFiltre] = useState<string>('tumu');
   const [aramaMetni, setAramaMetni] = useState<string>('');
-  
+
   // Tarih aralığı filtreleri
   const [baslangicTarih, setBaslangicTarih] = useState<string>('');
   const [bitisTarih, setBitisTarih] = useState<string>('');
-  const [tarihPreset, setTarihPreset] = useState<'hepsi' | 'bugun' | 'son7gun' | 'buay' | 'ozel'>('hepsi');
+  const [tarihPreset, setTarihPreset] = useState<'hepsi' | 'bugun' | 'son7gun' | 'buay' | 'ozel'>(
+    'hepsi'
+  );
 
   const [kopyalandi, setKopyalandi] = useState(false);
   const [yazdiriliyor, setYazdiriliyor] = useState(false);
   const [pdfHazirlaniyor, setPdfHazirlaniyor] = useState(false);
+  const [excelHazirlaniyor, setExcelHazirlaniyor] = useState(false);
 
   // Kargo & Aramex Entegrasyon Durumları
   const { seciliFirmaId, siparisleriYukle } = useAppStore();
+  const [awbManifest, setAwbManifest] = useState<{ base64: string; ad: string } | null>(null);
   const [kargoModalAcik, setKargoModalAcik] = useState(false);
   const [kargoSenkronizeEdiliyor, setKargoSenkronizeEdiliyor] = useState(false);
   const [dispatchYukleniyor, setDispatchYukleniyor] = useState(false);
-  const [kargoBildirimi, setKargoBildirimi] = useState<{ tip: 'basari' | 'hata'; mesaj: string } | null>(null);
+  const [kargoBildirimi, setKargoBildirimi] = useState<{
+    tip: 'basari' | 'hata';
+    mesaj: string;
+  } | null>(null);
   const dispatchInputRef = React.useRef<HTMLInputElement>(null);
 
   // Aramex / Kargo Canlı Senkronizasyon Tetikleyicisi
@@ -121,13 +134,18 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
     reader.onload = async () => {
       try {
         const base64 = (reader.result as string) || '';
+        if (AWB_REVIEW_ENABLED) {
+          // Nothing is written on upload; the user reviews and confirms suggestions.
+          setAwbManifest({ base64, ad: file.name });
+          return;
+        }
         const res = await fetchWithRetry('/api/kargo/manifesto-yukle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             dosya_base64: base64,
             dosya_adi: file.name,
-            tenantId: seciliFirmaId || 'kanada_shopper_baku',
+            tenantId: seciliFirmaId,
             otomatik_esle: true,
           }),
         });
@@ -142,7 +160,8 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         } else {
           setKargoBildirimi({
             tip: 'hata',
-            mesaj: data.hata || (data.hatalar && data.hatalar[0]) || 'Fayl oxunarkən xəta baş verdi.',
+            mesaj:
+              data.hata || (data.hatalar && data.hatalar[0]) || 'Fayl oxunarkən xəta baş verdi.',
           });
         }
       } catch (err: any) {
@@ -158,7 +177,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
   // Benzersiz şehir listesi
   const sehirler = useMemo(() => {
     const set = new Set<string>();
-    siparisler.forEach(s => {
+    siparisler.forEach((s) => {
       const sehir = (s.teslimat_sehri || '').trim();
       if (sehir) set.add(sehir);
     });
@@ -210,7 +229,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
     return siparisler.filter((s) => {
       // 1. Lojistik Durumu Filtresi
       if (lojistikFiltre === 'kargo_ve_depo') {
-        const uygundur = 
+        const uygundur =
           s.lojistik_durumu === 'KANADA_DEPO' ||
           s.lojistik_durumu === 'ULUSLARARASI_KARGO' ||
           s.lojistik_durumu === 'BAKU_DAGITIM_ARKADAS';
@@ -254,14 +273,25 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
           s.teslimat_adresi,
           s.ozel_not,
           s.baku_tahsilat_notu,
-        ].filter(Boolean).join(' ').toLowerCase();
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
 
         if (!metinler.includes(aranan)) return false;
       }
 
       return true;
     });
-  }, [siparisler, lojistikFiltre, finansFiltre, sehirFiltre, baslangicTarih, bitisTarih, aramaMetni]);
+  }, [
+    siparisler,
+    lojistikFiltre,
+    finansFiltre,
+    sehirFiltre,
+    baslangicTarih,
+    bitisTarih,
+    aramaMetni,
+  ]);
 
   // Canlı İstatistikler
   const toplamDeger = useMemo(
@@ -291,15 +321,24 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
       case 'BAKU_DAGITIM_ARKADAS':
         return { label: 'Bakı Paylanış', color: 'bg-purple-100 text-purple-900 border-purple-300' };
       case 'TESLIM_EDILDI':
-        return { label: 'Təhvil Verildi', color: 'bg-emerald-100 text-emerald-900 border-emerald-300' };
+        return {
+          label: 'Təhvil Verildi',
+          color: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+        };
       default:
-        return { label: durum.replace(/_/g, ' '), color: 'bg-slate-100 text-slate-700 border-slate-300' };
+        return {
+          label: durum.replace(/_/g, ' '),
+          color: 'bg-slate-100 text-slate-700 border-slate-300',
+        };
     }
   };
 
   // 1. Formatlı Excel (.xlsx) İndirme
-  const excelIndir = () => {
+  const excelIndir = async () => {
+    if (excelHazirlaniyor) return;
+    setExcelHazirlaniyor(true);
     try {
+      const XLSX = await loadSpreadsheet();
       const baslik = [
         'Sıra',
         'Müştəri Adı',
@@ -318,7 +357,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         'Kanada İzləmə Kodu',
         'Beynəlxalq Kargo Kodu',
         'Xüsusi Qeyd',
-        'Bakı Təhvilat Notu'
+        'Bakı Təhvilat Notu',
       ];
 
       const satirlar = dahilSiparisler.map((s, index) => [
@@ -333,13 +372,13 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         s.toplam_tutar || 0,
         s.alinan_tutar || 0,
         s.kalan_tutar || 0,
-        s.gumruk_fin_kodu || '—',
+        s.kanada_gumruk_fin_kodu || '—',
         s.baku_kurye_adi || 'Bölgə üzrə',
         getLojistikEtiketi(s.lojistik_durumu).label,
         s.kanada_takip_kodu || '',
         s.uluslararasi_kargo_kodu || '',
         s.ozel_not || '',
-        s.baku_tahsilat_notu || ''
+        s.baku_tahsilat_notu || '',
       ]);
 
       satirlar.push([
@@ -360,7 +399,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         '',
         '',
         '',
-        ''
+        '',
       ]);
 
       const ws = XLSX.utils.aoa_to_sheet([baslik, ...satirlar]);
@@ -380,7 +419,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         { wch: 20 },
         { wch: 22 },
         { wch: 26 },
-        { wch: 26 }
+        { wch: 26 },
       ];
 
       // Başlık satırını dondur (Freeze Top Row)
@@ -392,50 +431,65 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
       XLSX.writeFile(wb, dosyaAdi);
     } catch (err) {
       console.error('Excel endirmə xətası:', err);
+      reportDocumentError(err);
+    } finally {
+      setExcelHazirlaniyor(false);
     }
   };
 
   // 2. Formatlı PDF İndirme (A4 Landscape - Daşmayan və Dəqiq Hesablanmış)
-  const pdfIndir = () => {
+  const pdfIndir = async () => {
+    if (pdfHazirlaniyor) return;
     setPdfHazirlaniyor(true);
     try {
+      const { jsPDF, autoTable } = await loadPdf();
       const doc = new jsPDF({
         orientation: 'landscape',
         unit: 'pt',
-        format: 'a4'
+        format: 'a4',
       });
 
       const bugun = new Date().toLocaleDateString('az-AZ');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
       doc.setTextColor(15, 23, 42);
-      doc.text(cleanPdfText('KNB Lojistik - Kanada -> Baki Kargo Manifestosu & Ceki Listesi'), 26, 32);
+      doc.text(
+        cleanPdfText('KNB Lojistik - Kanada -> Baki Kargo Manifestosu & Ceki Listesi'),
+        26,
+        32
+      );
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(100, 116, 139);
       doc.text(
-        cleanPdfText(`Tarix: ${bugun} | Toplam Baglama: ${dahilSiparisler.length} eded | Toplam Mehsul: ${toplamAdet} eded`),
+        cleanPdfText(
+          `Tarix: ${bugun} | Toplam Baglama: ${dahilSiparisler.length} eded | Toplam Mehsul: ${toplamAdet} eded`
+        ),
         26,
         47
       );
       doc.text(
-        cleanPdfText(`Cemi Deyer: ${toplamDeger.toFixed(2)} AZN | Bakida Alinacaq Qaliq Borc: ${toplamKalanBorc.toFixed(2)} AZN`),
+        cleanPdfText(
+          `Cemi Deyer: ${toplamDeger.toFixed(2)} AZN | Bakida Alinacaq Qaliq Borc: ${toplamKalanBorc.toFixed(2)} AZN`
+        ),
         26,
         60
       );
 
-      const head = [[
-        '#',
-        cleanPdfText('Musteri & Elaqe'),
-        cleanPdfText('Seher / Unvan'),
-        cleanPdfText('Mehsul & Xususiyyet'),
-        'Say',
-        'Deyer',
-        cleanPdfText('Qaliq Borc'),
-        cleanPdfText('Status / Kargo Kodu'),
-        cleanPdfText('Xususi Qeyd / Not')
-      ]];
+      const head = [
+        [
+          '#',
+          cleanPdfText('Musteri & Elaqe'),
+          cleanPdfText('Seher / Unvan'),
+          cleanPdfText('Mehsul & Xususiyyet'),
+          'Say',
+          'Deyer',
+          cleanPdfText('Qaliq Borc'),
+          cleanPdfText('Status / Kargo Kodu'),
+          cleanPdfText('Xususi Qeyd / Not'),
+        ],
+      ];
 
       const body = dahilSiparisler.map((s, idx) => {
         const lojRozet = getLojistikEtiketi(s.lojistik_durumu);
@@ -443,7 +497,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         const kargoKod = s.uluslararasi_kargo_kodu ? `\nKod: ${s.uluslararasi_kargo_kodu}` : '';
         const notlar = [
           s.ozel_not ? cleanPdfText(s.ozel_not) : '',
-          s.baku_tahsilat_notu ? `[Baki: ${cleanPdfText(s.baku_tahsilat_notu)}]` : ''
+          s.baku_tahsilat_notu ? `[Baki: ${cleanPdfText(s.baku_tahsilat_notu)}]` : '',
         ]
           .filter(Boolean)
           .join('\n');
@@ -469,7 +523,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
           `${(s.toplam_tutar || 0).toFixed(2)} AZN`,
           s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN (BORC)` : 'ODENILIB',
           cleanPdfText(`${lojRozet.label}${kargoKod}`),
-          notlar || '-'
+          notlar || '-',
         ];
       });
 
@@ -508,17 +562,19 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
           7: { cellWidth: 95 },
           8: { cellWidth: 200, overflow: 'linebreak' },
         },
-        foot: [[
-          '',
-          'YEKUN CEMI',
-          '',
-          `${dahilSiparisler.length} Baglama`,
-          String(toplamAdet),
-          `${toplamDeger.toFixed(2)} AZN`,
-          `${toplamKalanBorc.toFixed(2)} AZN`,
-          '',
-          cleanPdfText('Resmi KNB Lojistik Senedi')
-        ]],
+        foot: [
+          [
+            '',
+            'YEKUN CEMI',
+            '',
+            `${dahilSiparisler.length} Baglama`,
+            String(toplamAdet),
+            `${toplamDeger.toFixed(2)} AZN`,
+            `${toplamKalanBorc.toFixed(2)} AZN`,
+            '',
+            cleanPdfText('Resmi KNB Lojistik Senedi'),
+          ],
+        ],
         footStyles: {
           fillColor: [241, 245, 249],
           textColor: [15, 23, 42],
@@ -543,7 +599,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
       doc.save(dosyaAdi);
     } catch (err) {
       console.error('PDF hazırlama xətası:', err);
-      alert('PDF hazırlanarkən xəta baş verdi.');
+      reportDocumentError(err);
     } finally {
       setPdfHazirlaniyor(false);
     }
@@ -554,99 +610,170 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
     setYazdiriliyor(true);
     try {
       const bugun = new Date().toLocaleDateString('az-AZ');
-      const rowsHtml = dahilSiparisler.map((s, idx) => `
-        <tr>
-          <td style="text-align:center; padding: 6px 4px;">${idx + 1}</td>
-          <td style="padding: 6px 6px;">
-            <strong>${s.musteri_adi || 'Adsız'}</strong><br/>
-            <span style="color:#64748b; font-size:10px;">${s.telefon_numarasi || '-'}</span>
-          </td>
-          <td style="padding: 6px 6px;">
-            <strong>${s.teslimat_sehri || 'Bakı'}</strong><br/>
-            <span style="color:#64748b; font-size:10px;">${s.teslimat_adresi || 'Bakı'}</span>
-          </td>
-          <td style="padding: 6px 6px;">
-            ${s.urun_aciklamasi || '-'}<br/>
-            <small style="color:#64748b;">${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}</small>
-          </td>
-          <td style="text-align:center; font-weight:bold; padding: 6px 4px;">${s.adet || 1}</td>
-          <td style="text-align:right; font-weight:bold; padding: 6px 6px;">${(s.toplam_tutar || 0).toFixed(2)} ${s.para_birimi || 'AZN'}</td>
-          <td style="text-align:right; padding: 6px 6px; ${s.kalan_tutar > 0 ? 'color:#b45309; font-weight:bold;' : 'color:#15803d;'}">
-            ${s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN<br/><small>ALINACAQ</small>` : 'ÖDƏNİLİB'}
-          </td>
-          <td style="padding: 6px 6px;">
-            <span style="font-size:10px; background:#f1f5f9; padding:2px 4px; border-radius:3px;">${getLojistikEtiketi(s.lojistik_durumu).label}</span>
-            ${s.uluslararasi_kargo_kodu ? `<br/><code style="font-size:10px; color:#1d4ed8;">${s.uluslararasi_kargo_kodu}</code>` : ''}
-          </td>
-          <td style="padding: 6px 6px; font-size:10px;">
-            ${s.ozel_not ? `<div>📌 ${s.ozel_not}</div>` : ''}
-            ${s.baku_tahsilat_notu ? `<div style="color:#92400e;">💬 ${s.baku_tahsilat_notu}</div>` : ''}
-          </td>
-        </tr>
-      `).join('');
+      const rowsHtml = dahilSiparisler.map(
+        (s, idx) => html`
+          <tr>
+            <td style="text-align:center; padding: 6px 4px;">${idx + 1}</td>
+            <td style="padding: 6px 6px;">
+              <strong>${s.musteri_adi || 'Adsız'}</strong><br />
+              <span style="color:#64748b; font-size:10px;">${s.telefon_numarasi || '-'}</span>
+            </td>
+            <td style="padding: 6px 6px;">
+              <strong>${s.teslimat_sehri || 'Bakı'}</strong><br />
+              <span style="color:#64748b; font-size:10px;">${s.teslimat_adresi || 'Bakı'}</span>
+            </td>
+            <td style="padding: 6px 6px;">
+              ${s.urun_aciklamasi || '-'}<br />
+              <small style="color:#64748b;"
+                >${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}</small
+              >
+            </td>
+            <td style="text-align:center; font-weight:bold; padding: 6px 4px;">${s.adet || 1}</td>
+            <td style="text-align:right; font-weight:bold; padding: 6px 6px;">
+              ${(s.toplam_tutar || 0).toFixed(2)} ${s.para_birimi || 'AZN'}
+            </td>
+            <td
+              style="text-align:right; padding: 6px 6px; ${s.kalan_tutar > 0 ? 'color:#b45309; font-weight:bold;' : 'color:#15803d;'}"
+            >
+              ${s.kalan_tutar > 0 ? html`${s.kalan_tutar.toFixed(2)} AZN<br /><small>ALINACAQ</small>` : 'ÖDƏNİLİB'}
+            </td>
+            <td style="padding: 6px 6px;">
+              <span style="font-size:10px; background:#f1f5f9; padding:2px 4px; border-radius:3px;"
+                >${getLojistikEtiketi(s.lojistik_durumu).label}</span
+              >
+              ${s.uluslararasi_kargo_kodu ? html`<br /><code style="font-size:10px; color:#1d4ed8;">${s.uluslararasi_kargo_kodu}</code>` : ''}
+            </td>
+            <td style="padding: 6px 6px; font-size:10px;">
+              ${s.ozel_not ? html`<div>📌 ${s.ozel_not}</div>` : ''}
+              ${s.baku_tahsilat_notu ? html`<div style="color:#92400e;">💬 ${s.baku_tahsilat_notu}</div>` : ''}
+            </td>
+          </tr>
+        `
+      );
 
-      const content = `
+      const content = html`
         <!DOCTYPE html>
         <html>
-        <head>
-          <title>Kargo Manifestosu - KNB Lojistik</title>
-          <style>
-            @page { size: landscape; margin: 12mm; }
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 10px; font-size: 11px; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
-            .title { font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: -0.5px; }
-            .meta { font-size: 11px; color: #475569; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-            th { background-color: #0f172a; color: #ffffff; text-align: left; padding: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-            td { border-bottom: 1px solid #e2e8f0; vertical-align: top; }
-            tr:nth-child(even) td { background-color: #f8fafc; }
-            .footer { margin-top: 15px; padding-top: 8px; border-top: 1px solid #cbd5e1; display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <div class="title">KNB Lojistik — Kanada ➔ Bakı Kargo Manifestosu</div>
-              <div class="meta">Marşrut: Toronto / Vancouver ➔ Heydər Əliyev Beynəlxalq Hava Limanı (GYD)</div>
+          <head>
+            <title>Kargo Manifestosu - KNB Lojistik</title>
+            <style>
+              @page {
+                size: landscape;
+                margin: 12mm;
+              }
+              body {
+                font-family:
+                  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+                  sans-serif;
+                color: #0f172a;
+                margin: 0;
+                padding: 10px;
+                font-size: 11px;
+              }
+              .header {
+                display: flex;
+                justify-content: space-between;
+                border-bottom: 2px solid #0f172a;
+                padding-bottom: 8px;
+                margin-bottom: 12px;
+              }
+              .title {
+                font-size: 16px;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: -0.5px;
+              }
+              .meta {
+                font-size: 11px;
+                color: #475569;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 8px;
+              }
+              th {
+                background-color: #0f172a;
+                color: #ffffff;
+                text-align: left;
+                padding: 6px;
+                font-size: 10px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              td {
+                border-bottom: 1px solid #e2e8f0;
+                vertical-align: top;
+              }
+              tr:nth-child(even) td {
+                background-color: #f8fafc;
+              }
+              .footer {
+                margin-top: 15px;
+                padding-top: 8px;
+                border-top: 1px solid #cbd5e1;
+                display: flex;
+                justify-content: space-between;
+                font-size: 11px;
+                font-weight: bold;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div>
+                <div class="title">KNB Lojistik — Kanada ➔ Bakı Kargo Manifestosu</div>
+                <div class="meta">
+                  Marşrut: Toronto / Vancouver ➔ Heydər Əliyev Beynəlxalq Hava Limanı (GYD)
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <div><strong>Tarix:</strong> ${bugun}</div>
+                <div class="meta">
+                  Toplam Paket: <strong>${dahilSiparisler.length}</strong> (${toplamAdet} ədəd)
+                </div>
+              </div>
             </div>
-            <div style="text-align: right;">
-              <div><strong>Tarix:</strong> ${bugun}</div>
-              <div class="meta">Toplam Paket: <strong>${dahilSiparisler.length}</strong> (${toplamAdet} ədəd)</div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:25px; text-align:center;">#</th>
+                  <th style="width:130px;">Müştəri & Tel</th>
+                  <th style="width:120px;">Şəhər / Ünvan</th>
+                  <th>Məhsul & Xüsusiyyət</th>
+                  <th style="width:40px; text-align:center;">Say</th>
+                  <th style="width:85px; text-align:right;">Məbləğ</th>
+                  <th style="width:95px; text-align:right;">Qalıq Borc</th>
+                  <th style="width:120px;">Status / Kod</th>
+                  <th style="width:150px;">Qeyd & Təlimat</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+            <div class="footer">
+              <div>
+                Bəyannamə: Bu manifestodakı bağlamalar təhlükəsizlik və gömrük qaydalarına uyğun
+                Toronto anbarında təhvil verilmişdir.
+              </div>
+              <div>
+                <span>Toplam: ${toplamDeger.toFixed(2)} AZN</span> |
+                <span style="color:#b45309;"
+                  >Bakıda Alınacaq: ${toplamKalanBorc.toFixed(2)} AZN</span
+                >
+              </div>
             </div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width:25px; text-align:center;">#</th>
-                <th style="width:130px;">Müştəri & Tel</th>
-                <th style="width:120px;">Şəhər / Ünvan</th>
-                <th>Məhsul & Xüsusiyyət</th>
-                <th style="width:40px; text-align:center;">Say</th>
-                <th style="width:85px; text-align:right;">Məbləğ</th>
-                <th style="width:95px; text-align:right;">Qalıq Borc</th>
-                <th style="width:120px;">Status / Kod</th>
-                <th style="width:150px;">Qeyd & Təlimat</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml}
-            </tbody>
-          </table>
-          <div class="footer">
-            <div>Bəyannamə: Bu manifestodakı bağlamalar təhlükəsizlik və gömrük qaydalarına uyğun Toronto anbarında təhvil verilmişdir.</div>
-            <div>
-              <span>Toplam: ${toplamDeger.toFixed(2)} AZN</span> | 
-              <span style="color:#b45309;">Bakıda Alınacaq: ${toplamKalanBorc.toFixed(2)} AZN</span>
-            </div>
-          </div>
-        </body>
+          </body>
         </html>
       `;
 
       safePrintHtml(content, 'Kargo_Manifestosu');
     } catch (e) {
       console.error('Yazdırma xətası:', e);
-      alert('Yazdırma dialoqu açılarkən xəta baş verdi. Zəhmət olmasa PDF İndir seçimindən istifadə edin.');
+      alert(
+        'Yazdırma dialoqu açılarkən xəta baş verdi. Zəhmət olmasa PDF İndir seçimindən istifadə edin.'
+      );
     } finally {
       setYazdiriliyor(false);
     }
@@ -673,8 +800,8 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
       } else {
         metin += `   ✅ *ÖDƏNİLİB (0 AZN)*\n`;
       }
-      if (s.gumruk_fin_kodu) {
-        metin += `   🪪 FİN: ${s.gumruk_fin_kodu}\n`;
+      if (s.kanada_gumruk_fin_kodu) {
+        metin += `   🪪 FİN: ${s.kanada_gumruk_fin_kodu}\n`;
       }
       if (s.baku_kurye_adi) {
         metin += `   🛵 Kurye: ${s.baku_kurye_adi}\n`;
@@ -697,84 +824,212 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
   const handleEtiketleriYazdir = () => {
     setYazdiriliyor(true);
     try {
-      const etiketKartlari = dahilSiparisler.map((s, idx) => `
-        <div class="kargo-stiker">
-          <div class="stiker-header">
-            <div class="logo">✈️ KNB EXPRESS CARGO</div>
-            <div class="yon">KANADA ➔ BAKU / AZERBAIJAN</div>
-          </div>
-          <div class="barkod-alani">
-            <div class="barkod-cizgiler">||| | |||| | || |||| ||| || ||||</div>
-            <div class="takip-kod">${s.uluslararasi_kargo_kodu || `KNB-${String(idx + 1).padStart(4, '0')}`}</div>
-          </div>
-          <div class="alici-bolumu">
-            <div class="etiket-satir"><span class="etiket-baslik">ALICI (GÖMRÜK):</span> <strong class="alici-adi">${s.musteri_adi}</strong></div>
-            <div class="etiket-satir"><span class="etiket-baslik">FİN KODU / Ş.V:</span> <span class="vurgu-kod">${s.gumruk_fin_kodu || 'QEYD EDİLMƏYİB'}</span></div>
-            <div class="etiket-satir"><span class="etiket-baslik">TEL:</span> ${s.telefon_numarasi || '—'}</div>
-            <div class="etiket-satir"><span class="etiket-baslik">ŞƏHƏR & ÜNVAN:</span> ${s.teslimat_sehri || 'Bakı'}, ${s.teslimat_adresi || 'Mərkəzi Təhvil'}</div>
-          </div>
-          <div class="operasyon-bolumu">
-            <div class="operasyon-kurye">
-              <span class="etiket-baslik">BAKI TƏHVİL / SAHƏ KURYESİ:</span>
-              <div class="kurye-adi">🛵 ${s.baku_kurye_adi || 'Bölgə üzrə mərkəz'}</div>
+      const etiketKartlari = dahilSiparisler.map(
+        (s, idx) => html`
+          <div class="kargo-stiker">
+            <div class="stiker-header">
+              <div class="logo">✈️ KNB EXPRESS CARGO</div>
+              <div class="yon">KANADA ➔ BAKU / AZERBAIJAN</div>
             </div>
-            <div class="tahsilat-kutu ${s.kalan_tutar > 0 ? 'borclu' : 'odendi'}">
-              <span class="etiket-baslik">BAKIDA TƏHVİLDƏ:</span>
-              <div class="tahsilat-mebleg">
-                ${s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN (ALINACAQ)` : 'TAM ÖDƏNİLİB'}
+            <div class="barkod-alani">
+              <div class="barkod-cizgiler">||| | |||| | || |||| ||| || ||||</div>
+              <div class="takip-kod">
+                ${s.uluslararasi_kargo_kodu || `KNB-${String(idx + 1).padStart(4, '0')}`}
               </div>
             </div>
+            <div class="alici-bolumu">
+              <div class="etiket-satir">
+                <span class="etiket-baslik">ALICI (GÖMRÜK):</span>
+                <strong class="alici-adi">${s.musteri_adi}</strong>
+              </div>
+              <div class="etiket-satir">
+                <span class="etiket-baslik">FİN KODU / Ş.V:</span>
+                <span class="vurgu-kod">${s.kanada_gumruk_fin_kodu || 'QEYD EDİLMƏYİB'}</span>
+              </div>
+              <div class="etiket-satir">
+                <span class="etiket-baslik">TEL:</span> ${s.telefon_numarasi || '—'}
+              </div>
+              <div class="etiket-satir">
+                <span class="etiket-baslik">ŞƏHƏR & ÜNVAN:</span> ${s.teslimat_sehri || 'Bakı'},
+                ${s.teslimat_adresi || 'Mərkəzi Təhvil'}
+              </div>
+            </div>
+            <div class="operasyon-bolumu">
+              <div class="operasyon-kurye">
+                <span class="etiket-baslik">BAKI TƏHVİL / SAHƏ KURYESİ:</span>
+                <div class="kurye-adi">🛵 ${s.baku_kurye_adi || 'Bölgə üzrə mərkəz'}</div>
+              </div>
+              <div class="tahsilat-kutu ${s.kalan_tutar > 0 ? 'borclu' : 'odendi'}">
+                <span class="etiket-baslik">BAKIDA TƏHVİLDƏ:</span>
+                <div class="tahsilat-mebleg">
+                  ${s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN (ALINACAQ)` : 'TAM ÖDƏNİLİB'}
+                </div>
+              </div>
+            </div>
+            <div class="mehsul-qeyd">
+              <div>
+                <strong>Məhsul:</strong> ${s.urun_aciklamasi} (${s.adet || 1} əd)
+                ${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}
+              </div>
+              ${s.ozel_not ? html`<div class="not">Not: ${s.ozel_not}</div>` : ''}
+            </div>
           </div>
-          <div class="mehsul-qeyd">
-            <div><strong>Məhsul:</strong> ${s.urun_aciklamasi} (${s.adet || 1} əd) ${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}</div>
-            ${s.ozel_not ? `<div class="not">Not: ${s.ozel_not}</div>` : ''}
-          </div>
-        </div>
-      `).join('');
+        `
+      );
 
-      const html = `
+      const sayfa = html`
         <!DOCTYPE html>
         <html>
-        <head>
-          <title>KNB Kargo Paket Stikerləri</title>
-          <style>
-            @page { size: portrait; margin: 8mm; }
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; color: #0f172a; }
-            .stiker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-            .kargo-stiker { border: 2px solid #0f172a; border-radius: 8px; padding: 10px; page-break-inside: avoid; background: #fff; box-sizing: border-box; }
-            .stiker-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 4px; margin-bottom: 6px; }
-            .logo { font-weight: 900; font-size: 11px; letter-spacing: 0.5px; }
-            .yon { font-weight: bold; font-size: 9px; color: #1e3a8a; }
-            .barkod-alani { text-align: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px; margin-bottom: 6px; }
-            .barkod-cizgiler { font-family: monospace; font-size: 14px; letter-spacing: 2px; font-weight: bold; }
-            .takip-kod { font-family: monospace; font-size: 11px; font-weight: 800; color: #0f172a; }
-            .alici-bolumu { font-size: 10px; line-height: 1.4; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 6px; }
-            .alici-adi { font-size: 12px; color: #0f172a; }
-            .etiket-satir { margin-bottom: 2px; }
-            .etiket-baslik { font-size: 8.5px; font-weight: 700; color: #64748b; }
-            .vurgu-kod { font-family: monospace; font-weight: bold; background: #fef08a; padding: 1px 4px; border-radius: 3px; }
-            .operasyon-bolumu { display: flex; justify-content: space-between; gap: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 6px; }
-            .operasyon-kurye { flex: 1; font-size: 9.5px; }
-            .kurye-adi { font-weight: 800; color: #1e293b; margin-top: 1px; }
-            .tahsilat-kutu { padding: 4px 6px; border-radius: 4px; text-align: right; min-width: 100px; }
-            .tahsilat-kutu.borclu { background: #fef2f2; border: 1px solid #f87171; }
-            .tahsilat-kutu.odendi { background: #f0fdf4; border: 1px solid #4ade80; }
-            .tahsilat-mebleg { font-weight: 900; font-size: 11px; }
-            .tahsilat-kutu.borclu .tahsilat-mebleg { color: #b91c1c; }
-            .tahsilat-kutu.odendi .tahsilat-mebleg { color: #15803d; }
-            .mehsul-qeyd { font-size: 9px; color: #334155; line-height: 1.3; }
-            .not { color: #d97706; font-style: italic; margin-top: 2px; }
-          </style>
-        </head>
-        <body>
-          <div class="stiker-grid">
-            ${etiketKartlari}
-          </div>
-        </body>
+          <head>
+            <title>KNB Kargo Paket Stikerləri</title>
+            <style>
+              @page {
+                size: portrait;
+                margin: 8mm;
+              }
+              body {
+                font-family:
+                  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+                  sans-serif;
+                margin: 0;
+                padding: 0;
+                color: #0f172a;
+              }
+              .stiker-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+              }
+              .kargo-stiker {
+                border: 2px solid #0f172a;
+                border-radius: 8px;
+                padding: 10px;
+                page-break-inside: avoid;
+                background: #fff;
+                box-sizing: border-box;
+              }
+              .stiker-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 2px solid #0f172a;
+                padding-bottom: 4px;
+                margin-bottom: 6px;
+              }
+              .logo {
+                font-weight: 900;
+                font-size: 11px;
+                letter-spacing: 0.5px;
+              }
+              .yon {
+                font-weight: bold;
+                font-size: 9px;
+                color: #1e3a8a;
+              }
+              .barkod-alani {
+                text-align: center;
+                border-bottom: 1px dashed #cbd5e1;
+                padding-bottom: 6px;
+                margin-bottom: 6px;
+              }
+              .barkod-cizgiler {
+                font-family: monospace;
+                font-size: 14px;
+                letter-spacing: 2px;
+                font-weight: bold;
+              }
+              .takip-kod {
+                font-family: monospace;
+                font-size: 11px;
+                font-weight: 800;
+                color: #0f172a;
+              }
+              .alici-bolumu {
+                font-size: 10px;
+                line-height: 1.4;
+                border-bottom: 1px solid #e2e8f0;
+                padding-bottom: 6px;
+                margin-bottom: 6px;
+              }
+              .alici-adi {
+                font-size: 12px;
+                color: #0f172a;
+              }
+              .etiket-satir {
+                margin-bottom: 2px;
+              }
+              .etiket-baslik {
+                font-size: 8.5px;
+                font-weight: 700;
+                color: #64748b;
+              }
+              .vurgu-kod {
+                font-family: monospace;
+                font-weight: bold;
+                background: #fef08a;
+                padding: 1px 4px;
+                border-radius: 3px;
+              }
+              .operasyon-bolumu {
+                display: flex;
+                justify-content: space-between;
+                gap: 6px;
+                border-bottom: 1px solid #e2e8f0;
+                padding-bottom: 6px;
+                margin-bottom: 6px;
+              }
+              .operasyon-kurye {
+                flex: 1;
+                font-size: 9.5px;
+              }
+              .kurye-adi {
+                font-weight: 800;
+                color: #1e293b;
+                margin-top: 1px;
+              }
+              .tahsilat-kutu {
+                padding: 4px 6px;
+                border-radius: 4px;
+                text-align: right;
+                min-width: 100px;
+              }
+              .tahsilat-kutu.borclu {
+                background: #fef2f2;
+                border: 1px solid #f87171;
+              }
+              .tahsilat-kutu.odendi {
+                background: #f0fdf4;
+                border: 1px solid #4ade80;
+              }
+              .tahsilat-mebleg {
+                font-weight: 900;
+                font-size: 11px;
+              }
+              .tahsilat-kutu.borclu .tahsilat-mebleg {
+                color: #b91c1c;
+              }
+              .tahsilat-kutu.odendi .tahsilat-mebleg {
+                color: #15803d;
+              }
+              .mehsul-qeyd {
+                font-size: 9px;
+                color: #334155;
+                line-height: 1.3;
+              }
+              .not {
+                color: #d97706;
+                font-style: italic;
+                margin-top: 2px;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="stiker-grid">${etiketKartlari}</div>
+          </body>
         </html>
       `;
 
-      safePrintHtml(html, 'Kargo_Etiketleri');
+      safePrintHtml(sayfa, 'Kargo_Etiketleri');
     } catch (e) {
       console.error('Etiket yazdırma xətası:', e);
       alert('Etiket çap dialoqu açılarkən xəta baş verdi.');
@@ -801,7 +1056,8 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-1">
-              Hava kargo şirkəti, gömrük bəyannaməsi və Bakı təhvil-paylanış anbarı üçün tam genişlikdə idarəetmə cədvəli
+              Hava kargo şirkəti, gömrük bəyannaməsi və Bakı təhvil-paylanış anbarı üçün tam
+              genişlikdə idarəetmə cədvəli
             </p>
           </div>
         </div>
@@ -855,11 +1111,12 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
           <button
             type="button"
             onClick={excelIndir}
+            disabled={excelHazirlaniyor}
             title="Excel (.xlsx)"
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>{t.excelIndir}</span>
+            <span>{excelHazirlaniyor ? 'Hazırlanır...' : t.excelIndir}</span>
           </button>
 
           <button
@@ -932,6 +1189,17 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         </div>
       )}
 
+      {ManifestEslestirmePaneli && awbManifest && (
+        <Suspense fallback={<div className="text-xs text-slate-500">Yüklənir...</div>}>
+          <ManifestEslestirmePaneli
+            dosyaBase64={awbManifest.base64}
+            dosyaAdi={awbManifest.ad}
+            onKapat={() => setAwbManifest(null)}
+            onOnaylandi={() => siparisleriYukle()}
+          />
+        </Suspense>
+      )}
+
       {/* 2. Dörtlü Canlı İstatistik Kartları */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5">
@@ -941,7 +1209,8 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
           <div>
             <div className="text-xs font-semibold text-slate-500">Toplam Bağlama</div>
             <div className="text-xl font-extrabold text-slate-900">
-              {dahilSiparisler.length} <span className="text-xs font-normal text-slate-500">paket</span>
+              {dahilSiparisler.length}{' '}
+              <span className="text-xs font-normal text-slate-500">paket</span>
             </div>
           </div>
         </div>
@@ -965,7 +1234,8 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
           <div>
             <div className="text-xs font-semibold text-slate-500">Sifariş Dəyəri</div>
             <div className="text-xl font-extrabold text-slate-900">
-              {toplamDeger.toFixed(2)} <span className="text-xs font-normal text-slate-500">AZN</span>
+              {toplamDeger.toFixed(2)}{' '}
+              <span className="text-xs font-normal text-slate-500">AZN</span>
             </div>
           </div>
         </div>
@@ -977,7 +1247,8 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
           <div>
             <div className="text-xs font-bold text-amber-900">Bakıda Təhsilat (Borc)</div>
             <div className="text-xl font-extrabold text-amber-700">
-              {toplamKalanBorc.toFixed(2)} <span className="text-xs font-normal text-amber-900">AZN</span>
+              {toplamKalanBorc.toFixed(2)}{' '}
+              <span className="text-xs font-normal text-amber-900">AZN</span>
             </div>
           </div>
         </div>
@@ -1001,7 +1272,15 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                   : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
               }`}
             >
-              ✈️ Yoldakı & Depodakı ({siparisler.filter(s => ['KANADA_DEPO', 'ULUSLARARASI_KARGO', 'BAKU_DAGITIM_ARKADAS'].includes(s.lojistik_durumu)).length})
+              ✈️ Yoldakı & Depodakı (
+              {
+                siparisler.filter((s) =>
+                  ['KANADA_DEPO', 'ULUSLARARASI_KARGO', 'BAKU_DAGITIM_ARKADAS'].includes(
+                    s.lojistik_durumu
+                  )
+                ).length
+              }
+              )
             </button>
             <button
               type="button"
@@ -1012,7 +1291,8 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                   : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
               }`}
             >
-              Yalnız Uçuşda ({siparisler.filter(s => s.lojistik_durumu === 'ULUSLARARASI_KARGO').length})
+              Yalnız Uçuşda (
+              {siparisler.filter((s) => s.lojistik_durumu === 'ULUSLARARASI_KARGO').length})
             </button>
             <button
               type="button"
@@ -1023,7 +1303,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                   : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
               }`}
             >
-              Kanada Depo ({siparisler.filter(s => s.lojistik_durumu === 'KANADA_DEPO').length})
+              Kanada Depo ({siparisler.filter((s) => s.lojistik_durumu === 'KANADA_DEPO').length})
             </button>
             <button
               type="button"
@@ -1034,7 +1314,8 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                   : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
               }`}
             >
-              Bakı Paylanış ({siparisler.filter(s => s.lojistik_durumu === 'BAKU_DAGITIM_ARKADAS').length})
+              Bakı Paylanış (
+              {siparisler.filter((s) => s.lojistik_durumu === 'BAKU_DAGITIM_ARKADAS').length})
             </button>
             <button
               type="button"
@@ -1083,7 +1364,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                 type="button"
                 onClick={() => handleTarihPresetSec('hepsi')}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
-                  tarihPreset === 'hepsi' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'
+                  tarihPreset === 'hepsi'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:bg-white'
                 }`}
               >
                 Bütün Vaxtlar
@@ -1092,7 +1375,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                 type="button"
                 onClick={() => handleTarihPresetSec('bugun')}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
-                  tarihPreset === 'bugun' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'
+                  tarihPreset === 'bugun'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:bg-white'
                 }`}
               >
                 Bu Gün
@@ -1101,7 +1386,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                 type="button"
                 onClick={() => handleTarihPresetSec('son7gun')}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
-                  tarihPreset === 'son7gun' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'
+                  tarihPreset === 'son7gun'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:bg-white'
                 }`}
               >
                 Son 7 Gün
@@ -1110,7 +1397,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                 type="button"
                 onClick={() => handleTarihPresetSec('buay')}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
-                  tarihPreset === 'buay' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-white'
+                  tarihPreset === 'buay'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:bg-white'
                 }`}
               >
                 Bu Ay
@@ -1189,7 +1478,12 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
               )}
             </div>
 
-            {(lojistikFiltre !== 'kargo_ve_depo' || finansFiltre !== 'tumu' || sehirFiltre !== 'tumu' || baslangicTarih || bitisTarih || aramaMetni) && (
+            {(lojistikFiltre !== 'kargo_ve_depo' ||
+              finansFiltre !== 'tumu' ||
+              sehirFiltre !== 'tumu' ||
+              baslangicTarih ||
+              bitisTarih ||
+              aramaMetni) && (
               <button
                 type="button"
                 onClick={filtreleriSifirla}
@@ -1215,11 +1509,15 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
               </span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Marşrut: Toronto / Vancouver (Kanada) ➔ Heydər Əliyev Beynəlxalq Hava Limanı (GYD / Bakı)
+              Marşrut: Toronto / Vancouver (Kanada) ➔ Heydər Əliyev Beynəlxalq Hava Limanı (GYD /
+              Bakı)
             </p>
           </div>
           <div className="text-xs text-slate-500 text-right">
-            <div>Tarix: <strong className="text-slate-800">{new Date().toLocaleDateString('az-AZ')}</strong></div>
+            <div>
+              Tarix:{' '}
+              <strong className="text-slate-800">{new Date().toLocaleDateString('az-AZ')}</strong>
+            </div>
             {baslangicTarih || bitisTarih ? (
               <div className="text-blue-700 font-semibold text-[11px]">
                 Filtr Aralığı: {baslangicTarih || 'Əvvəl'} ➔ {bitisTarih || 'İndiyədək'}
@@ -1233,7 +1531,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         {dahilSiparisler.length === 0 ? (
           <div className="text-center py-20 text-slate-400 text-xs bg-slate-50/50">
             <Package className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-            <div className="font-bold text-slate-700 text-base">Seçilmiş filtrə uyğun bağlama tapılmadı.</div>
+            <div className="font-bold text-slate-700 text-base">
+              Seçilmiş filtrə uyğun bağlama tapılmadı.
+            </div>
             <p className="text-slate-500 mt-1 max-w-md mx-auto">
               Tarix aralığını, lojistik mərhələni və ya arama sözünü dəyişdirərək təkrar yoxlayın.
             </p>
@@ -1273,8 +1573,12 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                         {index + 1}
                       </td>
                       <td className="p-3">
-                        <div className="font-bold text-slate-900 text-sm">{s.musteri_adi || 'Adsız Müştəri'}</div>
-                        <div className="text-xs text-slate-500 font-mono mt-0.5">{s.telefon_numarasi || 'Nömrə yoxdur'}</div>
+                        <div className="font-bold text-slate-900 text-sm">
+                          {s.musteri_adi || 'Adsız Müştəri'}
+                        </div>
+                        <div className="text-xs text-slate-500 font-mono mt-0.5">
+                          {s.telefon_numarasi || 'Nömrə yoxdur'}
+                        </div>
                         {s.olusturma_tarihi && (
                           <div className="text-[10px] text-slate-400 mt-0.5">
                             Qeyd: {s.olusturma_tarihi.slice(0, 10)}
@@ -1291,7 +1595,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                         </div>
                       </td>
                       <td className="p-3">
-                        <div className="font-medium text-slate-900 text-xs sm:text-sm">{s.urun_aciklamasi}</div>
+                        <div className="font-medium text-slate-900 text-xs sm:text-sm">
+                          {s.urun_aciklamasi}
+                        </div>
                         <div className="text-xs text-slate-500 mt-0.5">
                           {[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}
                         </div>
@@ -1313,7 +1619,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                             <div className="font-extrabold text-amber-800 text-xs sm:text-sm">
                               {s.kalan_tutar.toFixed(2)} {s.para_birimi || 'AZN'}
                             </div>
-                            <div className="text-[9px] font-bold text-amber-700 uppercase">Bakıda Alınacaq</div>
+                            <div className="text-[9px] font-bold text-amber-700 uppercase">
+                              Bakıda Alınacaq
+                            </div>
                           </div>
                         ) : (
                           <span className="text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 inline-block text-xs">
@@ -1323,12 +1631,14 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                       </td>
                       <td className="p-3">
                         <div className="text-xs">
-                          {s.gumruk_fin_kodu ? (
+                          {s.kanada_gumruk_fin_kodu ? (
                             <div className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md inline-block border border-slate-200">
-                              🪪 {s.gumruk_fin_kodu}
+                              🪪 {s.kanada_gumruk_fin_kodu}
                             </div>
                           ) : (
-                            <span className="text-[10px] text-slate-400 italic">FİN qeyd yoxdur</span>
+                            <span className="text-[10px] text-slate-400 italic">
+                              FİN qeyd yoxdur
+                            </span>
                           )}
                         </div>
                         <div className="text-xs text-slate-700 font-medium mt-1 flex items-center gap-1">
@@ -1337,7 +1647,9 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
                         </div>
                       </td>
                       <td className="p-3">
-                        <span className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border inline-block ${lojRozet.color}`}>
+                        <span
+                          className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border inline-block ${lojRozet.color}`}
+                        >
                           {lojRozet.label}
                         </span>
                         {s.uluslararasi_kargo_kodu && (
@@ -1393,12 +1705,19 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         <div className="p-4 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4 text-xs">
           <div className="text-slate-600 max-w-lg">
             <strong className="text-slate-800">Rəsmi Bəyannamə: </strong>
-            Bu manifestodakı bütün bağlamalar təhlükəsizlik və gömrük qaydalarına uyğun Toronto anbarında təhvil verilmiş və qeydiyyata alınmışdır.
+            Bu manifestodakı bütün bağlamalar təhlükəsizlik və gömrük qaydalarına uyğun Toronto
+            anbarında təhvil verilmiş və qeydiyyata alınmışdır.
           </div>
           <div className="flex flex-wrap items-center gap-3 font-bold text-slate-900 bg-white px-3.5 py-2 rounded-xl border border-slate-200 shadow-2xs">
-            <span>Toplam Bağlama: <span className="text-blue-600">{dahilSiparisler.length}</span></span>
-            <span>Toplam Ədəd: <span className="text-purple-600">{toplamAdet}</span></span>
-            <span>Cəmi Məbləğ: <span className="text-emerald-600">{toplamDeger.toFixed(2)} AZN</span></span>
+            <span>
+              Toplam Bağlama: <span className="text-blue-600">{dahilSiparisler.length}</span>
+            </span>
+            <span>
+              Toplam Ədəd: <span className="text-purple-600">{toplamAdet}</span>
+            </span>
+            <span>
+              Cəmi Məbləğ: <span className="text-emerald-600">{toplamDeger.toFixed(2)} AZN</span>
+            </span>
             <span className="text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200">
               Bakıda Alınacaq: {toplamKalanBorc.toFixed(2)} AZN
             </span>

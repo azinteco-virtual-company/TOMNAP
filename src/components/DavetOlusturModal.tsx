@@ -1,6 +1,26 @@
+import { apiFetch } from '../lib/apiClient';
 import React, { useState } from 'react';
-import { X, UserPlus, Copy, Check, Share2, Shield, Users, AlertCircle, Loader2, Mail, CheckCircle2, User } from 'lucide-react';
+import {
+  X,
+  UserPlus,
+  Copy,
+  Check,
+  Share2,
+  Shield,
+  Users,
+  AlertCircle,
+  Loader2,
+  Mail,
+  CheckCircle2,
+  User,
+} from 'lucide-react';
 import { FirmaTenant, KullaniciRolu } from '../types';
+import {
+  VARSAYILAN_ROL_LIMITLERI,
+  ekipRoluMu,
+  ilkKullaniciSayilari,
+  rolKotasi,
+} from '../shared/roller';
 
 interface DavetOlusturModalProps {
   acik: boolean;
@@ -24,23 +44,12 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
 
   if (!acik || !seciliFirma) return null;
 
-  const rolLimitleri = seciliFirma.rolLimitleri || {
-    PATRON: 1,
-    KANADA_SATINALMA: 2,
-    SATIS_SORUMLUSU: 4,
-    BAKU_FINANS: 2,
-    BAKU_KURYE: 10,
-  };
+  const rolLimitleri = seciliFirma.rolLimitleri || VARSAYILAN_ROL_LIMITLERI;
 
-  const aktifSayilar = seciliFirma.aktifKullaniciSayilari || {
-    PATRON: 1,
-    KANADA_SATINALMA: 0,
-    SATIS_SORUMLUSU: 0,
-    BAKU_FINANS: 0,
-    BAKU_KURYE: 0,
-  };
+  const aktifSayilar = seciliFirma.aktifKullaniciSayilari || ilkKullaniciSayilari();
 
-  const limit = (rolLimitleri as any)[seciliRol] || 5;
+  // Sunucudaki kota kontrolüyle aynı kural: eksik anahtar rolKotasi ile varsayılana düşer.
+  const limit = ekipRoluMu(seciliRol) ? rolKotasi(rolLimitleri, seciliRol) : 0;
   const movcud = (aktifSayilar as any)[seciliRol] || 0;
   const qalanYer = Math.max(0, limit - movcud);
 
@@ -48,7 +57,7 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
     setHata(null);
     setYukleniyor(true);
     try {
-      const res = await fetch('/api/firmalar/davet-olustur', {
+      const res = await apiFetch('/api/firmalar/davet-olustur', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -179,6 +188,22 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  setSeciliRol('ABD_SATINALMA');
+                  setDavetUrl(null);
+                }}
+                className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                  seciliRol === 'ABD_SATINALMA'
+                    ? 'bg-indigo-600 border-indigo-500 text-white font-bold'
+                    : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <div>ABD Satınalma</div>
+                <div className="text-[10px] opacity-80 mt-0.5">ABD alışı və anbar qəbulu</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
                   setSeciliRol('BAKU_FINANS');
                   setDavetUrl(null);
                 }}
@@ -237,7 +262,9 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
               <span className="font-bold text-white">
                 {movcud} / {limit} istifadədə
               </span>
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${qalanYer > 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+              <span
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${qalanYer > 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}
+              >
                 {qalanYer} boş yer
               </span>
             </div>
@@ -261,7 +288,9 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
               ) : (
                 <>
                   <UserPlus className="w-4 h-4" />
-                  <span>{email.trim() ? 'E-poçt ilə Dəvət Göndər & Link Yarat' : 'Dəvət Linki Yarat'}</span>
+                  <span>
+                    {email.trim() ? 'E-poçt ilə Dəvət Göndər & Link Yarat' : 'Dəvət Linki Yarat'}
+                  </span>
                 </>
               )}
             </button>
@@ -270,20 +299,24 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
               {emailGonderildi && (
                 <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                  <span>Dəvət və şifrə təyini məktubu <strong>{email}</strong> ünvanına göndərildi!</span>
+                  <span>
+                    Dəvət və şifrə təyini məktubu <strong>{email}</strong> ünvanına göndərildi!
+                  </span>
                 </div>
               )}
               <div className="p-2.5 rounded-xl bg-slate-950 border border-indigo-500/50 flex items-center justify-between gap-2 text-xs">
-                <span className="text-slate-300 truncate font-mono text-[11px]">
-                  {davetUrl}
-                </span>
+                <span className="text-slate-300 truncate font-mono text-[11px]">{davetUrl}</span>
                 <button
                   type="button"
                   onClick={handleKopyala}
                   className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors cursor-pointer shrink-0"
                   title="Linki Kopyala"
                 >
-                  {kopyalandi ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {kopyalandi ? (
+                    <Check className="w-3.5 h-3.5" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
                 </button>
               </div>
 
@@ -293,7 +326,11 @@ export const DavetOlusturModal: React.FC<DavetOlusturModalProps> = ({
                   onClick={handleKopyala}
                   className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  {kopyalandi ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {kopyalandi ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
                   <span>{kopyalandi ? 'Kopyalandı!' : 'Linki Kopyala'}</span>
                 </button>
 

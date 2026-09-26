@@ -6,6 +6,14 @@ describe('useAppStore (Zustand State Management)', () => {
   beforeEach(() => {
     // Reset store to known state
     useAppStore.setState({
+      session: {
+        id: 'test-user',
+        adSoyad: 'Test',
+        email: 'test@example.test',
+        rol: 'PATRON',
+        tenantId: 'test-tenant',
+      },
+      sessionStatus: 'authenticated',
       siparisler: [],
       firmalar: [],
       seciliFirmaId: 'all',
@@ -71,6 +79,8 @@ describe('useAppStore (Zustand State Management)', () => {
       alinan_tutar: 200,
       kalan_tutar: 0,
       finans_durumu: 'ODENDI',
+      guncellenme_tarihi: '2026-09-17T12:34:56.000Z',
+      kurye_atama_surumu: 3,
     });
 
     const guncel = useAppStore.getState().siparisler.find((s) => s.id === 'sip-test-102');
@@ -78,7 +88,8 @@ describe('useAppStore (Zustand State Management)', () => {
     expect(guncel?.lojistik_durumu).toBe('TESLIM_EDILDI');
     expect(guncel?.finans_durumu).toBe('ODENDI');
     expect(guncel?.alinan_tutar).toBe(200);
-    expect(guncel?.guncellenme_tarihi).toBeDefined();
+    expect(guncel?.guncellenme_tarihi).toBe('2026-09-17T12:34:56.000Z');
+    expect(guncel?.kurye_atama_surumu).toBe(3);
   });
 
   it('siparisSil: verilen ID li siparişi listeden kaldırmalı', () => {
@@ -124,12 +135,12 @@ describe('useAppStore (Zustand State Management)', () => {
     expect(kalan[0].id).toBe('sip-2');
   });
 
-  it('setAktifRol ve setSeciliFirmaId durumları doğru güncellemeli', () => {
-    useAppStore.getState().setAktifRol('BAKU_KURYE');
-    expect(useAppStore.getState().aktifRol).toBe('BAKU_KURYE');
-
-    useAppStore.getState().setSeciliFirmaId('tenant-baku-express');
-    expect(useAppStore.getState().seciliFirmaId).toBe('tenant-baku-express');
+  it('normal users cannot change their role or tenant', () => {
+    useAppStore.setState({ seciliFirmaId: 'test-tenant', aktifRol: 'PATRON' });
+    expect((useAppStore.getState() as any).setAktifRol).toBeUndefined();
+    useAppStore.getState().setSeciliFirmaId('another-tenant');
+    expect(useAppStore.getState().seciliFirmaId).toBe('test-tenant');
+    expect(useAppStore.getState().aktifRol).toBe('PATRON');
   });
 
   it('setBildirim ve setInboxSayisi doğru çalışmalı', () => {

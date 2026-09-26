@@ -88,7 +88,7 @@ BEGIN
 END $$;
 
 -- 6. YÜKSEK PERFORMANS VE İZOLASYON İNDEKSLERİ
--- Her tenant sorgusunu O(log N) hızına indirir ve cross-tenant sızıntılarını önler
+-- Tenant filtreli sorgular için indeksler; yetkilendirmenin yerine geçmez.
 CREATE INDEX IF NOT EXISTS idx_siparisler_tenant_id ON public.siparisler(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_siparisler_tenant_lojistik ON public.siparisler(tenant_id, lojistik_durumu);
 CREATE INDEX IF NOT EXISTS idx_siparisler_tenant_finans ON public.siparisler(tenant_id, finans_durumu);
@@ -102,25 +102,26 @@ CREATE INDEX IF NOT EXISTS idx_musteriler_tenant_harcama ON public.musteriler(te
 CREATE INDEX IF NOT EXISTS idx_kuryeler_tenant_id ON public.kuryeler(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_inbox_tenant_id ON public.inbox_mesajlar(tenant_id);
 
--- 7. ROW LEVEL SECURITY (RLS) POLİTİKALARI (OPSİYONEL VE AKTİF)
-ALTER TABLE public.siparisler ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.musteriler ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.firmalar ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.kuryeler ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inbox_mesajlar ENABLE ROW LEVEL SECURITY;
-
--- Servis Rolü ve Anon Erişimi için Varsayılan Okuma Politikaları
-CREATE POLICY "Anon ve Servis Rolü Siparişleri Okuyabilir" ON public.siparisler FOR SELECT USING (true);
-CREATE POLICY "Anon ve Servis Rolü Siparişleri Yazabilir" ON public.siparisler FOR ALL USING (true);
-
-CREATE POLICY "Anon ve Servis Rolü Müşterileri Okuyabilir" ON public.musteriler FOR SELECT USING (true);
-CREATE POLICY "Anon ve Servis Rolü Müşterileri Yazabilir" ON public.musteriler FOR ALL USING (true);
-
-CREATE POLICY "Anon ve Servis Rolü Firmaları Okuyabilir" ON public.firmalar FOR SELECT USING (true);
-CREATE POLICY "Anon ve Servis Rolü Firmaları Yazabilir" ON public.firmalar FOR ALL USING (true);
-
-CREATE POLICY "Anon ve Servis Rolü Kuryeleri Okuyabilir" ON public.kuryeler FOR SELECT USING (true);
-CREATE POLICY "Anon ve Servis Rolü Kuryeleri Yazabilir" ON public.kuryeler FOR ALL USING (true);
-
-CREATE POLICY "Anon ve Servis Rolü Inbox Okuyabilir" ON public.inbox_mesajlar FOR SELECT USING (true);
-CREATE POLICY "Anon ve Servis Rolü Inbox Yazabilir" ON public.inbox_mesajlar FOR ALL USING (true);
+DO $$
+DECLARE
+  target text;
+  old_policy record;
+  column_list text;
+BEGIN
+  FOREACH target IN ARRAY ARRAY['firmalar', 'davetler', 'kullanicilar', 'siparisler', 'musteriler', 'inbox_mesajlar', 'kuryeler', 'oturumlar'] LOOP
+    IF to_regclass(format('public.%I', target)) IS NULL THEN CONTINUE; END IF;
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', target);
+    EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', target);
+    -- Permissive policies combine with OR: remove previous allow-all policies.
+    FOR old_policy IN SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = target LOOP
+      EXECUTE format('DROP POLICY %I ON public.%I', old_policy.policyname, target);
+    END LOOP;
+    EXECUTE format('REVOKE ALL PRIVILEGES ON TABLE public.%I FROM PUBLIC, anon, authenticated', target);
+    SELECT string_agg(quote_ident(attname), ', ') INTO column_list FROM pg_attribute
+      WHERE attrelid = to_regclass(format('public.%I', target)) AND attnum > 0 AND NOT attisdropped;
+    -- Table-level REVOKE does not remove previously granted column privileges.
+    EXECUTE format('REVOKE ALL PRIVILEGES (%s) ON public.%I FROM PUBLIC, anon, authenticated', column_list, target);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO service_role', target);
+  END LOOP;
+END $$;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;
