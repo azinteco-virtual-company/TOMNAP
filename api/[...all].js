@@ -6570,6 +6570,7 @@ var ALANLAR = [
   "islem_anahtari"
 ];
 var KURUS = (value) => Math.round(value * 100);
+var DEFTER_OKUMA_DENEMESI = 3;
 function odemeDurumu(toplam, odenen) {
   if (odenen <= 0) return "ODENMEDI";
   if (KURUS(odenen) < KURUS(toplam)) return "KISMI";
@@ -6909,22 +6910,43 @@ async function v2SiparisOdemeleri(tenant2, siparisId) {
     );
   }
   const client2 = supabase;
-  const { data: baslik, error: error2 } = await client2.from("siparisler").select("id,tenant_id,model_surumu,toplam_tutar,alinan_tutar").eq("tenant_id", tenantId).eq("model_surumu", 2).eq("id", id).maybeSingle();
-  if (error2) throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
-  if (!baslik) return null;
-  const b = kayit(baslik);
-  if (b.tenant_id !== tenantId || b.id !== id)
-    throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
-  const liste = await tumSatirlar(
-    (from, to) => client2.from("odemeler").select(ODEME_KOLONLARI, { count: "exact" }).eq("tenant_id", tenantId).eq("siparis_id", id).order("olusturma_zamani", { ascending: true }).order("id", { ascending: true }).range(from, to),
-    "\xD6demeler okunamad\u0131."
-  );
-  const odemeler = liste.map((row) => odemeden(row, tenantId));
-  if (odemeler.some((o) => o.siparisId !== id))
-    throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
-  const odenen = Number(b.alinan_tutar);
-  if (!Number.isFinite(odenen)) throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
-  return defter(id, Number(b.toplam_tutar), odemeler, odenen);
+  const hata6 = () => new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
+  const baslikOku = async () => {
+    const { data, error: error2 } = await client2.from("siparisler").select("id,tenant_id,model_surumu,toplam_tutar,alinan_tutar,guncellenme_tarihi").eq("tenant_id", tenantId).eq("model_surumu", 2).eq("id", id).maybeSingle();
+    if (error2) throw hata6();
+    if (!data) return null;
+    const b = kayit(data);
+    if (b.tenant_id !== tenantId || b.id !== id) throw hata6();
+    return b;
+  };
+  const satirlariOku2 = async () => {
+    const liste = await tumSatirlar(
+      (from, to) => client2.from("odemeler").select(ODEME_KOLONLARI, { count: "exact" }).eq("tenant_id", tenantId).eq("siparis_id", id).order("olusturma_zamani", { ascending: true }).order("id", { ascending: true }).range(from, to),
+      "\xD6demeler okunamad\u0131."
+    );
+    const odemeler = liste.map((row) => odemeden(row, tenantId));
+    if (odemeler.some((o) => o.siparisId !== id)) throw hata6();
+    return odemeler;
+  };
+  let once = await baslikOku();
+  for (let deneme = 0; deneme < DEFTER_OKUMA_DENEMESI; deneme++) {
+    if (!once) return null;
+    const onceki = once;
+    const odemeler = await satirlariOku2();
+    const sonra = await baslikOku();
+    if (!sonra) return null;
+    const odenen = Number(sonra.alinan_tutar);
+    if (!Number.isFinite(odenen)) throw hata6();
+    const kipirdamadi = ["toplam_tutar", "alinan_tutar", "guncellenme_tarihi"].every(
+      (alan) => String(onceki[alan]) === String(sonra[alan])
+    );
+    const satirToplami = odemeler.reduce((kurus, o) => kurus + KURUS(o.tutarAzn), 0);
+    const tekil = new Set(odemeler.map((o) => o.id)).size === odemeler.length;
+    if (kipirdamadi && tekil && satirToplami === KURUS(odenen))
+      return defter(id, Number(sonra.toplam_tutar), odemeler, odenen);
+    once = sonra;
+  }
+  throw new PublicResourceError("\xD6demeler \u015Fu an de\u011Fi\u015Fiyor; l\xFCtfen tekrar deneyin.", 503);
 }
 
 // src/server/routes/siparisler.ts
