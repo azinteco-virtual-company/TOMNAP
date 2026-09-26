@@ -36,10 +36,9 @@ router.get('/kurye/nakit', async (req: Request, res: Response) => {
 router.post('/kurye/tahsilat', async (req: Request, res: Response) => {
   try {
     const girdi = kuryeTahsilatGirdisi(req.body);
-    res.status(201).json({
-      basarili: true,
-      ...(await kuryeTahsilatiKaydet(req.tenantId, kullanici(req), girdi)),
-    });
+    const sonuc = await kuryeTahsilatiKaydet(req.tenantId, kullanici(req), girdi);
+    // A retry of a recorded intent (same operation key) answers 200 with the first payment.
+    res.status(sonuc.tekrar ? 200 : 201).json({ basarili: true, ...sonuc });
   } catch (error) {
     hata(res, error);
   }

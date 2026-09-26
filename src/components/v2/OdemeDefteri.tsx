@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { apiFetch } from '../../lib/apiClient';
 import { useAppStore } from '../../store/appStore';
 import {
@@ -39,7 +39,15 @@ export default function OdemeDefteri({
   const kullaniciId = useAppStore((state) => state.session?.id ?? null);
   const kaynaklar = kaynakSecenekleri(aktifRol);
   const [defter, setDefter] = useState<OdemeDefteriYaniti | null>(null);
-  const [form, setForm] = useState<OdemeFormu>(() => bosOdemeFormu(kaynaklar[0]));
+  const [form, setFormState] = useState<OdemeFormu>(() => bosOdemeFormu(kaynaklar[0]));
+  // One operation key per payment intent (Codex R3 F15): a retry of the same form sends
+  // the same key, so a payment whose answer was lost is not recorded twice. Any change
+  // of the form, or a recorded payment, starts a new intent.
+  const islemAnahtari = useRef<string | null>(null);
+  const setForm = (yeni: OdemeFormu) => {
+    islemAnahtari.current = null;
+    setFormState(yeni);
+  };
   const [hatalar, setHatalar] = useState<string[]>([]);
   const [mesaj, setMesaj] = useState<string | null>(null);
   const [bekliyor, setBekliyor] = useState(false);
@@ -79,7 +87,8 @@ export default function OdemeDefteri({
 
   const kaydet = async (event: React.FormEvent) => {
     event.preventDefault();
-    const { govde, hatalar: yeni } = odemeIstegi(siparisId, form);
+    islemAnahtari.current ??= crypto.randomUUID();
+    const { govde, hatalar: yeni } = odemeIstegi(siparisId, form, islemAnahtari.current);
     setHatalar(yeni);
     if (govde && (await gonder('/api/v2/odemeler', govde, 'Ödəniş yazıldı.')))
       setForm(bosOdemeFormu(form.kaynak));

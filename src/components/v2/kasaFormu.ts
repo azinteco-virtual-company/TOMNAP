@@ -52,13 +52,23 @@ export function teslimIstegi(
 /** POST /api/v2/kurye/tahsilat body: more than 0, at most the amount due. */
 export function kuryeTahsilatIstegi(
   siparis: KuryeSiparisi,
-  tutar: string
+  tutar: string,
+  /** One key per collection intent; a retry sends the same one (Codex R3 F15). */
+  islemAnahtari?: string
 ):
-  { govde: { siparis_id: string; tutar_azn: number }; hata: null } | { govde: null; hata: string } {
+  | { govde: { siparis_id: string; tutar_azn: number; islem_anahtari?: string }; hata: null }
+  | { govde: null; hata: string } {
   const deger = sayiOku(tutar);
   if (!Number.isFinite(deger) || deger <= 0 || Math.round(deger * 100) / 100 !== deger)
     return { govde: null, hata: 'Məbləğ 0-dan böyük, ən çox 2 onluq olmalıdır.' };
   if (Math.round(deger * 100) > Math.round(siparis.kalanTutar * 100))
     return { govde: null, hata: `Ən çox ${siparis.kalanTutar.toFixed(2)} AZN yazıla bilər.` };
-  return { govde: { siparis_id: siparis.id, tutar_azn: deger }, hata: null };
+  return {
+    govde: {
+      siparis_id: siparis.id,
+      tutar_azn: deger,
+      ...(islemAnahtari ? { islem_anahtari: islemAnahtari } : {}),
+    },
+    hata: null,
+  };
 }

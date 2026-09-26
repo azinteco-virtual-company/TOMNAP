@@ -31,6 +31,8 @@ export interface V2OdemeGirdisi {
   kaynak: (typeof ELLE_KAYNAKLAR)[number];
   almaZamani: string | null;
   aciklama: string | null;
+  /** One payment intent (Codex R3 F15): a retry with the same key records nothing new. */
+  islemAnahtari: string | null;
 }
 export interface V2Odeme {
   id: string;
@@ -61,7 +63,15 @@ export interface V2OdemeDefteri {
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const ODEME_KOLONLARI =
   'id,tenant_id,siparis_id,tutar_azn,yontem,kaynak,alan_kullanici_id,alma_zamani,kaydeden_kullanici_id,aciklama,ters_kayit_odeme_id,kasa_teslim_id,olusturma_zamani';
-const ALANLAR = ['siparis_id', 'tutar_azn', 'yontem', 'kaynak', 'alma_zamani', 'aciklama'] as const;
+const ALANLAR = [
+  'siparis_id',
+  'tutar_azn',
+  'yontem',
+  'kaynak',
+  'alma_zamani',
+  'aciklama',
+  'islem_anahtari',
+] as const;
 const KURUS = (value: number) => Math.round(value * 100);
 
 /** Payment status from the ledger total (spec §4): stored nowhere, always derived. */
@@ -83,6 +93,14 @@ function metin(value: unknown, alan: string, sinir: number): string | null {
   if (temiz.length > sinir)
     throw new PublicResourceError(`${alan} en fazla ${sinir} karakter.`, 400);
   return temiz || null;
+}
+
+/** Operation key of one payment intent (Codex R3 F15): the client's UUID, optional. */
+export function islemAnahtariOku(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !UUID.test(value))
+    throw new PublicResourceError('İşlem anahtarı geçersiz.', 400);
+  return value.toLowerCase();
 }
 
 /** Validates a payment; tenant, receiver and recorder always come from the session. */
@@ -122,6 +140,7 @@ export function v2OdemeGirdisiniDogrula(body: unknown, simdi = new Date()): V2Od
     kaynak: alanlar.kaynak as V2OdemeGirdisi['kaynak'],
     almaZamani,
     aciklama: metin(alanlar.aciklama, 'Açıklama', 500),
+    islemAnahtari: islemAnahtariOku(alanlar.islem_anahtari),
   };
 }
 
@@ -172,17 +191,21 @@ function odemeden(value: unknown, tenantId: string): V2Odeme {
   };
 }
 
+function ozetOlustur(siparisId: string, toplam: number, odenen: number): V2OdemeOzeti {
+  return {
+    siparisId,
+    toplamTutar: toplam,
+    odenenTutar: odenen,
+    kalanTutar: (KURUS(toplam) - KURUS(odenen)) / 100,
+    durum: odemeDurumu(toplam, odenen),
+  };
+}
+
 function defter(siparisId: string, toplam: number, odemeler: V2Odeme[]): V2OdemeDefteri {
   const odenen = odemeler.reduce((kurus, o) => kurus + KURUS(o.tutarAzn), 0) / 100;
   const tersler = new Set(odemeler.map((o) => o.tersKayitOdemeId).filter(Boolean));
   return {
-    ozet: {
-      siparisId,
-      toplamTutar: toplam,
-      odenenTutar: odenen,
-      kalanTutar: (KURUS(toplam) - KURUS(odenen)) / 100,
-      durum: odemeDurumu(toplam, odenen),
-    },
+    ozet: ozetOlustur(siparisId, toplam, odenen),
     odemeler: odemeler.map((o) => ({ ...o, tersKaydiVar: tersler.has(o.id) })),
   };
 }
@@ -192,6 +215,7 @@ function defter(siparisId: string, toplam: number, odemeler: V2Odeme[]): V2Odeme
 
 interface BellekOdemesi extends V2Odeme {
   tenantId: string;
+  islemAnahtari?: string | null;
 }
 const odemeBellegi: BellekOdemesi[] = [];
 const bellekModu = (tenantId: string) => !supabase || tenantId === 'demo_sandbox';
@@ -230,8 +254,29 @@ function bellekteYaz(tenantId: string, odeme: BellekOdemesi, siparis: Record<str
     finans_durumu: eskiFinansDurumu(toplam, odenen),
     guncellenme_tarihi: new Date().toISOString(),
   });
-  const { tenantId: _tenant, ...kayitli } = odeme;
-  return kayitli;
+  return disaVer(odeme);
+}
+function disaVer({ tenantId: _tenant, islemAnahtari: _anahtar, ...odeme }: BellekOdemesi): V2Odeme {
+  return odeme;
+}
+
+/**
+ * Memory: the payment an operation key already recorded (Codex R3 F15), if it is the
+ * same intent; the same key for a different payment is refused like the RPC does.
+ */
+export function bellekteAnahtarliOdeme(
+  tenantId: string,
+  anahtar: string | null,
+  ayni: (odeme: V2Odeme) => boolean
+): V2Odeme | null {
+  if (!anahtar) return null;
+  const onceki = odemeBellegi.find((o) => o.tenantId === tenantId && o.islemAnahtari === anahtar);
+  if (!onceki) return null;
+  if (!ayni(onceki)) islemAnahtariCakismasi();
+  return disaVer(onceki);
+}
+export function islemAnahtariCakismasi(): never {
+  throw new PublicResourceError('Bu işlem anahtarı başka bir ödeme için kullanıldı.', 409);
 }
 
 /** A11 (memory): appends a courier's cash collection and updates the order summary. */
@@ -239,7 +284,8 @@ export function bellekteKuryeTahsilatiYaz(
   tenantId: string,
   siparis: Record<string, unknown>,
   kuryeId: string,
-  tutarAzn: number
+  tutarAzn: number,
+  islemAnahtari: string | null = null
 ): V2Odeme {
   const zaman = new Date().toISOString();
   return bellekteYaz(
@@ -258,6 +304,7 @@ export function bellekteKuryeTahsilatiYaz(
       tersKayitOdemeId: null,
       kasaTeslimId: null,
       olusturmaZamani: zaman,
+      islemAnahtari,
     },
     siparis
   );
@@ -299,7 +346,7 @@ export function bellekteKasayaKapat(
 
 /** Test and guard helper: the in-memory ledger rows of one tenant. */
 export function bellektekiOdemeler(tenant: string): V2Odeme[] {
-  return odemeBellegi.filter((o) => o.tenantId === tenant).map(({ tenantId: _t, ...o }) => o);
+  return odemeBellegi.filter((o) => o.tenantId === tenant).map(disaVer);
 }
 /** v1 delete and restore guard (memory mode): an order with payments is kept. */
 export function bellekteOdemesiVar(tenant: string, siparisIdleri: readonly string[]): boolean {
@@ -314,6 +361,7 @@ function rpcHatasi(error: { code?: string } | null): never {
   const code = error?.code ?? '';
   if (code === 'PT403') throw new PublicResourceError('Bu ödeme işlemi için yetkiniz yok.', 403);
   if (code === 'PT404') throw new PublicResourceError('Sipariş ya da ödeme bulunamadı.', 404);
+  if (code === 'PT412') islemAnahtariCakismasi();
   if (code === 'PT409' || code === '23505')
     throw new PublicResourceError(
       'Bu ödeme işlenemez: v1 sipariş, ters kayıt ya da zaten ters kaydı var.',
@@ -324,12 +372,24 @@ function rpcHatasi(error: { code?: string } | null): never {
   throw new PublicResourceError('Ödeme kaydedilemedi.', 503);
 }
 
-async function rpcSonucu(tenantId: string, data: unknown) {
+/**
+ * The RPC's answer: the payment and the order totals that the ledger trigger keeps in
+ * SQL in the same transaction (Codex R3 F15). Nothing is read after the commit, so a
+ * failed read can no longer turn a recorded payment into an error and a second payment.
+ */
+export function rpcOdemeSonucu(tenantId: string, data: unknown) {
   const sonuc = kayit(data);
   const odeme = odemeden(sonuc.odeme, tenantId);
-  const defterim = await v2SiparisOdemeleri(tenantId, odeme.siparisId);
-  if (!defterim) throw new PublicResourceError('Ödemeler okunamadı.', 503);
-  return { odeme, ozet: defterim.ozet };
+  const s = kayit(sonuc.siparis);
+  const toplam = Number(s.toplam_tutar);
+  const odenen = Number(s.alinan_tutar);
+  if (s.id !== odeme.siparisId || !Number.isFinite(toplam) || !Number.isFinite(odenen))
+    throw new PublicResourceError('Ödemeler okunamadı.', 503);
+  return {
+    odeme,
+    ozet: ozetOlustur(odeme.siparisId, toplam, odenen),
+    tekrar: sonuc.tekrar === true,
+  };
 }
 
 /** Records one boutique or online payment for a v2 order of the session tenant. */
@@ -346,6 +406,22 @@ export async function v2OdemeKaydet(tenant: unknown, userId: string, girdi: V2Od
     if (!siparis) throw new PublicResourceError('Sipariş ya da ödeme bulunamadı.', 404);
     if (Number(siparis.model_surumu) !== 2)
       throw new PublicResourceError('Ödeme defteri yalnız v2 siparişleri içindir.', 409);
+    const onceki = bellekteAnahtarliOdeme(
+      tenantId,
+      girdi.islemAnahtari,
+      (o) =>
+        o.siparisId === girdi.siparisId &&
+        KURUS(o.tutarAzn) === KURUS(girdi.tutarAzn) &&
+        o.yontem === girdi.yontem &&
+        o.kaynak === girdi.kaynak &&
+        o.kaydedenKullaniciId === u.id
+    );
+    if (onceki)
+      return {
+        odeme: onceki,
+        ozet: (await v2SiparisOdemeleri(tenantId, girdi.siparisId))!.ozet,
+        tekrar: true,
+      };
     const zaman = new Date().toISOString();
     const odeme = bellekteYaz(
       tenantId,
@@ -363,10 +439,15 @@ export async function v2OdemeKaydet(tenant: unknown, userId: string, girdi: V2Od
         tersKayitOdemeId: null,
         kasaTeslimId: null,
         olusturmaZamani: zaman,
+        islemAnahtari: girdi.islemAnahtari,
       },
       siparis
     );
-    return { odeme, ozet: (await v2SiparisOdemeleri(tenantId, girdi.siparisId))!.ozet };
+    return {
+      odeme,
+      ozet: (await v2SiparisOdemeleri(tenantId, girdi.siparisId))!.ozet,
+      tekrar: false,
+    };
   }
   const { data, error } = await supabase!.rpc('tomnap_v2_odeme_kaydet', {
     p_tenant_id: tenantId,
@@ -378,10 +459,11 @@ export async function v2OdemeKaydet(tenant: unknown, userId: string, girdi: V2Od
       kaynak: girdi.kaynak,
       alma_zamani: girdi.almaZamani,
       aciklama: girdi.aciklama,
+      islem_anahtari: girdi.islemAnahtari,
     },
   });
   if (error) rpcHatasi(error);
-  return rpcSonucu(tenantId, data);
+  return rpcOdemeSonucu(tenantId, data);
 }
 
 /** Reverses one payment of the session tenant once, with a reason (K16). */
@@ -428,10 +510,15 @@ export async function v2OdemeTersKayit(
         aciklama: gerekce,
         tersKayitOdemeId: asil.id,
         olusturmaZamani: zaman,
+        islemAnahtari: null,
       },
       siparis
     );
-    return { odeme, ozet: (await v2SiparisOdemeleri(tenantId, asil.siparisId))!.ozet };
+    return {
+      odeme,
+      ozet: (await v2SiparisOdemeleri(tenantId, asil.siparisId))!.ozet,
+      tekrar: false,
+    };
   }
   const { data, error } = await supabase!.rpc('tomnap_v2_odeme_ters_kayit', {
     p_tenant_id: tenantId,
@@ -440,7 +527,7 @@ export async function v2OdemeTersKayit(
     p_aciklama: gerekce,
   });
   if (error) rpcHatasi(error);
-  return rpcSonucu(tenantId, data);
+  return rpcOdemeSonucu(tenantId, data);
 }
 
 /** The ledger of one v2 order of the session tenant, oldest first; null if not found. */

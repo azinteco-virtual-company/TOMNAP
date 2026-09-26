@@ -370,8 +370,16 @@ describe('v2 payment ledger on Supabase: one RPC per write, tenant-scoped reads 
   const body = () =>
     v2OdemeGirdisiniDogrula({ siparis_id: ORDER, tutar_azn: 30, yontem: 'NAKIT', kaynak: 'BUTIK' });
 
+  // The RPCs answer with the order totals the ledger trigger keeps (Codex R3 F15).
+  const totals = {
+    id: ORDER,
+    toplam_tutar: '100.00',
+    alinan_tutar: '30.00',
+    kalan_tutar: '70.00',
+    finans_durumu: 'KISMI_ODEME',
+  };
   it('records and reverses through the RPCs with the session tenant and user only', async () => {
-    db.rpcAnswer = () => ({ data: { odeme: payment('t-a') }, error: null });
+    db.rpcAnswer = () => ({ data: { odeme: payment('t-a'), siparis: totals }, error: null });
     ledgerAnswers('t-a');
     const recorded = await v2OdemeKaydet('t-a', 'u-1', body());
     expect(db.rpcs).toEqual([
@@ -387,12 +395,15 @@ describe('v2 payment ledger on Supabase: one RPC per write, tenant-scoped reads 
             kaynak: 'BUTIK',
             alma_zamani: null,
             aciklama: null,
+            islem_anahtari: null,
           },
         },
       },
     ]);
     expect(recorded.odeme).toMatchObject({ id: PAYMENT, tutarAzn: 30 });
     expect(recorded.ozet).toMatchObject({ odenenTutar: 30, durum: 'KISMI' });
+    // Nothing is read after the commit (Codex R3 F15).
+    expect(db.calls).toEqual([]);
 
     db.rpcs = [];
     db.rpcAnswer = () => ({
@@ -403,6 +414,7 @@ describe('v2 payment ledger on Supabase: one RPC per write, tenant-scoped reads 
           ters_kayit_odeme_id: PAYMENT,
           aciklama: 'x',
         }),
+        siparis: { ...totals, alinan_tutar: '0.00', kalan_tutar: '100.00' },
       },
       error: null,
     });
@@ -496,8 +508,15 @@ describe('v2 cash desk on Supabase: RPCs with the session tenant and user only (
     ],
   };
 
-  it('records a courier collection through the RPC and reads it back tenant-scoped', async () => {
-    db.rpcAnswer = () => ({ data: { odeme: cash('t-a') }, error: null });
+  const totals = {
+    id: ORDER,
+    toplam_tutar: '100.00',
+    alinan_tutar: '10.00',
+    kalan_tutar: '90.00',
+    finans_durumu: 'KISMI_ODEME',
+  };
+  it('records a courier collection through the RPC and answers from it (Codex R3 F15)', async () => {
+    db.rpcAnswer = () => ({ data: { odeme: cash('t-a'), siparis: totals }, error: null });
     db.answer = (call) => ({
       data: call.table === 'siparisler' ? header('t-a') : [cash('t-a')],
       error: null,
@@ -514,11 +533,10 @@ describe('v2 cash desk on Supabase: RPCs with the session tenant and user only (
       },
     ]);
     expect(result.odeme).toMatchObject({ id: PAYMENT, kaynak: 'TESLIMAT' });
-    expect(db.calls.map((c) => [c.table, c.filters.find(([k]) => k === 'tenant_id')])).toEqual([
-      ['siparisler', ['tenant_id', 't-a']],
-      ['odemeler', ['tenant_id', 't-a']],
-    ]);
-    db.rpcAnswer = () => ({ data: { odeme: cash('t-b') }, error: null });
+    expect(result.ozet).toMatchObject({ odenenTutar: 10, kalanTutar: 90 });
+    // Nothing is read after the commit.
+    expect(db.calls).toEqual([]);
+    db.rpcAnswer = () => ({ data: { odeme: cash('t-b'), siparis: totals }, error: null });
     await expect(
       kuryeTahsilatiKaydet(
         't-a',
