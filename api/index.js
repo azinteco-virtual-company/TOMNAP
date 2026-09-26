@@ -6448,6 +6448,74 @@ function musteriOner(customers, ipucu) {
   return { eslesen, adaylar };
 }
 
+// src/server/services/siparisYetkisi.ts
+var SATINALMA_DETAY_ALANLARI = [
+  "kanada_magaza_adi",
+  "kanada_alis_fiyati_cad",
+  "kanada_fatura_gorseli"
+];
+var GUMRUK_KIMLIK_ALANLARI = [
+  "kanada_gumruk_fin_kodu",
+  "kanada_gumruk_pasaport_no"
+];
+var DETAY_ALANLARI = [
+  ...SATINALMA_DETAY_ALANLARI,
+  ...GUMRUK_KIMLIK_ALANLARI
+];
+var TAHSIL_EDILMIS = /* @__PURE__ */ new Set(["ODENDI", "KISMI_ODEME"]);
+function tahsilatYazabilir(role) {
+  return rolGrubunda(role, "PAYMENT_WRITE");
+}
+function tahsilatYetkisiYok(role) {
+  return new PublicResourceError(
+    role === PLATFORM_ROLU ? "Platform y\xF6neticisi tahsilat yazamaz; \xF6demeyi butik ekibi kaydeder." : "Bu rol tahsilat yazamaz.",
+    403
+  );
+}
+function detayAlaniYazabilir(role, alan) {
+  if (role === "PATRON" || rolGrubunda(role, "BUYERS")) return true;
+  if (role === PLATFORM_ROLU) return !GUMRUK_KIMLIK_ALANLARI.includes(alan);
+  return false;
+}
+function detayAlaniYetkisiYok(role, alan) {
+  return new PublicResourceError(
+    role === PLATFORM_ROLU ? "Platform y\xF6neticisi g\xFCmr\xFCk kimlik bilgisi yazamaz." : "Bu alan\u0131 yazma yetkiniz yok: " + alan,
+    403
+  );
+}
+function detayDegerleriniDenetle(alanlar) {
+  const bad = (field) => new PublicResourceError("Ge\xE7ersiz de\u011Fer: " + field, 400);
+  const text3 = (field, pattern) => {
+    const value = alanlar[field];
+    if (value === void 0 || value === null) return;
+    if (typeof value !== "string") throw bad(field);
+    const normalized = value.trim().toUpperCase();
+    if (normalized !== "" && !pattern.test(normalized)) throw bad(field);
+    alanlar[field] = normalized;
+  };
+  text3("kanada_gumruk_fin_kodu", /^[A-Z0-9]{7}$/);
+  text3("kanada_gumruk_pasaport_no", /^[A-Z0-9]{6,12}$/);
+  const store = alanlar.kanada_magaza_adi;
+  if (store !== void 0 && store !== null && (typeof store !== "string" || store.length > 200))
+    throw bad("kanada_magaza_adi");
+  const price = alanlar.kanada_alis_fiyati_cad;
+  if (price !== void 0 && price !== null && (typeof price !== "number" || !Number.isFinite(price) || price < 0 || price > 1e6))
+    throw bad("kanada_alis_fiyati_cad");
+  const invoice = alanlar.kanada_fatura_gorseli;
+  if (invoice !== void 0 && invoice !== null && (typeof invoice !== "string" || invoice.length > 42e5 || invoice !== "" && !/^(data:image\/(png|jpeg|webp|gif);base64,|(\/api)?\/uploads\/)/.test(invoice)))
+    throw bad("kanada_fatura_gorseli");
+}
+var bos = (deger) => deger === void 0 || deger === null || deger === "";
+function siparisOlusturmaYetkisi(role, veri, ekVeriler) {
+  const alinan = Number(veri.alinan_tutar ?? 0);
+  const odenmis = Number.isFinite(alinan) && alinan > 0 || TAHSIL_EDILMIS.has(String(veri.finans_durumu ?? ""));
+  if (odenmis && !tahsilatYazabilir(role)) throw tahsilatYetkisiYok(role);
+  for (const alan of DETAY_ALANLARI)
+    if (!bos(ekVeriler[alan]) && !detayAlaniYazabilir(role, alan))
+      throw detayAlaniYetkisiYok(role, alan);
+  detayDegerleriniDenetle(ekVeriler);
+}
+
 // src/server/services/v2/odemeStore.ts
 import { randomUUID } from "node:crypto";
 
@@ -7185,6 +7253,8 @@ ${urunNotOzeti}`;
       }
     }
     let nihaiSiparis = null;
+    if (otomatik_kaydet !== false)
+      siparisOlusturmaYetkisi(req.auth?.role, dbPayload, siparisEkVerileriniAl(dbPayload));
     if (otomatik_kaydet !== false && dbActive(hedefTenantId)) {
       try {
         const sbPayload = hazirlaSupabasePayload(dbPayload);
@@ -7281,6 +7351,7 @@ router3.post("/siparisler", async (req, res) => {
     if (!yeniVeri || !yeniVeri.urun_aciklamasi || !yeniVeri.musteri_adi) {
       return res.status(400).json({ basarili: false, hata: "M\xFC\u015Fteri ad\u0131 ve \xFCr\xFCn a\xE7\u0131klamas\u0131 zorunludur." });
     }
+    siparisOlusturmaYetkisi(req.auth?.role, yeniVeri, siparisEkVerileriniAl(yeniVeri));
     const toplam = Number(yeniVeri.toplam_tutar || 0);
     const alinan = Number(yeniVeri.alinan_tutar || 0);
     const kalan2 = Math.max(0, toplam - alinan);
@@ -7368,15 +7439,7 @@ router3.post("/siparisler", async (req, res) => {
     orderFailure(res, genelHata);
   }
 });
-var purchaseDetailFields = [
-  "kanada_magaza_adi",
-  "kanada_alis_fiyati_cad",
-  "kanada_fatura_gorseli"
-];
-var customsFields = ["kanada_gumruk_fin_kodu", "kanada_gumruk_pasaport_no"];
 var generalFields = /* @__PURE__ */ new Set([
-  ...purchaseDetailFields,
-  ...customsFields,
   "ham_mesaj",
   "musteri_id",
   "musteri_adi",
@@ -7422,9 +7485,7 @@ var salesFields = new Set(
       "baku_kurye_bolgesi",
       "teslim_tarihi",
       "teslim_eden_kisi",
-      "kargo_agirligi_kg",
-      ...purchaseDetailFields,
-      ...customsFields
+      "kargo_agirligi_kg"
     ].includes(field)
   )
 );
@@ -7472,32 +7533,8 @@ var purchaseFields = /* @__PURE__ */ new Set([
   "baku_kurye_id",
   "baku_kurye_adi",
   "baku_kurye_bolgesi",
-  "kargo_agirligi_kg",
-  ...purchaseDetailFields,
-  ...customsFields
+  "kargo_agirligi_kg"
 ]);
-function checkDetailFields(updates) {
-  const bad = (field) => new PublicResourceError("Ge\xE7ersiz de\u011Fer: " + field, 400);
-  const text3 = (field, pattern) => {
-    const value = updates[field];
-    if (value === void 0 || value === null) return;
-    if (typeof value !== "string") throw bad(field);
-    const normalized = value.trim().toUpperCase();
-    if (normalized !== "" && !pattern.test(normalized)) throw bad(field);
-    updates[field] = normalized;
-  };
-  text3("kanada_gumruk_fin_kodu", /^[A-Z0-9]{7}$/);
-  text3("kanada_gumruk_pasaport_no", /^[A-Z0-9]{6,12}$/);
-  const store = updates.kanada_magaza_adi;
-  if (store !== void 0 && store !== null && (typeof store !== "string" || store.length > 200))
-    throw bad("kanada_magaza_adi");
-  const price = updates.kanada_alis_fiyati_cad;
-  if (price !== void 0 && price !== null && (typeof price !== "number" || !Number.isFinite(price) || price < 0 || price > 1e6))
-    throw bad("kanada_alis_fiyati_cad");
-  const invoice = updates.kanada_fatura_gorseli;
-  if (invoice !== void 0 && invoice !== null && (typeof invoice !== "string" || invoice.length > 42e5 || invoice !== "" && !/^(data:image\/(png|jpeg|webp|gif);base64,|(\/api)?\/uploads\/)/.test(invoice)))
-    throw bad("kanada_fatura_gorseli");
-}
 async function ownedOrder(tenant2, id) {
   if (dbActive(tenant2)) {
     const { data, error: error2 } = await supabase.from("siparisler").select("*").eq("id", id).eq("tenant_id", tenant2).maybeSingle();
@@ -7525,10 +7562,13 @@ router3.patch("/siparisler/:id", async (req, res) => {
       if (JSON.stringify(value) === JSON.stringify(formatted[key])) continue;
       if (Number(formatted.model_surumu) === 2 && v2DerivedFields.has(key))
         throw new PublicResourceError("v2 sipari\u015Fte bu alan sat\u0131rlardan t\xFCretilir: " + key, 409);
-      if (role === PLATFORM_ROLU && (key === "alinan_tutar" || key === "finans_durumu"))
-        throw new PublicResourceError("Platform y\xF6neticisi tahsilat\u0131 de\u011Fi\u015Ftiremez.", 403);
-      if (role === PLATFORM_ROLU && customsFields.includes(key))
-        throw new PublicResourceError("Platform y\xF6neticisi g\xFCmr\xFCk kimlik bilgisi yazamaz.", 403);
+      if ((key === "alinan_tutar" || key === "finans_durumu") && !tahsilatYazabilir(role))
+        throw tahsilatYetkisiYok(role);
+      if (DETAY_ALANLARI.includes(key)) {
+        if (!detayAlaniYazabilir(role, key)) throw detayAlaniYetkisiYok(role, key);
+        updates[key] = value;
+        continue;
+      }
       if ([
         "baku_kurye_id",
         "baku_kurye_adi",
@@ -7546,7 +7586,7 @@ router3.patch("/siparisler/:id", async (req, res) => {
     }
     if (updates.eksik_bilgiler !== void 0 && (!Array.isArray(updates.eksik_bilgiler) || updates.eksik_bilgiler.some((v) => typeof v !== "string" || v.startsWith("META:"))))
       throw new PublicResourceError("Ge\xE7ersiz eksik bilgi listesi.", 400);
-    checkDetailFields(updates);
+    detayDegerleriniDenetle(updates);
     await validateCustomerReference(tenant2, updates.musteri_id);
     await assertTenantImageReferences(req, updates);
     const kaynak = dbActive(tenant2) ? "supabase" : tenant2 === "demo_sandbox" ? "demo_sandbox" : "bellek";
@@ -8181,6 +8221,7 @@ router5.post("/inbox/:id/onayla", async (req, res) => {
     const siparisVerisi = { ...submitted, ...extras };
     if (siparisVerisi.tenant_id && siparisVerisi.tenant_id !== tenantId || siparisVerisi.tenantId && siparisVerisi.tenantId !== tenantId)
       throw new PublicResourceError("Sipari\u015F ba\u015Fka butike ta\u015F\u0131namaz.", 403);
+    siparisOlusturmaYetkisi(req.auth?.role, siparisVerisi, extras);
     await assertTenantImageReferences(req, siparisVerisi);
     if (siparisVerisi.musteri_id) {
       let customer;
@@ -11559,6 +11600,17 @@ async function kurlariListele(tenant2) {
   return { guncel, kurlar };
 }
 
+// src/shared/v2AyarSinirlari.ts
+var AYAR_SINIRLARI = {
+  aylikBeyanSinirUsd: { alt: 0, ust: 1e5, ondalik: 2, altDahil: false },
+  varsayilanKgFiyatiAzn: { alt: 0, ust: 1e4, ondalik: 2, altDahil: true },
+  /** Oran (0,05 = %5); formda yüzde olarak girilir. */
+  primOraniVarsayilan: { alt: 0, ust: 1, ondalik: 4, altDahil: true }
+};
+function sinirIcinde(deger, sinir) {
+  return Number.isFinite(deger) && (sinir.altDahil ? deger >= sinir.alt : deger > sinir.alt) && deger <= sinir.ust;
+}
+
 // src/server/services/v2/ayarlar.ts
 var VARSAYILAN_V2_AYARLARI = {
   aylikBeyanSinirUsd: 300,
@@ -11572,9 +11624,9 @@ var ALANLAR3 = [
   "prim_orani_varsayilan"
 ];
 var bellek2 = /* @__PURE__ */ new Map();
-function sayi(value, alt, ust, ondalik, altDahil) {
-  const kat = 10 ** ondalik;
-  if (typeof value !== "number" || !Number.isFinite(value) || (altDahil ? value < alt : value <= alt) || value > ust || Math.round(value * kat) / kat !== value)
+function sayi(value, sinir) {
+  const kat = 10 ** sinir.ondalik;
+  if (typeof value !== "number" || !sinirIcinde(value, sinir) || Math.round(value * kat) / kat !== value)
     throw new PublicResourceError("Ge\xE7ersiz ayar de\u011Feri.", 400);
   return value;
 }
@@ -11582,11 +11634,17 @@ function ayarGuncellemesiniDogrula(body2) {
   const alanlar = v2GovdesiniAyikla(body2, ALANLAR3);
   const sonuc = {};
   if ("aylik_beyan_sinir_usd" in alanlar)
-    sonuc.aylikBeyanSinirUsd = sayi(alanlar.aylik_beyan_sinir_usd, 0, 1e5, 2, false);
+    sonuc.aylikBeyanSinirUsd = sayi(
+      alanlar.aylik_beyan_sinir_usd,
+      AYAR_SINIRLARI.aylikBeyanSinirUsd
+    );
   if ("varsayilan_kg_fiyati_azn" in alanlar)
-    sonuc.varsayilanKgFiyatiAzn = alanlar.varsayilan_kg_fiyati_azn === null ? null : sayi(alanlar.varsayilan_kg_fiyati_azn, 0, 1e4, 2, true);
+    sonuc.varsayilanKgFiyatiAzn = alanlar.varsayilan_kg_fiyati_azn === null ? null : sayi(alanlar.varsayilan_kg_fiyati_azn, AYAR_SINIRLARI.varsayilanKgFiyatiAzn);
   if ("prim_orani_varsayilan" in alanlar)
-    sonuc.primOraniVarsayilan = sayi(alanlar.prim_orani_varsayilan, 0, 1, 4, true);
+    sonuc.primOraniVarsayilan = sayi(
+      alanlar.prim_orani_varsayilan,
+      AYAR_SINIRLARI.primOraniVarsayilan
+    );
   if (Object.keys(sonuc).length === 0)
     throw new PublicResourceError("G\xFCncellenecek bir ayar g\xF6nderilmelidir.", 400);
   return sonuc;
