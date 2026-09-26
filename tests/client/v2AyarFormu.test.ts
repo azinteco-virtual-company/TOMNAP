@@ -46,4 +46,23 @@ describe('v2 settings form (Codex R3 F11)', () => {
       degisiklik: {},
     });
   });
+
+  it('a number too large for the server is an error, not a cleared price (Codex R4 F11)', () => {
+    // 309 digits: Number() gives Infinity, which JSON sends as null (= clear).
+    for (const kg of ['9'.repeat(309), '10000.01', '99999'])
+      expect([kg.length, ayarDegisiklikleri(ayarlar, form({ kg })).hata]).toEqual([
+        kg.length,
+        expect.stringMatching(/kq qiyməti/i),
+      ]);
+    expect(ayarDegisiklikleri(ayarlar, form({ kg: '10000' }))).toEqual({
+      degisiklik: { varsayilan_kg_fiyati_azn: 10000 },
+    });
+    expect(ayarDegisiklikleri(ayarlar, form({ kg: '0' }))).toEqual({
+      degisiklik: { varsayilan_kg_fiyati_azn: 0 },
+    });
+    // The same server ranges for the declaration limit (0–100.000] and the prim (0–100 %).
+    for (const beyan of ['100000.01', '9'.repeat(309)])
+      expect(ayarDegisiklikleri(ayarlar, form({ beyan })).hata).toMatch(/bəyan/i);
+    expect(ayarDegisiklikleri(ayarlar, form({ prim: '100.01' })).hata).toMatch(/prim/i);
+  });
 });
