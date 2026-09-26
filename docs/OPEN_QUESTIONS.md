@@ -513,3 +513,16 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       de görür. Daraltmak isterseniz ayrı iş. Modalda pasaport alanı için giriş kutusu yok
       (alan yalnız sunucuda yazılabilir oldu). Fatura görseli hâlâ satır içi base64 olarak
       `ek_veriler`'e yazılıyor (en fazla 3 MB); dosya deposuna taşımak K22 / Faz B işi.
+
+35. **Sipariş notu sözleşmesi (Codex R3 F8, varsayım).**
+    - **Tek yer:** Teslimat notu (`ozel_not`) `baku_tahsilat_notu`'nun başındaki
+      `[TƏLİMAT: …]` etiketinde durur; v1 zaten böyle saklıyordu. Yeni kolon eklenmedi,
+      hiçbir kayıt değiştirilmedi. Hiçbir migration fiziksel `ozel_not` kolonu oluşturmuyor.
+    - **v2:** Oluşturma RPC'si etiketi yazar (migration 17). v2 ve v1 okuması önce etiketi,
+      etiket yoksa fiziksel `ozel_not`'u (eski şema, bellek modu) okur. v2 başlık okuması
+      bu yüzden kolon adı vermeden (`*`) okur. v1 düzenlemesi, kolon varsa onu da eşitler;
+      böylece silinen not eski fiziksel değere geri düşmez.
+    - **Biçim:** Nottaki `[` `]` yuvarlak parantez olur (etiket bölünmesin).
+    - **Kalan:** Eski gövdeyle (11) oluşturulmuş v2 siparişlerinin notu fiziksel kolonda
+      kalır ve oradan okunur; ilk düzenlemede etikete geçer. Toplu taşıma yapılmadı (veri
+      değiştirilmez).

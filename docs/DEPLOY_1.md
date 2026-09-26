@@ -102,18 +102,20 @@ Repodaki migration'ların **hepsi** `90b8eae`'den sonra geldi; canlı kodda hiç
 | 14  | `20260925130000_kacaklar.sql` (A12)                                       | PR #22    | `tomnap_v2_kacak_q4()`                     | var          | **hayır**                  | okunamadı |
 | 15  | `20260925140000_para_yazma_yetkisi.sql` (SUPER_ADMIN para yazmaz)         | bu PR     | 3 fonksiyon gövdesi (`para-yazma-yetkisi`) | var          | evet (`OR REPLACE`)        | okunamadı |
 | 16  | `20260925150000_siparis_guncelle.sql` (v1 düzenleme, Codex R3 F1/F2)      | PR #27    | `tomnap_siparis_guncelle()`                | var          | **hayır**                  | okunamadı |
+| 17  | `20260925160000_not_sozlesmesi.sql` (not sözleşmesi, Codex R3 F8)         | bu PR     | `tomnap_v2_siparis_olustur()` gövdesi      | var          | evet (`OR REPLACE`)        | okunamadı |
 
-Toplam 16 migration. 7–16'nın her biri CI'da `up → down → down → up` ile sınanıyor.
+Toplam 17 migration. 7–17'nin her biri CI'da `up → down → down → up` ile sınanıyor.
 
 - **16 Deploy 1 ile gider:** Sipariş düzenleme rotası (`PATCH /api/siparisler/:id`) 16'nın fonksiyonunu çağırıyor. Bu yüzden 16, 1–6 ile birlikte ve yeni koddan **önce** uygulanır. 7–15'e bağlı değil.
 
 ⚠️ Dikkat edilecekler:
 
 - **7–15 ne zaman:** faz-a-plan'a göre Deploy 1'den **sonra**, `FF_V2_FLOW` kapalıyken, ayrı yayınlarla. 7 ve 8, Deploy 1'deki kodun `ABD_SATINALMA` davetini açar; yoksa bu davet 409 ile reddedilir, diğer roller etkilenmez. 9–15 yalnız v2 akışı içindir.
+- **17 v2 ile gider:** 7–15 ile birlikte, 11'den sonra. 11'in fonksiyonunu değiştirir: v2 sipariş notu artık fiziksel bir `ozel_not` kolonuna değil, v1 gibi `baku_tahsilat_notu`'daki `[TƏLİMAT: …]` etiketine yazılır (hiçbir migration `ozel_not` kolonu oluşturmuyor; kolonsuz şemada v2 siparişi hiç oluşturulamıyordu). 11 herhangi bir nedenle yeniden uygulanırsa 17 de ardından yeniden uygulanır.
 - **7–15 arası bağımlılık:** 11, 10'un fonksiyonunu değiştirir; 12, 10'un v2 siparişlerine bağlanır; 13, 12'ye ve 3'teki `kuryeler`'e; 14'ün Q5'i 13'ün bakiye fonksiyonunu çağırır; 15, 12 ve 13'ün üç yazma fonksiyonunu değiştirir (SUPER_ADMIN ödeme kaydı, ters kayıt ve kasa teslimi yazamaz). Sırayı bozmayın.
 - **2, 3, 4, 6, 7, 8, 9, 10, 12, 13 ve 14 kısmen uygulanmışsa yeniden çalıştırılamaz:** `CREATE FUNCTION` / `CREATE TABLE` komutları `OR REPLACE` ya da `IF NOT EXISTS` içermiyor. Önce imza kontrolünü yapın; imzası var olan migration'ı yeniden çalıştırmayın.
 - **1–4'ün down dosyası yok.** Veritabanında geri dönüş ancak yedekten yapılabilir; uygulamadan önce yedek alın.
-- **Beklenmedik migration:** `schema_migrations` tablosunda bu on altı sürümden başka bir kayıt görürseniz durun ve raporlayın. Bu, repoda olmayan bir değişikliğin uzakta uygulandığı anlamına gelir.
+- **Beklenmedik migration:** `schema_migrations` tablosunda bu on yedi sürümden başka bir kayıt görürseniz durun ve raporlayın. Bu, repoda olmayan bir değişikliğin uzakta uygulandığı anlamına gelir.
 
 ### Salt okunur kontrol (Supabase SQL Editor ya da `psql`)
 
@@ -149,9 +151,34 @@ from (values
   (13, '20260925120000_kasa_teslimleri.sql', 'tablo', 'public.kasa_teslimleri'),
   (14, '20260925130000_kacaklar.sql', 'fonksiyon', 'tomnap_v2_kacak_q4'),
   (15, '20260925140000_para_yazma_yetkisi.sql', 'govde', 'tomnap_v2_odeme_kaydet:para-yazma-yetkisi'),
-  (16, '20260925150000_siparis_guncelle.sql', 'fonksiyon', 'tomnap_siparis_guncelle')
+  (16, '20260925150000_siparis_guncelle.sql', 'fonksiyon', 'tomnap_siparis_guncelle'),
+  (17, '20260925160000_not_sozlesmesi.sql', 'govde', 'tomnap_v2_siparis_olustur:Codex R3 F8')
 ) as m(sira, dosya, tur, imza)
 order by m.sira;
+
+-- Ön koşul kolonları: hiçbir migration'ın oluşturmadığı (eski temel şemadan gelen), kodun
+-- okuyup yazdığı siparisler kolonları. 'gerekli' satırlarından biri false ise durun:
+-- sipariş yazma o kolonda hata verir. Sipariş notu baku_tahsilat_notu'ndadır (Codex R3 F8).
+select k.kolon, k.gerekli,
+  exists (select 1 from pg_catalog.pg_attribute a
+          where a.attrelid = to_regclass('public.siparisler') and a.attname = k.kolon
+            and a.attnum > 0 and not a.attisdropped) as var
+from (values
+  ('id', 'gerekli'), ('tenant_id', 'gerekli'), ('olusturma_tarihi', 'gerekli'),
+  ('ham_mesaj', 'gerekli'), ('siparis_kaynagi', 'gerekli'), ('musteri_adi', 'gerekli'),
+  ('instagram_kullanici_adi', 'gerekli'), ('telefon_numarasi', 'gerekli'),
+  ('teslimat_sehri', 'gerekli'), ('teslimat_adresi', 'gerekli'), ('urun_aciklamasi', 'gerekli'),
+  ('beden_veya_olcu', 'gerekli'), ('renk', 'gerekli'), ('adet', 'gerekli'),
+  ('toplam_tutar', 'gerekli'), ('alinan_tutar', 'gerekli'), ('kalan_tutar', 'gerekli'),
+  ('para_birimi', 'gerekli'), ('finans_durumu', 'gerekli'), ('lojistik_durumu', 'gerekli'),
+  ('baku_kurye_id', 'gerekli'), ('baku_kurye_adi', 'gerekli'), ('baku_kurye_bolgesi', 'gerekli'),
+  ('teslim_tarihi', 'gerekli'), ('teslim_eden_kisi', 'gerekli'), ('baku_tahsilat_notu', 'gerekli'),
+  ('kanada_takip_kodu', 'gerekli'), ('uluslararasi_kargo_kodu', 'gerekli'),
+  ('eksik_bilgiler', 'gerekli'), ('ai_guven_skoru', 'gerekli'), ('is_demo', 'gerekli'),
+  -- Yoksa da çalışır: düzenleme zamanı yazılmaz; fiziksel not yalnız etiket yokken okunur.
+  ('guncellenme_tarihi', 'isteğe bağlı'), ('ozel_not', 'isteğe bağlı')
+) as k(kolon, gerekli)
+order by k.gerekli, k.kolon;
 
 select to_regclass('supabase_migrations.schema_migrations') is not null as gecmis_tablosu_var;
 -- Yalnız yukarıdaki true ise:
@@ -164,7 +191,7 @@ select to_regclass('supabase_migrations.schema_migrations') is not null as gecmi
 psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "begin transaction read only" -f migration-durumu.sql -c "rollback"
 ```
 
-Sorgu 25 Eylül'de, CI şemasının kurulu olduğu yerel bir veritabanında denendi: 15 satırın hepsi `true` döndü; 11'in ya da 15'in down dosyası bir transaction içinde uygulanınca yalnız o satır `false` oldu.
+Sorgu 25 Eylül'de, CI şemasının kurulu olduğu yerel bir veritabanında denendi: 15 satırın hepsi `true` döndü; 11'in ya da 15'in down dosyası bir transaction içinde uygulanınca yalnız o satır `false` oldu. 26 Eylül'de 17 satırla yeniden denendi: hepsi `true`; 17'nin down dosyası uygulanınca yalnız 17 `false` oldu. Ön koşul sorgusu aynı veritabanında 33 kolonun hepsi için `true` döndü.
 
 SQL Editor'da elle uygulanan migration'lar `schema_migrations` tablosuna yazılmaz. Bu yüzden asıl ölçü imza nesnesinin varlığıdır.
 
