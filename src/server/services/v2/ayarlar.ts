@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { PublicResourceError } from '../publicFetch';
 import { v2Tenant, v2GovdesiniAyikla } from './ortak';
+import { AYAR_SINIRLARI, sinirIcinde, type AyarSiniri } from '../../../shared/v2AyarSinirlari';
 
 /**
  * v2 tenant ayarları: tenant başına bir satır. Satır yoksa varsayılanlar
@@ -37,19 +38,11 @@ const ALANLAR = [
 // Development/demo store: one entry per tenant.
 const bellek = new Map<string, V2Ayarlari>();
 
-function sayi(
-  value: unknown,
-  alt: number,
-  ust: number,
-  ondalik: number,
-  altDahil: boolean
-): number {
-  const kat = 10 ** ondalik;
+function sayi(value: unknown, sinir: AyarSiniri): number {
+  const kat = 10 ** sinir.ondalik;
   if (
     typeof value !== 'number' ||
-    !Number.isFinite(value) ||
-    (altDahil ? value < alt : value <= alt) ||
-    value > ust ||
+    !sinirIcinde(value, sinir) ||
     Math.round(value * kat) / kat !== value
   )
     throw new PublicResourceError('Geçersiz ayar değeri.', 400);
@@ -61,14 +54,20 @@ export function ayarGuncellemesiniDogrula(body: unknown): Partial<V2AyarDegerler
   const alanlar = v2GovdesiniAyikla(body, ALANLAR);
   const sonuc: Partial<V2AyarDegerleri> = {};
   if ('aylik_beyan_sinir_usd' in alanlar)
-    sonuc.aylikBeyanSinirUsd = sayi(alanlar.aylik_beyan_sinir_usd, 0, 100000, 2, false);
+    sonuc.aylikBeyanSinirUsd = sayi(
+      alanlar.aylik_beyan_sinir_usd,
+      AYAR_SINIRLARI.aylikBeyanSinirUsd
+    );
   if ('varsayilan_kg_fiyati_azn' in alanlar)
     sonuc.varsayilanKgFiyatiAzn =
       alanlar.varsayilan_kg_fiyati_azn === null
         ? null
-        : sayi(alanlar.varsayilan_kg_fiyati_azn, 0, 10000, 2, true);
+        : sayi(alanlar.varsayilan_kg_fiyati_azn, AYAR_SINIRLARI.varsayilanKgFiyatiAzn);
   if ('prim_orani_varsayilan' in alanlar)
-    sonuc.primOraniVarsayilan = sayi(alanlar.prim_orani_varsayilan, 0, 1, 4, true);
+    sonuc.primOraniVarsayilan = sayi(
+      alanlar.prim_orani_varsayilan,
+      AYAR_SINIRLARI.primOraniVarsayilan
+    );
   if (Object.keys(sonuc).length === 0)
     throw new PublicResourceError('Güncellenecek bir ayar gönderilmelidir.', 400);
   return sonuc;
