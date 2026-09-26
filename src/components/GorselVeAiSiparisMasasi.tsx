@@ -57,6 +57,8 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
   const [basari, setBasari] = useState(false);
+  // Saved without a payment this role may not write (Codex R4, F19 side effect).
+  const [odemeUyarisi, setOdemeUyarisi] = useState<string | null>(null);
   const [ayristirilanTaslak, setAyristirilanTaslak] = useState<any | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -228,6 +230,7 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
     setYukleniyor(true);
     setHata(null);
     setBasari(false);
+    setOdemeUyarisi(null);
 
     try {
       const response = await apiFetch('/api/ayristir-siparis', {
@@ -281,6 +284,7 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
 
       if (otomatikKaydet) {
         setBasari(true);
+        setOdemeUyarisi(typeof data.uyari === 'string' ? data.uyari : null);
         onSiparisEklendi(bulunanSiparis);
         // Formu sıfırla
         setHamMetin('');
@@ -607,6 +611,15 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
                 <span className="font-bold">
                   Sipariş başarıyla işlendi ve veritabanına eklendi!
                 </span>
+              </div>
+            )}
+            {odemeUyarisi && (
+              <div
+                role="alert"
+                className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs flex items-start gap-2"
+              >
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium leading-relaxed">{odemeUyarisi}</div>
               </div>
             )}
 

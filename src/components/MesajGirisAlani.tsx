@@ -31,6 +31,8 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
   const [hataMesaji, setHataMesaji] = useState<string | null>(null);
   const [sonAyristirilan, setSonAyristirilan] = useState<Siparis | null>(null);
   const [basariMesaji, setBasariMesaji] = useState<string | null>(null);
+  // Saved without a payment this role may not write (Codex R4, F19 side effect).
+  const [uyari, setUyari] = useState<string | null>(null);
 
   const ornekYukle = (ornek: (typeof HAZIR_TEST_MESAJLARI)[0]) => {
     setHamMesaj(ornek.mesaj);
@@ -38,6 +40,7 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
     setMusteriIpucu(ornek.ipucu);
     setHataMesaji(null);
     setBasariMesaji(null);
+    setUyari(null);
   };
 
   const handleAyristir = async (e: React.FormEvent) => {
@@ -47,6 +50,7 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
     setYukleniyor(true);
     setHataMesaji(null);
     setBasariMesaji(null);
+    setUyari(null);
 
     try {
       const yanit = await apiFetch('/api/ayristir-siparis', {
@@ -66,6 +70,7 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
         setSonAyristirilan(sonuc.ayristirilan_veri);
         onSiparisEklendi(sonuc.ayristirilan_veri);
         setBasariMesaji('Sipariş Gemini AI ile başarıyla ayrıştırıldı ve veritabanına kaydedildi!');
+        setUyari(typeof sonuc.uyari === 'string' ? sonuc.uyari : null);
         setHamMesaj('');
         setMusteriIpucu('');
       } else {
@@ -208,6 +213,15 @@ export const MesajGirisAlani: React.FC<MesajGirisAlaniProps> = ({ onSiparisEklen
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{basariMesaji}</span>
+            </div>
+          )}
+          {uyari && (
+            <div
+              role="alert"
+              className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2"
+            >
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>{uyari}</span>
             </div>
           )}
         </div>

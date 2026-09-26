@@ -94,6 +94,34 @@ export function detayDegerleriniDenetle(alanlar: Record<string, unknown>): void 
 
 const bos = (deger: unknown) => deger === undefined || deger === null || deger === '';
 
+/** Whether an order body carries a collection: money received or a paid status. */
+export function odemeIceriyor(veri: Record<string, unknown>): boolean {
+  const alinan = Number(veri.alinan_tutar ?? 0);
+  return (
+    (Number.isFinite(alinan) && alinan > 0) || TAHSIL_EDILMIS.has(String(veri.finans_durumu ?? ''))
+  );
+}
+
+/**
+ * AI auto-save (Codex R4, F19 side effect): there the amount comes from the AI, not from
+ * the user, so a role that writes no collection does not lose the whole order. The
+ * collection is left out and the payment the AI saw becomes a notice for the boutique
+ * team. Returns that notice, or null when nothing is left out. The direct create and the
+ * inbox approval still refuse: there the user writes the amount.
+ */
+export function aiOdemeBildirimi(
+  role: string | undefined,
+  veri: Record<string, unknown>
+): string | null {
+  if (tahsilatYazabilir(role) || !odemeIceriyor(veri)) return null;
+  const alinan = Number(veri.alinan_tutar ?? 0);
+  const tutar =
+    Number.isFinite(alinan) && alinan > 0
+      ? `${alinan} ${typeof veri.para_birimi === 'string' && veri.para_birimi ? veri.para_birimi : 'AZN'}`
+      : 'tutar belirtilmemiş';
+  return `Ödeme bildirimi — butik ekibi kaydetmeli: ${tutar}`;
+}
+
 /**
  * A new order (direct, inbox approval, AI auto-save): the first collection follows the
  * money-write rule, and every detail field given follows its right and its format.
@@ -104,10 +132,7 @@ export function siparisOlusturmaYetkisi(
   veri: Record<string, unknown>,
   ekVeriler: Record<string, unknown>
 ): void {
-  const alinan = Number(veri.alinan_tutar ?? 0);
-  const odenmis =
-    (Number.isFinite(alinan) && alinan > 0) || TAHSIL_EDILMIS.has(String(veri.finans_durumu ?? ''));
-  if (odenmis && !tahsilatYazabilir(role)) throw tahsilatYetkisiYok(role);
+  if (odemeIceriyor(veri) && !tahsilatYazabilir(role)) throw tahsilatYetkisiYok(role);
   for (const alan of DETAY_ALANLARI)
     if (!bos(ekVeriler[alan]) && !detayAlaniYazabilir(role, alan))
       throw detayAlaniYetkisiYok(role, alan);

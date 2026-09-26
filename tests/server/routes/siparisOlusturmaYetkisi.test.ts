@@ -110,14 +110,44 @@ describe('the first collection follows the money-write rule on every creation pa
     expect((await approve('PATRON', suggested)).status).toBe(200);
   });
 
-  it('the AI auto-save path refuses a parsed payment for the admin and saves nothing', async () => {
-    const before = tenantOrders();
-    aiReturns({ alinan_tutar: 100, finans_durumu: 'ODENDI' });
-    expect((await aiSave('SUPER_ADMIN')).status).toBe(403);
-    expect(tenantOrders()).toBe(before);
+  // The AI auto-save is not the user writing an amount: a role that writes no collection
+  // (platform admin, buyers) still saves the order; the payment the AI saw stays as a
+  // notice for the boutique team, and the answer warns (Codex R4, F19 side effect).
+  it.each(['SUPER_ADMIN', 'KANADA_SATINALMA'])(
+    'the AI auto-save of %s keeps the order and leaves the payment as a notice',
+    async (role) => {
+      const before = tenantOrders();
+      aiReturns({ alinan_tutar: 100, finans_durumu: 'ODENDI', baku_tahsilat_notu: 'Nağd' });
+      const response = await aiSave(role);
+      expect(response.status, JSON.stringify(response.body)).toBe(200);
+      expect(tenantOrders()).toBe(before + 1);
+      const notice = 'Ödeme bildirimi — butik ekibi kaydetmeli: 100 AZN';
+      const order = response.body.siparis;
+      expect(order).toMatchObject({ alinan_tutar: 0, kalan_tutar: 100, finans_durumu: 'BEKLIYOR' });
+      expect(order.baku_tahsilat_notu).toContain(notice);
+      expect(order.baku_tahsilat_notu).toContain('Nağd');
+      expect(order.eksik_bilgiler).toContain(notice);
+      expect(response.body.uyari).toMatch(/kaydedilmedi.*butik ekibi/);
+      const stored = state.siparislerVeritabani.find((s) => s.id === order.id);
+      expect(stored).toMatchObject({ alinan_tutar: 0, finans_durumu: 'BEKLIYOR' });
+    }
+  );
+
+  it('a paid status without an amount is a notice too; the owner writes the payment', async () => {
+    aiReturns({ alinan_tutar: 0, finans_durumu: 'KISMI_ODEME' });
+    const admin = await aiSave('SUPER_ADMIN');
+    expect(admin.status).toBe(200);
+    expect(admin.body.siparis).toMatchObject({ alinan_tutar: 0, finans_durumu: 'BEKLIYOR' });
+    expect(admin.body.siparis.eksik_bilgiler).toContain(
+      'Ödeme bildirimi — butik ekibi kaydetmeli: tutar belirtilmemiş'
+    );
+
     aiReturns({ alinan_tutar: 100 });
-    expect((await aiSave('PATRON')).status).toBe(200);
-    expect(tenantOrders()).toBe(before + 1);
+    const owner = await aiSave('PATRON');
+    expect(owner.status).toBe(200);
+    expect(owner.body.siparis).toMatchObject({ alinan_tutar: 100, finans_durumu: 'ODENDI' });
+    expect(owner.body.uyari).toBeUndefined();
+    expect(JSON.stringify(owner.body.siparis)).not.toContain('Ödeme bildirimi');
   });
 });
 
