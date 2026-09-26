@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../../lib/apiClient';
+import { bakuTarihi } from '../../shared/bakuTarihi';
 
 type ParaBirimi = 'CAD' | 'USD';
 interface Kur {
@@ -15,7 +16,8 @@ interface KurListesi {
   kurlar: Kur[];
 }
 
-const bugun = () => new Date().toISOString().slice(0, 10);
+// Today in Baku, not in UTC (Codex R3 F13).
+const bugun = () => bakuTarihi();
 const hataMetni = (error: unknown) =>
   error instanceof Error ? error.message : 'Əməliyyat tamamlanmadı.';
 
