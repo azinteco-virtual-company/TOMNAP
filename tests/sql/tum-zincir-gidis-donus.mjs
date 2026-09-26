@@ -126,8 +126,9 @@ const query = status.slice(
 const rows = psql(['-c', 'begin transaction read only', '-f', '-', '-c', 'rollback'], query)
   .split('\n')
   .filter((line) => /\|[tf]$/.test(line));
-// An optional column may be missing (the live siparisler has no ozel_not; Codex R4).
-const falses = rows.filter((line) => line.endsWith('|f') && !line.includes('|isteğe bağlı|'));
+// Only the physical ozel_not column may be missing (the live siparisler has none; Codex R4).
+// guncellenme_tarihi is required: v2 SQL writes and reads it.
+const falses = rows.filter((line) => line.endsWith('|f') && !line.startsWith('ozel_not|'));
 assert.ok(rows.length > order.length, 'the status query returned too few rows');
 assert.deepEqual(falses, [], 'status query rows not true after the round trip');
 console.log(

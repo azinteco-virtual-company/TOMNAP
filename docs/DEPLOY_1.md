@@ -160,8 +160,9 @@ from (values
 order by m.sira;
 
 -- Ön koşul kolonları: hiçbir migration'ın oluşturmadığı (eski temel şemadan gelen), kodun
--- okuyup yazdığı siparisler kolonları. 'gerekli' satırlarından biri false ise durun:
--- sipariş yazma o kolonda hata verir. Sipariş notu baku_tahsilat_notu'ndadır (Codex R3 F8).
+-- okuyup yazdığı siparisler kolonları. 'gerekli' ya da 'v2 için gerekli' satırlarından biri
+-- false ise durun: sipariş yazma o kolonda hata verir. Sipariş notu baku_tahsilat_notu'ndadır
+-- (Codex R3 F8).
 select k.kolon, k.gerekli,
   exists (select 1 from pg_catalog.pg_attribute a
           where a.attrelid = to_regclass('public.siparisler') and a.attname = k.kolon
@@ -178,8 +179,11 @@ from (values
   ('teslim_tarihi', 'gerekli'), ('teslim_eden_kisi', 'gerekli'), ('baku_tahsilat_notu', 'gerekli'),
   ('kanada_takip_kodu', 'gerekli'), ('uluslararasi_kargo_kodu', 'gerekli'),
   ('eksik_bilgiler', 'gerekli'), ('ai_guven_skoru', 'gerekli'), ('is_demo', 'gerekli'),
-  -- Yoksa da çalışır: düzenleme zamanı yazılmaz; fiziksel not yalnız etiket yokken okunur.
-  ('guncellenme_tarihi', 'isteğe bağlı'), ('ozel_not', 'isteğe bağlı')
+  -- v2 ödeme tetikleyicisi (12), kaçaklar Q4 (14) ve v2 defter okuması (Codex R4 F21) bu
+  -- kolonu şart koşar; hepsi plpgsql, eksikliği ancak çalışırken görülür. 26 Eylül: canlıda var.
+  ('guncellenme_tarihi', 'v2 için gerekli'),
+  -- Yoksa da çalışır (canlıda yok): fiziksel not yalnız etiket yokken okunur.
+  ('ozel_not', 'isteğe bağlı')
 ) as k(kolon, gerekli)
 order by k.gerekli, k.kolon;
 
@@ -194,7 +198,7 @@ select to_regclass('supabase_migrations.schema_migrations') is not null as gecmi
 psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "begin transaction read only" -f migration-durumu.sql -c "rollback"
 ```
 
-Sorgu 25 Eylül'de, CI şemasının kurulu olduğu yerel bir veritabanında denendi: 15 satırın hepsi `true` döndü; 11'in ya da 15'in down dosyası bir transaction içinde uygulanınca yalnız o satır `false` oldu. 26 Eylül'de 17 satırla yeniden denendi: hepsi `true`; 17'nin down dosyası uygulanınca yalnız 17 `false` oldu. 18 satırla da denendi: hepsi `true`; 18'in down dosyası uygulanınca yalnız 18 `false` oldu. Ön koşul sorgusu aynı veritabanında 33 kolonun hepsi için `true` döndü.
+Sorgu 25 Eylül'de, CI şemasının kurulu olduğu yerel bir veritabanında denendi: 15 satırın hepsi `true` döndü; 11'in ya da 15'in down dosyası bir transaction içinde uygulanınca yalnız o satır `false` oldu. 26 Eylül'de 17 satırla yeniden denendi: hepsi `true`; 17'nin down dosyası uygulanınca yalnız 17 `false` oldu. 18 satırla da denendi: hepsi `true`; 18'in down dosyası uygulanınca yalnız 18 `false` oldu. Ön koşul sorgusu aynı veritabanında 33 kolonun hepsi için `true` döndü. Canlıda (26 Eylül) `guncellenme_tarihi` var, `ozel_not` yok. CI bu sorguyu `ozel_not` kolonu olmayan ikinci bir veritabanında da çalıştırır; orada yalnız `ozel_not` satırı `false` olabilir.
 
 SQL Editor'da elle uygulanan migration'lar `schema_migrations` tablosuna yazılmaz. Bu yüzden asıl ölçü imza nesnesinin varlığıdır.
 
