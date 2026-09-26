@@ -115,6 +115,7 @@ export default function ManifestEslestirmePaneli({ dosyaBase64, dosyaAdi, onKapa
 
   return (
     <section
+      data-awb-panel="tomnap-awb-panel"
       aria-label="Manifest eşləşdirmə təklifləri"
       className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900 shadow-xs space-y-4"
     >
