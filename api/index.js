@@ -6453,6 +6453,21 @@ import { randomUUID } from "node:crypto";
 
 // src/server/services/v2/ortak.ts
 var OTURUM_ALANLARI = /* @__PURE__ */ new Set(["tenant_id", "tenantId"]);
+var SAYFA = 1e3;
+var SAYFA_SINIRI = 2e5;
+async function tumSatirlar(sorgu, mesaj) {
+  const satirlar = [];
+  let hedef = null;
+  for (; ; ) {
+    const { data, error: error2, count } = await sorgu(satirlar.length, satirlar.length + SAYFA - 1);
+    if (error2 || !Array.isArray(data)) throw new PublicResourceError(mesaj, 503);
+    if (hedef === null) hedef = typeof count === "number" ? count : null;
+    satirlar.push(...data);
+    if (hedef === null ? data.length < SAYFA : satirlar.length >= hedef) return satirlar;
+    if (data.length === 0 || satirlar.length > SAYFA_SINIRI)
+      throw new PublicResourceError(mesaj, 503);
+  }
+}
 function v2Tenant(tenant2) {
   if (typeof tenant2 !== "string" || tenant2 === "all" || !/^[a-zA-Z0-9_-]{1,100}$/.test(tenant2))
     throw new PublicResourceError("Bir butik se\xE7ilmelidir.", 400);
@@ -6477,7 +6492,15 @@ var ODEME_YONTEMLERI = ["NAKIT", "KART", "HAVALE", "DIGER"];
 var ELLE_KAYNAKLAR = ["BUTIK", "ONLINE"];
 var UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 var ODEME_KOLONLARI = "id,tenant_id,siparis_id,tutar_azn,yontem,kaynak,alan_kullanici_id,alma_zamani,kaydeden_kullanici_id,aciklama,ters_kayit_odeme_id,kasa_teslim_id,olusturma_zamani";
-var ALANLAR = ["siparis_id", "tutar_azn", "yontem", "kaynak", "alma_zamani", "aciklama"];
+var ALANLAR = [
+  "siparis_id",
+  "tutar_azn",
+  "yontem",
+  "kaynak",
+  "alma_zamani",
+  "aciklama",
+  "islem_anahtari"
+];
 var KURUS = (value) => Math.round(value * 100);
 function odemeDurumu(toplam, odenen) {
   if (odenen <= 0) return "ODENMEDI";
@@ -6492,6 +6515,12 @@ function metin(value, alan, sinir) {
   if (temiz.length > sinir)
     throw new PublicResourceError(`${alan} en fazla ${sinir} karakter.`, 400);
   return temiz || null;
+}
+function islemAnahtariOku(value) {
+  if (value === void 0 || value === null) return null;
+  if (typeof value !== "string" || !UUID.test(value))
+    throw new PublicResourceError("\u0130\u015Flem anahtar\u0131 ge\xE7ersiz.", 400);
+  return value.toLowerCase();
 }
 function v2OdemeGirdisiniDogrula(body2, simdi = /* @__PURE__ */ new Date()) {
   const alanlar = v2GovdesiniAyikla(body2, ALANLAR);
@@ -6517,7 +6546,8 @@ function v2OdemeGirdisiniDogrula(body2, simdi = /* @__PURE__ */ new Date()) {
     yontem: alanlar.yontem,
     kaynak: alanlar.kaynak,
     almaZamani,
-    aciklama: metin(alanlar.aciklama, "A\xE7\u0131klama", 500)
+    aciklama: metin(alanlar.aciklama, "A\xE7\u0131klama", 500),
+    islemAnahtari: islemAnahtariOku(alanlar.islem_anahtari)
   };
 }
 function tersKayitGerekcesi(body2) {
@@ -6551,17 +6581,19 @@ function odemeden(value, tenantId) {
     olusturmaZamani: String(r.olusturma_zamani)
   };
 }
-function defter(siparisId, toplam, odemeler) {
-  const odenen = odemeler.reduce((kurus, o) => kurus + KURUS(o.tutarAzn), 0) / 100;
+function ozetOlustur(siparisId, toplam, odenen) {
+  return {
+    siparisId,
+    toplamTutar: toplam,
+    odenenTutar: odenen,
+    kalanTutar: (KURUS(toplam) - KURUS(odenen)) / 100,
+    durum: odemeDurumu(toplam, odenen)
+  };
+}
+function defter(siparisId, toplam, odemeler, odenen = odemeler.reduce((kurus, o) => kurus + KURUS(o.tutarAzn), 0) / 100) {
   const tersler = new Set(odemeler.map((o) => o.tersKayitOdemeId).filter(Boolean));
   return {
-    ozet: {
-      siparisId,
-      toplamTutar: toplam,
-      odenenTutar: odenen,
-      kalanTutar: (KURUS(toplam) - KURUS(odenen)) / 100,
-      durum: odemeDurumu(toplam, odenen)
-    },
+    ozet: ozetOlustur(siparisId, toplam, odenen),
     odemeler: odemeler.map((o) => ({ ...o, tersKaydiVar: tersler.has(o.id) }))
   };
 }
@@ -6593,10 +6625,22 @@ function bellekteYaz(tenantId, odeme, siparis) {
     finans_durumu: eskiFinansDurumu(toplam, odenen),
     guncellenme_tarihi: (/* @__PURE__ */ new Date()).toISOString()
   });
-  const { tenantId: _tenant, ...kayitli } = odeme;
-  return kayitli;
+  return disaVer(odeme);
 }
-function bellekteKuryeTahsilatiYaz(tenantId, siparis, kuryeId, tutarAzn) {
+function disaVer({ tenantId: _tenant, islemAnahtari: _anahtar, ...odeme }) {
+  return odeme;
+}
+function bellekteAnahtarliOdeme(tenantId, anahtar, ayni) {
+  if (!anahtar) return null;
+  const onceki = odemeBellegi.find((o) => o.tenantId === tenantId && o.islemAnahtari === anahtar);
+  if (!onceki) return null;
+  if (!ayni(onceki)) islemAnahtariCakismasi();
+  return disaVer(onceki);
+}
+function islemAnahtariCakismasi() {
+  throw new PublicResourceError("Bu i\u015Flem anahtar\u0131 ba\u015Fka bir \xF6deme i\xE7in kullan\u0131ld\u0131.", 409);
+}
+function bellekteKuryeTahsilatiYaz(tenantId, siparis, kuryeId, tutarAzn, islemAnahtari = null) {
   const zaman = (/* @__PURE__ */ new Date()).toISOString();
   return bellekteYaz(
     tenantId,
@@ -6613,7 +6657,8 @@ function bellekteKuryeTahsilatiYaz(tenantId, siparis, kuryeId, tutarAzn) {
       aciklama: null,
       tersKayitOdemeId: null,
       kasaTeslimId: null,
-      olusturmaZamani: zaman
+      olusturmaZamani: zaman,
+      islemAnahtari
     },
     siparis
   );
@@ -6631,7 +6676,7 @@ function bellekteKasayaKapat(tenantId, kuryeId, odemeIdleri, tutarAzn, kasaTesli
   return true;
 }
 function bellektekiOdemeler(tenant2) {
-  return odemeBellegi.filter((o) => o.tenantId === tenant2).map(({ tenantId: _t, ...o }) => o);
+  return odemeBellegi.filter((o) => o.tenantId === tenant2).map(disaVer);
 }
 function bellekteOdemesiVar(tenant2, siparisIdleri) {
   const ids = new Set(siparisIdleri);
@@ -6641,6 +6686,7 @@ function rpcHatasi(error2) {
   const code = error2?.code ?? "";
   if (code === "PT403") throw new PublicResourceError("Bu \xF6deme i\u015Flemi i\xE7in yetkiniz yok.", 403);
   if (code === "PT404") throw new PublicResourceError("Sipari\u015F ya da \xF6deme bulunamad\u0131.", 404);
+  if (code === "PT412") islemAnahtariCakismasi();
   if (code === "PT409" || code === "23505")
     throw new PublicResourceError(
       "Bu \xF6deme i\u015Flenemez: v1 sipari\u015F, ters kay\u0131t ya da zaten ters kayd\u0131 var.",
@@ -6650,12 +6696,19 @@ function rpcHatasi(error2) {
     throw new PublicResourceError("\xD6deme verisi ge\xE7ersiz.", 400);
   throw new PublicResourceError("\xD6deme kaydedilemedi.", 503);
 }
-async function rpcSonucu(tenantId, data) {
+function rpcOdemeSonucu(tenantId, data) {
   const sonuc = kayit(data);
   const odeme = odemeden(sonuc.odeme, tenantId);
-  const defterim = await v2SiparisOdemeleri(tenantId, odeme.siparisId);
-  if (!defterim) throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
-  return { odeme, ozet: defterim.ozet };
+  const s = kayit(sonuc.siparis);
+  const toplam = Number(s.toplam_tutar);
+  const odenen = Number(s.alinan_tutar);
+  if (s.id !== odeme.siparisId || !Number.isFinite(toplam) || !Number.isFinite(odenen))
+    throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
+  return {
+    odeme,
+    ozet: ozetOlustur(odeme.siparisId, toplam, odenen),
+    tekrar: sonuc.tekrar === true
+  };
 }
 async function v2OdemeKaydet(tenant2, userId, girdi) {
   const tenantId = v2Tenant(tenant2);
@@ -6670,6 +6723,17 @@ async function v2OdemeKaydet(tenant2, userId, girdi) {
     if (!siparis) throw new PublicResourceError("Sipari\u015F ya da \xF6deme bulunamad\u0131.", 404);
     if (Number(siparis.model_surumu) !== 2)
       throw new PublicResourceError("\xD6deme defteri yaln\u0131z v2 sipari\u015Fleri i\xE7indir.", 409);
+    const onceki = bellekteAnahtarliOdeme(
+      tenantId,
+      girdi.islemAnahtari,
+      (o) => o.siparisId === girdi.siparisId && KURUS(o.tutarAzn) === KURUS(girdi.tutarAzn) && o.yontem === girdi.yontem && o.kaynak === girdi.kaynak && o.kaydedenKullaniciId === u.id
+    );
+    if (onceki)
+      return {
+        odeme: onceki,
+        ozet: (await v2SiparisOdemeleri(tenantId, girdi.siparisId)).ozet,
+        tekrar: true
+      };
     const zaman = (/* @__PURE__ */ new Date()).toISOString();
     const odeme = bellekteYaz(
       tenantId,
@@ -6686,11 +6750,16 @@ async function v2OdemeKaydet(tenant2, userId, girdi) {
         aciklama: girdi.aciklama,
         tersKayitOdemeId: null,
         kasaTeslimId: null,
-        olusturmaZamani: zaman
+        olusturmaZamani: zaman,
+        islemAnahtari: girdi.islemAnahtari
       },
       siparis
     );
-    return { odeme, ozet: (await v2SiparisOdemeleri(tenantId, girdi.siparisId)).ozet };
+    return {
+      odeme,
+      ozet: (await v2SiparisOdemeleri(tenantId, girdi.siparisId)).ozet,
+      tekrar: false
+    };
   }
   const { data, error: error2 } = await supabase.rpc("tomnap_v2_odeme_kaydet", {
     p_tenant_id: tenantId,
@@ -6701,11 +6770,12 @@ async function v2OdemeKaydet(tenant2, userId, girdi) {
       yontem: girdi.yontem,
       kaynak: girdi.kaynak,
       alma_zamani: girdi.almaZamani,
-      aciklama: girdi.aciklama
+      aciklama: girdi.aciklama,
+      islem_anahtari: girdi.islemAnahtari
     }
   });
   if (error2) rpcHatasi(error2);
-  return rpcSonucu(tenantId, data);
+  return rpcOdemeSonucu(tenantId, data);
 }
 async function v2OdemeTersKayit(tenant2, userId, odemeId, gerekce) {
   const tenantId = v2Tenant(tenant2);
@@ -6737,11 +6807,16 @@ async function v2OdemeTersKayit(tenant2, userId, odemeId, gerekce) {
         kaydedenKullaniciId: u.id,
         aciklama: gerekce,
         tersKayitOdemeId: asil.id,
-        olusturmaZamani: zaman
+        olusturmaZamani: zaman,
+        islemAnahtari: null
       },
       siparis
     );
-    return { odeme, ozet: (await v2SiparisOdemeleri(tenantId, asil.siparisId)).ozet };
+    return {
+      odeme,
+      ozet: (await v2SiparisOdemeleri(tenantId, asil.siparisId)).ozet,
+      tekrar: false
+    };
   }
   const { data, error: error2 } = await supabase.rpc("tomnap_v2_odeme_ters_kayit", {
     p_tenant_id: tenantId,
@@ -6750,7 +6825,7 @@ async function v2OdemeTersKayit(tenant2, userId, odemeId, gerekce) {
     p_aciklama: gerekce
   });
   if (error2) rpcHatasi(error2);
-  return rpcSonucu(tenantId, data);
+  return rpcOdemeSonucu(tenantId, data);
 }
 async function v2SiparisOdemeleri(tenant2, siparisId) {
   const tenantId = v2Tenant(tenant2);
@@ -6766,19 +6841,22 @@ async function v2SiparisOdemeleri(tenant2, siparisId) {
     );
   }
   const client2 = supabase;
-  const { data: baslik, error: error2 } = await client2.from("siparisler").select("id,tenant_id,model_surumu,toplam_tutar").eq("tenant_id", tenantId).eq("model_surumu", 2).eq("id", id).maybeSingle();
+  const { data: baslik, error: error2 } = await client2.from("siparisler").select("id,tenant_id,model_surumu,toplam_tutar,alinan_tutar").eq("tenant_id", tenantId).eq("model_surumu", 2).eq("id", id).maybeSingle();
   if (error2) throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
   if (!baslik) return null;
   const b = kayit(baslik);
   if (b.tenant_id !== tenantId || b.id !== id)
     throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
-  const { data: rows, error: hata6 } = await client2.from("odemeler").select(ODEME_KOLONLARI).eq("tenant_id", tenantId).eq("siparis_id", id).order("olusturma_zamani", { ascending: true });
-  if (hata6 || !Array.isArray(rows)) throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
-  const liste = rows;
+  const liste = await tumSatirlar(
+    (from, to) => client2.from("odemeler").select(ODEME_KOLONLARI, { count: "exact" }).eq("tenant_id", tenantId).eq("siparis_id", id).order("olusturma_zamani", { ascending: true }).order("id", { ascending: true }).range(from, to),
+    "\xD6demeler okunamad\u0131."
+  );
   const odemeler = liste.map((row) => odemeden(row, tenantId));
   if (odemeler.some((o) => o.siparisId !== id))
     throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
-  return defter(id, Number(b.toplam_tutar), odemeler);
+  const odenen = Number(b.alinan_tutar);
+  if (!Number.isFinite(odenen)) throw new PublicResourceError("\xD6demeler okunamad\u0131.", 503);
+  return defter(id, Number(b.toplam_tutar), odemeler, odenen);
 }
 
 // src/server/routes/siparisler.ts
@@ -11347,6 +11425,19 @@ import { Router as Router15 } from "express";
 
 // src/server/services/v2/kurlar.ts
 import { randomUUID as randomUUID10 } from "node:crypto";
+
+// src/shared/bakuTarihi.ts
+var BAKU_GUNU = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Baku",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+});
+function bakuTarihi(an = /* @__PURE__ */ new Date()) {
+  return BAKU_GUNU.format(an);
+}
+
+// src/server/services/v2/kurlar.ts
 var KUR_PARA_BIRIMLERI = ["CAD", "USD"];
 var KUR_LISTE_SINIRI = 200;
 var COLUMNS = "id,tenant_id,para_birimi,tarih,azn_karsiligi,kaynak,giren_kullanici_id,olusturma_zamani";
@@ -11359,8 +11450,7 @@ function gecerliTarih(value, bugun) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
     throw new PublicResourceError("Tarih YYYY-AA-GG bi\xE7iminde olmal\u0131.", 400);
   const time = Date.parse(`${value}T00:00:00Z`);
-  const yarin = Date.UTC(bugun.getUTCFullYear(), bugun.getUTCMonth(), bugun.getUTCDate() + 1);
-  if (!Number.isFinite(time) || new Date(time).toISOString().slice(0, 10) !== value || value < "2000-01-01" || time > yarin)
+  if (!Number.isFinite(time) || new Date(time).toISOString().slice(0, 10) !== value || value < "2000-01-01" || value > bakuTarihi(bugun))
     throw new PublicResourceError("Ge\xE7ersiz kur tarihi.", 400);
   return value;
 }
@@ -11845,9 +11935,10 @@ async function v2SiparisOlustur(tenant2, userId, girdi) {
 }
 async function satirlariOku(tenantId, siparisIdleri) {
   if (siparisIdleri.length === 0) return [];
-  const { data, error: error2 } = await supabase.from("siparis_satirlari").select(SATIR_KOLONLARI).eq("tenant_id", tenantId).in("siparis_id", siparisIdleri).order("sira", { ascending: true });
-  if (error2 || !Array.isArray(data)) throw new PublicResourceError("Sipari\u015Fler okunamad\u0131.", 503);
-  const rows = data;
+  const rows = await tumSatirlar(
+    (from, to) => supabase.from("siparis_satirlari").select(SATIR_KOLONLARI, { count: "exact" }).eq("tenant_id", tenantId).in("siparis_id", siparisIdleri).order("siparis_id", { ascending: true }).order("sira", { ascending: true }).range(from, to),
+    "Sipari\u015Fler okunamad\u0131."
+  );
   return rows.map((row) => satirdan3(row, tenantId));
 }
 async function v2SiparisleriListele(tenant2) {
@@ -12155,7 +12246,8 @@ var kullanici = (req) => req.auth?.userId ?? "";
 router12.post("/odemeler", async (req, res) => {
   try {
     const girdi = v2OdemeGirdisiniDogrula(req.body);
-    res.status(201).json({ basarili: true, ...await v2OdemeKaydet(req.tenantId, kullanici(req), girdi) });
+    const sonuc = await v2OdemeKaydet(req.tenantId, kullanici(req), girdi);
+    res.status(sonuc.tekrar ? 200 : 201).json({ basarili: true, ...sonuc });
   } catch (error2) {
     hata3(res, error2);
   }
@@ -12198,12 +12290,14 @@ function tutarOku(value, sinir) {
   return value;
 }
 function kuryeTahsilatGirdisi(body2) {
-  const alanlar = v2GovdesiniAyikla(body2, ["siparis_id", "tutar_azn"]);
+  const alanlar = v2GovdesiniAyikla(body2, ["siparis_id", "tutar_azn", "islem_anahtari"]);
   if (typeof alanlar.siparis_id !== "string" || !UUID4.test(alanlar.siparis_id))
     throw new PublicResourceError("Ge\xE7erli bir sipari\u015F se\xE7ilmelidir.", 400);
   return {
     siparisId: alanlar.siparis_id.toLowerCase(),
-    tutarAzn: tutarOku(alanlar.tutar_azn, 1e6)
+    tutarAzn: tutarOku(alanlar.tutar_azn, 1e6),
+    // One collection intent (Codex R3 F15): a retry with the same key records nothing new.
+    islemAnahtari: islemAnahtariOku(alanlar.islem_anahtari)
   };
 }
 function kasaTeslimGirdisi(body2) {
@@ -12236,6 +12330,7 @@ function rpcHatasi3(error2) {
   const code = error2?.code ?? "";
   if (code === "PT403") throw new PublicResourceError("Bu kasa i\u015Flemi i\xE7in yetkiniz yok.", 403);
   if (code === "PT404") throw new PublicResourceError("Sipari\u015F ya da kurye bulunamad\u0131.", 404);
+  if (code === "PT412") islemAnahtariCakismasi();
   if (code === "PT409" || code === "23505")
     throw new PublicResourceError(
       "Kay\u0131t de\u011Fi\u015Fti: sipari\u015F teslimatta de\u011Fil ya da tahsilat art\u0131k a\xE7\u0131k de\u011Fil. Listeyi yenileyin.",
@@ -12353,23 +12448,35 @@ async function kuryeTahsilatiKaydet(tenant2, userId, girdi) {
     if (!s) rpcHatasi3({ code: "PT404" });
     if (s.baku_kurye_id !== kurye.id) rpcHatasi3({ code: "PT403" });
     if (Number(s.model_surumu) !== 2 || !teslimatta(s, userId)) rpcHatasi3({ code: "PT409" });
+    const onceki = bellekteAnahtarliOdeme(
+      tenantId,
+      girdi.islemAnahtari,
+      (o) => o.siparisId === girdi.siparisId && KURUS2(o.tutarAzn) === KURUS2(girdi.tutarAzn) && o.kaynak === "TESLIMAT" && o.alanKullaniciId === userId
+    );
+    const ozet = async () => (await v2SiparisOdemeleri(tenantId, girdi.siparisId)).ozet;
+    if (onceki) return { odeme: onceki, ozet: await ozet(), tekrar: true };
     if (KURUS2(girdi.tutarAzn) > KURUS2(kalan(s))) rpcHatasi3({ code: "22023" });
-    const odeme2 = bellekteKuryeTahsilatiYaz(tenantId, s, userId, girdi.tutarAzn);
-    return { odeme: odeme2, ozet: (await v2SiparisOdemeleri(tenantId, girdi.siparisId)).ozet };
+    const odeme = bellekteKuryeTahsilatiYaz(
+      tenantId,
+      s,
+      userId,
+      girdi.tutarAzn,
+      girdi.islemAnahtari
+    );
+    return { odeme, ozet: await ozet(), tekrar: false };
   }
   const { data, error: error2 } = await supabase.rpc("tomnap_v2_kurye_tahsilati", {
     p_tenant_id: tenantId,
     p_user_id: userId,
     p_siparis_id: girdi.siparisId,
-    p_tutar: girdi.tutarAzn
+    p_tutar: girdi.tutarAzn,
+    ...girdi.islemAnahtari ? { p_islem_anahtari: girdi.islemAnahtari } : {}
   });
   if (error2) rpcHatasi3(error2);
-  const odeme = kayit4(kayit4(data).odeme);
-  if (odeme.tenant_id !== tenantId || odeme.siparis_id !== girdi.siparisId)
+  const sonuc = rpcOdemeSonucu(tenantId, data);
+  if (sonuc.odeme.siparisId !== girdi.siparisId)
     throw new PublicResourceError("Kasa verisi okunamad\u0131.", 503);
-  const defter2 = await v2SiparisOdemeleri(tenantId, girdi.siparisId);
-  if (!defter2) throw new PublicResourceError("Kasa verisi okunamad\u0131.", 503);
-  return { odeme: defter2.odemeler.find((o) => o.id === odeme.id) ?? null, ozet: defter2.ozet };
+  return sonuc;
 }
 async function kuryeNakitDurumu(tenant2, userId) {
   const tenantId = v2Tenant(tenant2);
@@ -12492,10 +12599,8 @@ router13.get("/kurye/nakit", async (req, res) => {
 router13.post("/kurye/tahsilat", async (req, res) => {
   try {
     const girdi = kuryeTahsilatGirdisi(req.body);
-    res.status(201).json({
-      basarili: true,
-      ...await kuryeTahsilatiKaydet(req.tenantId, kullanici2(req), girdi)
-    });
+    const sonuc = await kuryeTahsilatiKaydet(req.tenantId, kullanici2(req), girdi);
+    res.status(sonuc.tekrar ? 200 : 201).json({ basarili: true, ...sonuc });
   } catch (error2) {
     hata4(res, error2);
   }
@@ -12659,6 +12764,10 @@ function hata5(res, error2) {
   return res.status(500).json({ basarili: false, hata: "\u0130\u015Flem tamamlanamad\u0131." });
 }
 var kullanici3 = (req) => req.auth?.userId ?? "";
+router15.use((req, res, next) => {
+  if (req.tenantId !== "demo_sandbox") return next();
+  res.status(404).json({ basarili: false, hata: "Bu funksiya demo sah\u0259sind\u0259 aktiv deyil." });
+});
 router15.get("/durum", (_req, res) => {
   res.json({ basarili: true, v2: true });
 });
