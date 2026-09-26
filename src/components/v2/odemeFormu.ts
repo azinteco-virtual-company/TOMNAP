@@ -91,7 +91,9 @@ export const bosOdemeFormu = (kaynak: 'BUTIK' | 'ONLINE' = 'BUTIK'): OdemeFormu 
 /** Validates the form and builds the POST /api/v2/odemeler body. */
 export function odemeIstegi(
   siparisId: string,
-  form: OdemeFormu
+  form: OdemeFormu,
+  /** One key per payment intent; a retry sends the same one (Codex R3 F15). */
+  islemAnahtari?: string
 ): { govde: Record<string, unknown>; hatalar: [] } | { govde: null; hatalar: string[] } {
   const hatalar: string[] = [];
   const tutar = sayiOku(form.tutar);
@@ -111,6 +113,7 @@ export function odemeIstegi(
       yontem: form.yontem,
       kaynak: form.kaynak,
       ...(form.aciklama.trim() ? { aciklama: form.aciklama.trim() } : {}),
+      ...(islemAnahtari ? { islem_anahtari: islemAnahtari } : {}),
     },
     hatalar: [],
   };

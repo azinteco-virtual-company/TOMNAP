@@ -9,7 +9,7 @@ import {
   siparislerVeritabani,
 } from '../state';
 import { PLATFORM_ROLU, rolGrubunda } from '../../../shared/roller';
-import { v2GovdesiniAyikla, v2Tenant } from './ortak';
+import { tumSatirlar, v2GovdesiniAyikla, v2Tenant } from './ortak';
 import { talimatiAyir } from '../siparisFormatlama';
 
 /**
@@ -436,14 +436,19 @@ export async function v2SiparisOlustur(
 
 async function satirlariOku(tenantId: string, siparisIdleri: string[]) {
   if (siparisIdleri.length === 0) return [];
-  const { data, error } = await supabase!
-    .from('siparis_satirlari')
-    .select(SATIR_KOLONLARI)
-    .eq('tenant_id', tenantId)
-    .in('siparis_id', siparisIdleri)
-    .order('sira', { ascending: true });
-  if (error || !Array.isArray(data)) throw new PublicResourceError('Siparişler okunamadı.', 503);
-  const rows: unknown[] = data;
+  // All lines of up to 200 orders (up to 20,000): paged, in a stable order (Codex R3 F10).
+  const rows = await tumSatirlar(
+    (from, to) =>
+      supabase!
+        .from('siparis_satirlari')
+        .select(SATIR_KOLONLARI, { count: 'exact' })
+        .eq('tenant_id', tenantId)
+        .in('siparis_id', siparisIdleri)
+        .order('siparis_id', { ascending: true })
+        .order('sira', { ascending: true })
+        .range(from, to),
+    'Siparişler okunamadı.'
+  );
   return rows.map((row) => satirdan(row, tenantId));
 }
 

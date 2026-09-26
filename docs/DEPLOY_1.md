@@ -102,9 +102,10 @@ Repodaki migration'ların **hepsi** `90b8eae`'den sonra geldi; canlı kodda hiç
 | 14  | `20260925130000_kacaklar.sql` (A12)                                       | PR #22    | `tomnap_v2_kacak_q4()`                     | var          | **hayır**                  | okunamadı |
 | 15  | `20260925140000_para_yazma_yetkisi.sql` (SUPER_ADMIN para yazmaz)         | bu PR     | 3 fonksiyon gövdesi (`para-yazma-yetkisi`) | var          | evet (`OR REPLACE`)        | okunamadı |
 | 16  | `20260925150000_siparis_guncelle.sql` (v1 düzenleme, Codex R3 F1/F2)      | PR #27    | `tomnap_siparis_guncelle()`                | var          | **hayır**                  | okunamadı |
-| 17  | `20260925160000_not_sozlesmesi.sql` (not sözleşmesi, Codex R3 F8)         | bu PR     | `tomnap_v2_siparis_olustur()` gövdesi      | var          | evet (`OR REPLACE`)        | okunamadı |
+| 17  | `20260925160000_not_sozlesmesi.sql` (not sözleşmesi, Codex R3 F8)         | PR #29    | `tomnap_v2_siparis_olustur()` gövdesi      | var          | evet (`OR REPLACE`)        | okunamadı |
+| 18  | `20260926100000_odeme_islem_anahtari.sql` (işlem anahtarı, Codex R3 F15)  | bu PR     | `tomnap_v2_odeme_kaydet()` gövdesi         | var          | **hayır**                  | okunamadı |
 
-Toplam 17 migration. 7–17'nin her biri CI'da `up → down → down → up` ile sınanıyor.
+Toplam 18 migration. 7–18'in her biri CI'da `up → down → down → up` ile sınanıyor.
 
 - **16 Deploy 1 ile gider:** Sipariş düzenleme rotası (`PATCH /api/siparisler/:id`) 16'nın fonksiyonunu çağırıyor. Bu yüzden 16, 1–6 ile birlikte ve yeni koddan **önce** uygulanır. 7–15'e bağlı değil.
 
@@ -112,10 +113,11 @@ Toplam 17 migration. 7–17'nin her biri CI'da `up → down → down → up` ile
 
 - **7–15 ne zaman:** faz-a-plan'a göre Deploy 1'den **sonra**, `FF_V2_FLOW` kapalıyken, ayrı yayınlarla. 7 ve 8, Deploy 1'deki kodun `ABD_SATINALMA` davetini açar; yoksa bu davet 409 ile reddedilir, diğer roller etkilenmez. 9–15 yalnız v2 akışı içindir.
 - **17 v2 ile gider:** 7–15 ile birlikte, 11'den sonra. 11'in fonksiyonunu değiştirir: v2 sipariş notu artık fiziksel bir `ozel_not` kolonuna değil, v1 gibi `baku_tahsilat_notu`'daki `[TƏLİMAT: …]` etiketine yazılır (hiçbir migration `ozel_not` kolonu oluşturmuyor; kolonsuz şemada v2 siparişi hiç oluşturulamıyordu). 11 herhangi bir nedenle yeniden uygulanırsa 17 de ardından yeniden uygulanır.
+- **18 v2 ile gider:** 12, 13 ve 15'ten sonra, en son. `odemeler`'e yeni bir kolon (`islem_anahtari`, var olan satırlarda boş) ve kiracı başına benzersiz bir indeks ekler; ödeme kaydı ve yeni beş argümanlı kurye tahsilatı aynı anahtarla gelen tekrarı yeni kayıt yazmadan ilk ödemeyle yanıtlar. v2 ödeme ve kurye ekranları her zaman anahtar gönderir: 18 olmadan kurye tahsilatı çalışmaz. 15 yeniden uygulanırsa 18 de ardından yeniden uygulanır.
 - **7–15 arası bağımlılık:** 11, 10'un fonksiyonunu değiştirir; 12, 10'un v2 siparişlerine bağlanır; 13, 12'ye ve 3'teki `kuryeler`'e; 14'ün Q5'i 13'ün bakiye fonksiyonunu çağırır; 15, 12 ve 13'ün üç yazma fonksiyonunu değiştirir (SUPER_ADMIN ödeme kaydı, ters kayıt ve kasa teslimi yazamaz). Sırayı bozmayın.
 - **2, 3, 4, 6, 7, 8, 9, 10, 12, 13 ve 14 kısmen uygulanmışsa yeniden çalıştırılamaz:** `CREATE FUNCTION` / `CREATE TABLE` komutları `OR REPLACE` ya da `IF NOT EXISTS` içermiyor. Önce imza kontrolünü yapın; imzası var olan migration'ı yeniden çalıştırmayın.
 - **1–4'ün down dosyası yok.** Veritabanında geri dönüş ancak yedekten yapılabilir; uygulamadan önce yedek alın.
-- **Beklenmedik migration:** `schema_migrations` tablosunda bu on yedi sürümden başka bir kayıt görürseniz durun ve raporlayın. Bu, repoda olmayan bir değişikliğin uzakta uygulandığı anlamına gelir.
+- **Beklenmedik migration:** `schema_migrations` tablosunda bu on sekiz sürümden başka bir kayıt görürseniz durun ve raporlayın. Bu, repoda olmayan bir değişikliğin uzakta uygulandığı anlamına gelir.
 
 ### Salt okunur kontrol (Supabase SQL Editor ya da `psql`)
 
@@ -152,7 +154,8 @@ from (values
   (14, '20260925130000_kacaklar.sql', 'fonksiyon', 'tomnap_v2_kacak_q4'),
   (15, '20260925140000_para_yazma_yetkisi.sql', 'govde', 'tomnap_v2_odeme_kaydet:para-yazma-yetkisi'),
   (16, '20260925150000_siparis_guncelle.sql', 'fonksiyon', 'tomnap_siparis_guncelle'),
-  (17, '20260925160000_not_sozlesmesi.sql', 'govde', 'tomnap_v2_siparis_olustur:Codex R3 F8')
+  (17, '20260925160000_not_sozlesmesi.sql', 'govde', 'tomnap_v2_siparis_olustur:Codex R3 F8'),
+  (18, '20260926100000_odeme_islem_anahtari.sql', 'govde', 'tomnap_v2_odeme_kaydet:Codex R3 F15')
 ) as m(sira, dosya, tur, imza)
 order by m.sira;
 
@@ -191,7 +194,7 @@ select to_regclass('supabase_migrations.schema_migrations') is not null as gecmi
 psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "begin transaction read only" -f migration-durumu.sql -c "rollback"
 ```
 
-Sorgu 25 Eylül'de, CI şemasının kurulu olduğu yerel bir veritabanında denendi: 15 satırın hepsi `true` döndü; 11'in ya da 15'in down dosyası bir transaction içinde uygulanınca yalnız o satır `false` oldu. 26 Eylül'de 17 satırla yeniden denendi: hepsi `true`; 17'nin down dosyası uygulanınca yalnız 17 `false` oldu. Ön koşul sorgusu aynı veritabanında 33 kolonun hepsi için `true` döndü.
+Sorgu 25 Eylül'de, CI şemasının kurulu olduğu yerel bir veritabanında denendi: 15 satırın hepsi `true` döndü; 11'in ya da 15'in down dosyası bir transaction içinde uygulanınca yalnız o satır `false` oldu. 26 Eylül'de 17 satırla yeniden denendi: hepsi `true`; 17'nin down dosyası uygulanınca yalnız 17 `false` oldu. 18 satırla da denendi: hepsi `true`; 18'in down dosyası uygulanınca yalnız 18 `false` oldu. Ön koşul sorgusu aynı veritabanında 33 kolonun hepsi için `true` döndü.
 
 SQL Editor'da elle uygulanan migration'lar `schema_migrations` tablosuna yazılmaz. Bu yüzden asıl ölçü imza nesnesinin varlığıdır.
 
@@ -340,7 +343,7 @@ vercel rollback <önceki-deployment-url>
    psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/20260923023659_awb_match_confirmation.down.sql
    ```
 
-**v2 migration'ları (15 → 7):** Önce `FF_V2_FLOW` kapatılıp yeniden deploy edilir. Sonra down dosyaları yeniden eskiye, her biri tek transaction olarak uygulanır:
+**v2 migration'ları (18 → 7):** Önce `FF_V2_FLOW` kapatılıp yeniden deploy edilir. Sonra down dosyaları yeniden eskiye, her biri tek transaction olarak uygulanır:
 
 ```bash
 psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/<sürüm>_<ad>.down.sql
@@ -348,6 +351,8 @@ psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/<sürüm>_<ad>.
 
 | #   | Down dosyası                                    | Reddettiği durum / kaybolan veri                                   |
 | --- | ----------------------------------------------- | ------------------------------------------------------------------ |
+| 18  | `20260926100000_odeme_islem_anahtari.down.sql`  | yok; ödemeler kalır, yalnız işlem anahtarları silinir              |
+| 17  | `20260925160000_not_sozlesmesi.down.sql`        | yok; v2 notu yeniden fiziksel `ozel_not`'a yazılır (kolon gerekir) |
 | 15  | `20260925140000_para_yazma_yetkisi.down.sql`    | yok; A10/A11 gövdelerine döner (SUPER_ADMIN yeniden yazabilir)     |
 | 14  | `20260925130000_kacaklar.down.sql`              | yok; yalnız iki salt okunur fonksiyon                              |
 | 13  | `20260925120000_kasa_teslimleri.down.sql`       | kasa teslimi varsa **reddeder**; kurye tahsilatları defterde kalır |

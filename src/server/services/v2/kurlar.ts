@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { supabase } from '../supabase';
 import { PublicResourceError } from '../publicFetch';
+import { bakuTarihi } from '../../../shared/bakuTarihi';
 import { v2Tenant, v2GovdesiniAyikla } from './ortak';
 
 /**
@@ -47,13 +48,12 @@ function gecerliTarih(value: unknown, bugun: Date): string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value))
     throw new PublicResourceError('Tarih YYYY-AA-GG biçiminde olmalı.', 400);
   const time = Date.parse(`${value}T00:00:00Z`);
-  // A day of slack for time zones; rates are not entered for future days.
-  const yarin = Date.UTC(bugun.getUTCFullYear(), bugun.getUTCMonth(), bugun.getUTCDate() + 1);
+  // Rates are not entered for days that have not started in Baku (Codex R3 F13).
   if (
     !Number.isFinite(time) ||
     new Date(time).toISOString().slice(0, 10) !== value ||
     value < '2000-01-01' ||
-    time > yarin
+    value > bakuTarihi(bugun)
   )
     throw new PublicResourceError('Geçersiz kur tarihi.', 400);
   return value;

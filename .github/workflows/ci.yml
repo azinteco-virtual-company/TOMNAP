@@ -50,10 +50,12 @@ jobs:
           npm run check:client-artifacts
           echo "✅ Production derlemesi başarıyla doğrulandı."
 
-      # npm run build, v2 bayrağı kapalıyken kabuğun pakette hiç olmadığını denetler.
-      - name: v2 kabuğu bayrak açıkken ilk yük paketinin dışında
+      # npm run build, bayraklar kapalıyken v2 kabuğunun ve AWB panelinin pakette hiç
+      # olmadığını denetler (Codex R3 F18); bu adım açıkken ilk yükün dışında olduklarını.
+      - name: v2 kabuğu ve AWB paneli bayrak açıkken ilk yük paketinin dışında
         run: |
-          VITE_FF_V2_FLOW=true npx vite build --outDir "$RUNNER_TEMP/dist-v2" --emptyOutDir
+          export VITE_FF_V2_FLOW=true VITE_FF_AWB_REVIEW=true
+          npx vite build --outDir "$RUNNER_TEMP/dist-v2" --emptyOutDir
           npm run check:v2-bundle -- "$RUNNER_TEMP/dist-v2" acik
 
   browser-security:
@@ -152,10 +154,13 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/siparis-guncelle.sql
           # Note contract (Codex R3 F8): the v2 RPC writes the note tag, no ozel_not; down -> up.
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/not-sozlesmesi.sql
+          # Payment operation key (Codex R3 F15): one payment per key, replay, PT412; down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/odeme-islem-anahtari.sql
           node tests/sql/siparis-satirlari-concurrency.mjs
           node tests/sql/odemeler-concurrency.mjs
           node tests/sql/kasa-concurrency.mjs
           node tests/sql/siparis-guncelle-concurrency.mjs
+          node tests/sql/odeme-islem-anahtari-concurrency.mjs
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/cargo-settings.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/courier-access.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-upload-migrations.sql

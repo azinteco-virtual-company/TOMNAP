@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { ApiError, apiFetch } from '../../lib/apiClient';
 import { kuryeTahsilatIstegi, type AcikTahsilat, type KuryeSiparisi } from './kasaFormu';
 
@@ -17,6 +17,8 @@ export default function KuryeNakitBolumu() {
   const [durum, setDurum] = useState<NakitDurumu | null>(null);
   const [kapali, setKapali] = useState(false);
   const [tutarlar, setTutarlar] = useState<Record<string, string>>({});
+  // One operation key per collection intent (Codex R3 F15); a new amount is a new intent.
+  const islemAnahtarlari = useRef<Record<string, string>>({});
   const [mesaj, setMesaj] = useState<string | null>(null);
   const [bekliyor, setBekliyor] = useState(false);
 
@@ -34,9 +36,11 @@ export default function KuryeNakitBolumu() {
   }, [yukle]);
 
   const yaz = async (siparis: KuryeSiparisi) => {
+    islemAnahtarlari.current[siparis.id] ??= crypto.randomUUID();
     const { govde, hata } = kuryeTahsilatIstegi(
       siparis,
-      tutarlar[siparis.id] ?? siparis.kalanTutar.toFixed(2)
+      tutarlar[siparis.id] ?? siparis.kalanTutar.toFixed(2),
+      islemAnahtarlari.current[siparis.id]
     );
     if (!govde) return setMesaj(hata);
     setBekliyor(true);
@@ -48,6 +52,7 @@ export default function KuryeNakitBolumu() {
         body: JSON.stringify(govde),
       });
       setMesaj(`${govde.tutar_azn.toFixed(2)} AZN nağd yazıldı.`);
+      delete islemAnahtarlari.current[siparis.id];
       setTutarlar({ ...tutarlar, [siparis.id]: '' });
       await yukle();
     } catch (error) {
@@ -77,7 +82,10 @@ export default function KuryeNakitBolumu() {
             inputMode="decimal"
             placeholder={siparis.kalanTutar.toFixed(2)}
             value={tutarlar[siparis.id] ?? ''}
-            onChange={(event) => setTutarlar({ ...tutarlar, [siparis.id]: event.target.value })}
+            onChange={(event) => {
+              delete islemAnahtarlari.current[siparis.id];
+              setTutarlar({ ...tutarlar, [siparis.id]: event.target.value });
+            }}
             className="min-h-11 w-28 rounded-lg border border-slate-300 px-2"
           />
           <button

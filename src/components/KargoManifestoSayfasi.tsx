@@ -35,8 +35,11 @@ import { fetchWithRetry } from '../lib/apiClient';
 import { KargoEntegrasyonModal } from './KargoEntegrasyonModal';
 import { AWB_REVIEW_ENABLED } from '../lib/featureFlags';
 
-// Manifest AWB review: a separate chunk, loaded only when VITE_FF_AWB_REVIEW is on.
-const ManifestEslestirmePaneli = lazy(() => import('./awb-eslestirme/ManifestEslestirmePaneli'));
+// Manifest AWB review: a separate chunk, built and loaded only when VITE_FF_AWB_REVIEW
+// is on; with the flag off the import is not in the build at all (Codex R3 F18).
+const ManifestEslestirmePaneli = AWB_REVIEW_ENABLED
+  ? lazy(() => import('./awb-eslestirme/ManifestEslestirmePaneli'))
+  : null;
 
 interface KargoManifestoSayfasiProps {
   siparisler: Siparis[];
@@ -996,7 +999,7 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
         </div>
       )}
 
-      {AWB_REVIEW_ENABLED && awbManifest && (
+      {ManifestEslestirmePaneli && awbManifest && (
         <Suspense fallback={<div className="text-xs text-slate-500">Yüklənir...</div>}>
           <ManifestEslestirmePaneli
             dosyaBase64={awbManifest.base64}

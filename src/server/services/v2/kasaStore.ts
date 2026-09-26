@@ -11,9 +11,13 @@ import { localCourierForUser } from '../couriers';
 import { rolGrubunda } from '../../../shared/roller';
 import { v2GovdesiniAyikla, v2Tenant } from './ortak';
 import {
+  bellekteAnahtarliOdeme,
   bellekteKasayaKapat,
   bellekteKuryeTahsilatiYaz,
   bellektekiOdemeler,
+  islemAnahtariCakismasi,
+  islemAnahtariOku,
+  rpcOdemeSonucu,
   v2SiparisOdemeleri,
 } from './odemeStore';
 
@@ -81,12 +85,14 @@ function tutarOku(value: unknown, sinir: number): number {
 
 /** POST /api/v2/kurye/tahsilat body. */
 export function kuryeTahsilatGirdisi(body: unknown) {
-  const alanlar = v2GovdesiniAyikla(body, ['siparis_id', 'tutar_azn'] as const);
+  const alanlar = v2GovdesiniAyikla(body, ['siparis_id', 'tutar_azn', 'islem_anahtari'] as const);
   if (typeof alanlar.siparis_id !== 'string' || !UUID.test(alanlar.siparis_id))
     throw new PublicResourceError('Geçerli bir sipariş seçilmelidir.', 400);
   return {
     siparisId: alanlar.siparis_id.toLowerCase(),
     tutarAzn: tutarOku(alanlar.tutar_azn, 1_000_000),
+    // One collection intent (Codex R3 F15): a retry with the same key records nothing new.
+    islemAnahtari: islemAnahtariOku(alanlar.islem_anahtari),
   };
 }
 
@@ -128,6 +134,7 @@ function rpcHatasi(error: { code?: string } | null): never {
   const code = error?.code ?? '';
   if (code === 'PT403') throw new PublicResourceError('Bu kasa işlemi için yetkiniz yok.', 403);
   if (code === 'PT404') throw new PublicResourceError('Sipariş ya da kurye bulunamadı.', 404);
+  if (code === 'PT412') islemAnahtariCakismasi();
   if (code === 'PT409' || code === '23505')
     throw new PublicResourceError(
       'Kayıt değişti: sipariş teslimatta değil ya da tahsilat artık açık değil. Listeyi yenileyin.',
@@ -290,23 +297,42 @@ export async function kuryeTahsilatiKaydet(
     if (!s) rpcHatasi({ code: 'PT404' });
     if (s.baku_kurye_id !== kurye.id) rpcHatasi({ code: 'PT403' });
     if (Number(s.model_surumu) !== 2 || !teslimatta(s, userId)) rpcHatasi({ code: 'PT409' });
+    // A replay comes before the amount check: the first collection lowered what is due.
+    const onceki = bellekteAnahtarliOdeme(
+      tenantId,
+      girdi.islemAnahtari,
+      (o) =>
+        o.siparisId === girdi.siparisId &&
+        KURUS(o.tutarAzn) === KURUS(girdi.tutarAzn) &&
+        o.kaynak === 'TESLIMAT' &&
+        o.alanKullaniciId === userId
+    );
+    const ozet = async () => (await v2SiparisOdemeleri(tenantId, girdi.siparisId))!.ozet;
+    if (onceki) return { odeme: onceki, ozet: await ozet(), tekrar: true };
     if (KURUS(girdi.tutarAzn) > KURUS(kalan(s))) rpcHatasi({ code: '22023' });
-    const odeme = bellekteKuryeTahsilatiYaz(tenantId, s, userId, girdi.tutarAzn);
-    return { odeme, ozet: (await v2SiparisOdemeleri(tenantId, girdi.siparisId))!.ozet };
+    const odeme = bellekteKuryeTahsilatiYaz(
+      tenantId,
+      s,
+      userId,
+      girdi.tutarAzn,
+      girdi.islemAnahtari
+    );
+    return { odeme, ozet: await ozet(), tekrar: false };
   }
+  // With a key the 20260926100000 function (five arguments) replays a retry.
   const { data, error } = await supabase!.rpc('tomnap_v2_kurye_tahsilati', {
     p_tenant_id: tenantId,
     p_user_id: userId,
     p_siparis_id: girdi.siparisId,
     p_tutar: girdi.tutarAzn,
+    ...(girdi.islemAnahtari ? { p_islem_anahtari: girdi.islemAnahtari } : {}),
   });
   if (error) rpcHatasi(error);
-  const odeme = kayit(kayit(data).odeme);
-  if (odeme.tenant_id !== tenantId || odeme.siparis_id !== girdi.siparisId)
+  // The RPC's own totals; no read after the commit (Codex R3 F15).
+  const sonuc = rpcOdemeSonucu(tenantId, data);
+  if (sonuc.odeme.siparisId !== girdi.siparisId)
     throw new PublicResourceError('Kasa verisi okunamadı.', 503);
-  const defter = await v2SiparisOdemeleri(tenantId, girdi.siparisId);
-  if (!defter) throw new PublicResourceError('Kasa verisi okunamadı.', 503);
-  return { odeme: defter.odemeler.find((o) => o.id === odeme.id) ?? null, ozet: defter.ozet };
+  return sonuc;
 }
 
 /** The courier's own view: balance, open collections and orders it may collect for. */
