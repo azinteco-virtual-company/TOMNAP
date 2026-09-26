@@ -179,3 +179,20 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/awb-migration-roundtrip.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/awb-match-approvals.sql
           node tests/sql/awb-confirmation-concurrency.mjs
+      - name: Live-like schema without the physical ozel_not column (Codex R4)
+        env:
+          PGDATABASE: tomnap_test_canli
+        run: |
+          createdb tomnap_test_canli
+          # The live siparisler has no ozel_not column; the roles exist cluster-wide already.
+          sed -e '/^    ozel_not TEXT,$/d' -e '/^CREATE ROLE /d' tests/sql/base-fixture.sql > "$RUNNER_TEMP/base-canli.sql"
+          if grep -q 'ozel_not' "$RUNNER_TEMP/base-canli.sql"; then exit 1; fi
+          psql -X -v ON_ERROR_STOP=1 -f "$RUNNER_TEMP/base-canli.sql"
+          psql -X -v ON_ERROR_STOP=1 -f supabase_saas_schema.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-access-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/storage-fixture.sql
+          for migration in supabase/migrations/*.sql; do
+            psql -X -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          node tests/sql/tum-zincir-gidis-donus.mjs
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/canli-sema-ozel-notsuz.sql

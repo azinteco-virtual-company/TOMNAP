@@ -126,7 +126,8 @@ const query = status.slice(
 const rows = psql(['-c', 'begin transaction read only', '-f', '-', '-c', 'rollback'], query)
   .split('\n')
   .filter((line) => /\|[tf]$/.test(line));
-const falses = rows.filter((line) => line.endsWith('|f'));
+// An optional column may be missing (the live siparisler has no ozel_not; Codex R4).
+const falses = rows.filter((line) => line.endsWith('|f') && !line.includes('|isteğe bağlı|'));
 assert.ok(rows.length > order.length, 'the status query returned too few rows');
 assert.deepEqual(falses, [], 'status query rows not true after the round trip');
 console.log(
