@@ -37,6 +37,7 @@ function builder(call: Call) {
     in: (key: string, values: unknown) => (call.filters.push([`${key}:in`, values]), chain),
     order: () => chain,
     limit: () => chain,
+    range: () => chain,
     single: answer,
     maybeSingle: answer,
     then: (resolve: (value: Answer) => unknown, reject: (reason: unknown) => unknown) =>
@@ -362,11 +363,18 @@ describe('v2 payment ledger on Supabase: one RPC per write, tenant-scoped reads 
     olusturma_zamani: '2026-09-25T10:00:00+00:00',
     ...extra,
   });
-  const ledgerAnswers = (tenant: string, rows: unknown[] = [payment(tenant)]) =>
-    (db.answer = (call) => ({
-      data: call.table === 'siparisler' ? header(tenant) : rows,
+  // The header carries the paid total the ledger trigger keeps in SQL (Codex R3 F10).
+  const ledgerAnswers = (tenant: string, rows: unknown[] = [payment(tenant)]) => {
+    const paid = rows.reduce<number>(
+      (sum: number, row) => sum + Number((row as { tutar_azn: string }).tutar_azn),
+      0
+    );
+    db.answer = (call) => ({
+      data:
+        call.table === 'siparisler' ? { ...header(tenant), alinan_tutar: paid.toFixed(2) } : rows,
       error: null,
-    }));
+    });
+  };
   const body = () =>
     v2OdemeGirdisiniDogrula({ siparis_id: ORDER, tutar_azn: 30, yontem: 'NAKIT', kaynak: 'BUTIK' });
 

@@ -102,6 +102,7 @@ function fakeDb(physicalNote: boolean) {
       },
       order: () => chain,
       limit: () => chain,
+      range: () => chain,
       maybeSingle: () => {
         const result = run();
         return Promise.resolve(

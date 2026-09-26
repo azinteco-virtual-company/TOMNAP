@@ -8,7 +8,7 @@ import {
   siparislerVeritabani,
 } from '../state';
 import { rolGrubunda } from '../../../shared/roller';
-import { v2GovdesiniAyikla, v2Tenant } from './ortak';
+import { tumSatirlar, v2GovdesiniAyikla, v2Tenant } from './ortak';
 
 /**
  * Ödeme defteri (A10; K16, K20). Append-only: düzeltme ters kayıttır. Veritabanında
@@ -201,8 +201,13 @@ function ozetOlustur(siparisId: string, toplam: number, odenen: number): V2Odeme
   };
 }
 
-function defter(siparisId: string, toplam: number, odemeler: V2Odeme[]): V2OdemeDefteri {
-  const odenen = odemeler.reduce((kurus, o) => kurus + KURUS(o.tutarAzn), 0) / 100;
+function defter(
+  siparisId: string,
+  toplam: number,
+  odemeler: V2Odeme[],
+  /** Database: the SQL total; memory: the sum of the rows. */
+  odenen = odemeler.reduce((kurus, o) => kurus + KURUS(o.tutarAzn), 0) / 100
+): V2OdemeDefteri {
   const tersler = new Set(odemeler.map((o) => o.tersKayitOdemeId).filter(Boolean));
   return {
     ozet: ozetOlustur(siparisId, toplam, odenen),
@@ -550,7 +555,7 @@ export async function v2SiparisOdemeleri(
   const client = supabase!;
   const { data: baslik, error } = await client
     .from('siparisler')
-    .select('id,tenant_id,model_surumu,toplam_tutar')
+    .select('id,tenant_id,model_surumu,toplam_tutar,alinan_tutar')
     .eq('tenant_id', tenantId)
     .eq('model_surumu', 2)
     .eq('id', id)
@@ -560,16 +565,25 @@ export async function v2SiparisOdemeleri(
   const b = kayit(baslik);
   if (b.tenant_id !== tenantId || b.id !== id)
     throw new PublicResourceError('Ödemeler okunamadı.', 503);
-  const { data: rows, error: hata } = await client
-    .from('odemeler')
-    .select(ODEME_KOLONLARI)
-    .eq('tenant_id', tenantId)
-    .eq('siparis_id', id)
-    .order('olusturma_zamani', { ascending: true });
-  if (hata || !Array.isArray(rows)) throw new PublicResourceError('Ödemeler okunamadı.', 503);
-  const liste: unknown[] = rows;
+  // Every payment of the order, paged in a stable order (Codex R3 F10).
+  const liste = await tumSatirlar(
+    (from, to) =>
+      client
+        .from('odemeler')
+        .select(ODEME_KOLONLARI, { count: 'exact' })
+        .eq('tenant_id', tenantId)
+        .eq('siparis_id', id)
+        .order('olusturma_zamani', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to),
+    'Ödemeler okunamadı.'
+  );
   const odemeler = liste.map((row) => odemeden(row, tenantId));
   if (odemeler.some((o) => o.siparisId !== id))
     throw new PublicResourceError('Ödemeler okunamadı.', 503);
-  return defter(id, Number(b.toplam_tutar), odemeler);
+  // The paid total is the one SQL keeps with the ledger (trigger, same transaction as
+  // every payment), not a sum in TypeScript.
+  const odenen = Number(b.alinan_tutar);
+  if (!Number.isFinite(odenen)) throw new PublicResourceError('Ödemeler okunamadı.', 503);
+  return defter(id, Number(b.toplam_tutar), odemeler, odenen);
 }
