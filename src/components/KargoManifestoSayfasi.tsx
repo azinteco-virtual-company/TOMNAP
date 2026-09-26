@@ -30,6 +30,7 @@ import {
 import { loadSpreadsheet, loadPdf, reportDocumentError } from '../utils/documentLibraries';
 import { useDil } from '../context/DilKonteksti';
 import { cleanPdfText, safePrintHtml } from '../utils/pdfHelpers';
+import { html } from '../utils/guvenliHtml';
 import { useAppStore } from '../store/appStore';
 import { fetchWithRetry } from '../lib/apiClient';
 import { KargoEntegrasyonModal } from './KargoEntegrasyonModal';
@@ -609,96 +610,161 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
     setYazdiriliyor(true);
     try {
       const bugun = new Date().toLocaleDateString('az-AZ');
-      const rowsHtml = dahilSiparisler
-        .map(
-          (s, idx) => `
-        <tr>
-          <td style="text-align:center; padding: 6px 4px;">${idx + 1}</td>
-          <td style="padding: 6px 6px;">
-            <strong>${s.musteri_adi || 'Adsız'}</strong><br/>
-            <span style="color:#64748b; font-size:10px;">${s.telefon_numarasi || '-'}</span>
-          </td>
-          <td style="padding: 6px 6px;">
-            <strong>${s.teslimat_sehri || 'Bakı'}</strong><br/>
-            <span style="color:#64748b; font-size:10px;">${s.teslimat_adresi || 'Bakı'}</span>
-          </td>
-          <td style="padding: 6px 6px;">
-            ${s.urun_aciklamasi || '-'}<br/>
-            <small style="color:#64748b;">${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}</small>
-          </td>
-          <td style="text-align:center; font-weight:bold; padding: 6px 4px;">${s.adet || 1}</td>
-          <td style="text-align:right; font-weight:bold; padding: 6px 6px;">${(s.toplam_tutar || 0).toFixed(2)} ${s.para_birimi || 'AZN'}</td>
-          <td style="text-align:right; padding: 6px 6px; ${s.kalan_tutar > 0 ? 'color:#b45309; font-weight:bold;' : 'color:#15803d;'}">
-            ${s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN<br/><small>ALINACAQ</small>` : 'ÖDƏNİLİB'}
-          </td>
-          <td style="padding: 6px 6px;">
-            <span style="font-size:10px; background:#f1f5f9; padding:2px 4px; border-radius:3px;">${getLojistikEtiketi(s.lojistik_durumu).label}</span>
-            ${s.uluslararasi_kargo_kodu ? `<br/><code style="font-size:10px; color:#1d4ed8;">${s.uluslararasi_kargo_kodu}</code>` : ''}
-          </td>
-          <td style="padding: 6px 6px; font-size:10px;">
-            ${s.ozel_not ? `<div>📌 ${s.ozel_not}</div>` : ''}
-            ${s.baku_tahsilat_notu ? `<div style="color:#92400e;">💬 ${s.baku_tahsilat_notu}</div>` : ''}
-          </td>
-        </tr>
-      `
-        )
-        .join('');
+      const rowsHtml = dahilSiparisler.map(
+        (s, idx) => html`
+          <tr>
+            <td style="text-align:center; padding: 6px 4px;">${idx + 1}</td>
+            <td style="padding: 6px 6px;">
+              <strong>${s.musteri_adi || 'Adsız'}</strong><br />
+              <span style="color:#64748b; font-size:10px;">${s.telefon_numarasi || '-'}</span>
+            </td>
+            <td style="padding: 6px 6px;">
+              <strong>${s.teslimat_sehri || 'Bakı'}</strong><br />
+              <span style="color:#64748b; font-size:10px;">${s.teslimat_adresi || 'Bakı'}</span>
+            </td>
+            <td style="padding: 6px 6px;">
+              ${s.urun_aciklamasi || '-'}<br />
+              <small style="color:#64748b;"
+                >${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}</small
+              >
+            </td>
+            <td style="text-align:center; font-weight:bold; padding: 6px 4px;">${s.adet || 1}</td>
+            <td style="text-align:right; font-weight:bold; padding: 6px 6px;">
+              ${(s.toplam_tutar || 0).toFixed(2)} ${s.para_birimi || 'AZN'}
+            </td>
+            <td
+              style="text-align:right; padding: 6px 6px; ${s.kalan_tutar > 0 ? 'color:#b45309; font-weight:bold;' : 'color:#15803d;'}"
+            >
+              ${s.kalan_tutar > 0 ? html`${s.kalan_tutar.toFixed(2)} AZN<br /><small>ALINACAQ</small>` : 'ÖDƏNİLİB'}
+            </td>
+            <td style="padding: 6px 6px;">
+              <span style="font-size:10px; background:#f1f5f9; padding:2px 4px; border-radius:3px;"
+                >${getLojistikEtiketi(s.lojistik_durumu).label}</span
+              >
+              ${s.uluslararasi_kargo_kodu ? html`<br /><code style="font-size:10px; color:#1d4ed8;">${s.uluslararasi_kargo_kodu}</code>` : ''}
+            </td>
+            <td style="padding: 6px 6px; font-size:10px;">
+              ${s.ozel_not ? html`<div>📌 ${s.ozel_not}</div>` : ''}
+              ${s.baku_tahsilat_notu ? html`<div style="color:#92400e;">💬 ${s.baku_tahsilat_notu}</div>` : ''}
+            </td>
+          </tr>
+        `
+      );
 
-      const content = `
+      const content = html`
         <!DOCTYPE html>
         <html>
-        <head>
-          <title>Kargo Manifestosu - KNB Lojistik</title>
-          <style>
-            @page { size: landscape; margin: 12mm; }
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 10px; font-size: 11px; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
-            .title { font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: -0.5px; }
-            .meta { font-size: 11px; color: #475569; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-            th { background-color: #0f172a; color: #ffffff; text-align: left; padding: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-            td { border-bottom: 1px solid #e2e8f0; vertical-align: top; }
-            tr:nth-child(even) td { background-color: #f8fafc; }
-            .footer { margin-top: 15px; padding-top: 8px; border-top: 1px solid #cbd5e1; display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <div class="title">KNB Lojistik — Kanada ➔ Bakı Kargo Manifestosu</div>
-              <div class="meta">Marşrut: Toronto / Vancouver ➔ Heydər Əliyev Beynəlxalq Hava Limanı (GYD)</div>
+          <head>
+            <title>Kargo Manifestosu - KNB Lojistik</title>
+            <style>
+              @page {
+                size: landscape;
+                margin: 12mm;
+              }
+              body {
+                font-family:
+                  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+                  sans-serif;
+                color: #0f172a;
+                margin: 0;
+                padding: 10px;
+                font-size: 11px;
+              }
+              .header {
+                display: flex;
+                justify-content: space-between;
+                border-bottom: 2px solid #0f172a;
+                padding-bottom: 8px;
+                margin-bottom: 12px;
+              }
+              .title {
+                font-size: 16px;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: -0.5px;
+              }
+              .meta {
+                font-size: 11px;
+                color: #475569;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 8px;
+              }
+              th {
+                background-color: #0f172a;
+                color: #ffffff;
+                text-align: left;
+                padding: 6px;
+                font-size: 10px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              td {
+                border-bottom: 1px solid #e2e8f0;
+                vertical-align: top;
+              }
+              tr:nth-child(even) td {
+                background-color: #f8fafc;
+              }
+              .footer {
+                margin-top: 15px;
+                padding-top: 8px;
+                border-top: 1px solid #cbd5e1;
+                display: flex;
+                justify-content: space-between;
+                font-size: 11px;
+                font-weight: bold;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div>
+                <div class="title">KNB Lojistik — Kanada ➔ Bakı Kargo Manifestosu</div>
+                <div class="meta">
+                  Marşrut: Toronto / Vancouver ➔ Heydər Əliyev Beynəlxalq Hava Limanı (GYD)
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <div><strong>Tarix:</strong> ${bugun}</div>
+                <div class="meta">
+                  Toplam Paket: <strong>${dahilSiparisler.length}</strong> (${toplamAdet} ədəd)
+                </div>
+              </div>
             </div>
-            <div style="text-align: right;">
-              <div><strong>Tarix:</strong> ${bugun}</div>
-              <div class="meta">Toplam Paket: <strong>${dahilSiparisler.length}</strong> (${toplamAdet} ədəd)</div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:25px; text-align:center;">#</th>
+                  <th style="width:130px;">Müştəri & Tel</th>
+                  <th style="width:120px;">Şəhər / Ünvan</th>
+                  <th>Məhsul & Xüsusiyyət</th>
+                  <th style="width:40px; text-align:center;">Say</th>
+                  <th style="width:85px; text-align:right;">Məbləğ</th>
+                  <th style="width:95px; text-align:right;">Qalıq Borc</th>
+                  <th style="width:120px;">Status / Kod</th>
+                  <th style="width:150px;">Qeyd & Təlimat</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+            <div class="footer">
+              <div>
+                Bəyannamə: Bu manifestodakı bağlamalar təhlükəsizlik və gömrük qaydalarına uyğun
+                Toronto anbarında təhvil verilmişdir.
+              </div>
+              <div>
+                <span>Toplam: ${toplamDeger.toFixed(2)} AZN</span> |
+                <span style="color:#b45309;"
+                  >Bakıda Alınacaq: ${toplamKalanBorc.toFixed(2)} AZN</span
+                >
+              </div>
             </div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width:25px; text-align:center;">#</th>
-                <th style="width:130px;">Müştəri & Tel</th>
-                <th style="width:120px;">Şəhər / Ünvan</th>
-                <th>Məhsul & Xüsusiyyət</th>
-                <th style="width:40px; text-align:center;">Say</th>
-                <th style="width:85px; text-align:right;">Məbləğ</th>
-                <th style="width:95px; text-align:right;">Qalıq Borc</th>
-                <th style="width:120px;">Status / Kod</th>
-                <th style="width:150px;">Qeyd & Təlimat</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml}
-            </tbody>
-          </table>
-          <div class="footer">
-            <div>Bəyannamə: Bu manifestodakı bağlamalar təhlükəsizlik və gömrük qaydalarına uyğun Toronto anbarında təhvil verilmişdir.</div>
-            <div>
-              <span>Toplam: ${toplamDeger.toFixed(2)} AZN</span> | 
-              <span style="color:#b45309;">Bakıda Alınacaq: ${toplamKalanBorc.toFixed(2)} AZN</span>
-            </div>
-          </div>
-        </body>
+          </body>
         </html>
       `;
 
@@ -758,88 +824,212 @@ export const KargoManifestoSayfasi: React.FC<KargoManifestoSayfasiProps> = ({
   const handleEtiketleriYazdir = () => {
     setYazdiriliyor(true);
     try {
-      const etiketKartlari = dahilSiparisler
-        .map(
-          (s, idx) => `
-        <div class="kargo-stiker">
-          <div class="stiker-header">
-            <div class="logo">✈️ KNB EXPRESS CARGO</div>
-            <div class="yon">KANADA ➔ BAKU / AZERBAIJAN</div>
-          </div>
-          <div class="barkod-alani">
-            <div class="barkod-cizgiler">||| | |||| | || |||| ||| || ||||</div>
-            <div class="takip-kod">${s.uluslararasi_kargo_kodu || `KNB-${String(idx + 1).padStart(4, '0')}`}</div>
-          </div>
-          <div class="alici-bolumu">
-            <div class="etiket-satir"><span class="etiket-baslik">ALICI (GÖMRÜK):</span> <strong class="alici-adi">${s.musteri_adi}</strong></div>
-            <div class="etiket-satir"><span class="etiket-baslik">FİN KODU / Ş.V:</span> <span class="vurgu-kod">${s.kanada_gumruk_fin_kodu || 'QEYD EDİLMƏYİB'}</span></div>
-            <div class="etiket-satir"><span class="etiket-baslik">TEL:</span> ${s.telefon_numarasi || '—'}</div>
-            <div class="etiket-satir"><span class="etiket-baslik">ŞƏHƏR & ÜNVAN:</span> ${s.teslimat_sehri || 'Bakı'}, ${s.teslimat_adresi || 'Mərkəzi Təhvil'}</div>
-          </div>
-          <div class="operasyon-bolumu">
-            <div class="operasyon-kurye">
-              <span class="etiket-baslik">BAKI TƏHVİL / SAHƏ KURYESİ:</span>
-              <div class="kurye-adi">🛵 ${s.baku_kurye_adi || 'Bölgə üzrə mərkəz'}</div>
+      const etiketKartlari = dahilSiparisler.map(
+        (s, idx) => html`
+          <div class="kargo-stiker">
+            <div class="stiker-header">
+              <div class="logo">✈️ KNB EXPRESS CARGO</div>
+              <div class="yon">KANADA ➔ BAKU / AZERBAIJAN</div>
             </div>
-            <div class="tahsilat-kutu ${s.kalan_tutar > 0 ? 'borclu' : 'odendi'}">
-              <span class="etiket-baslik">BAKIDA TƏHVİLDƏ:</span>
-              <div class="tahsilat-mebleg">
-                ${s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN (ALINACAQ)` : 'TAM ÖDƏNİLİB'}
+            <div class="barkod-alani">
+              <div class="barkod-cizgiler">||| | |||| | || |||| ||| || ||||</div>
+              <div class="takip-kod">
+                ${s.uluslararasi_kargo_kodu || `KNB-${String(idx + 1).padStart(4, '0')}`}
               </div>
             </div>
+            <div class="alici-bolumu">
+              <div class="etiket-satir">
+                <span class="etiket-baslik">ALICI (GÖMRÜK):</span>
+                <strong class="alici-adi">${s.musteri_adi}</strong>
+              </div>
+              <div class="etiket-satir">
+                <span class="etiket-baslik">FİN KODU / Ş.V:</span>
+                <span class="vurgu-kod">${s.kanada_gumruk_fin_kodu || 'QEYD EDİLMƏYİB'}</span>
+              </div>
+              <div class="etiket-satir">
+                <span class="etiket-baslik">TEL:</span> ${s.telefon_numarasi || '—'}
+              </div>
+              <div class="etiket-satir">
+                <span class="etiket-baslik">ŞƏHƏR & ÜNVAN:</span> ${s.teslimat_sehri || 'Bakı'},
+                ${s.teslimat_adresi || 'Mərkəzi Təhvil'}
+              </div>
+            </div>
+            <div class="operasyon-bolumu">
+              <div class="operasyon-kurye">
+                <span class="etiket-baslik">BAKI TƏHVİL / SAHƏ KURYESİ:</span>
+                <div class="kurye-adi">🛵 ${s.baku_kurye_adi || 'Bölgə üzrə mərkəz'}</div>
+              </div>
+              <div class="tahsilat-kutu ${s.kalan_tutar > 0 ? 'borclu' : 'odendi'}">
+                <span class="etiket-baslik">BAKIDA TƏHVİLDƏ:</span>
+                <div class="tahsilat-mebleg">
+                  ${s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN (ALINACAQ)` : 'TAM ÖDƏNİLİB'}
+                </div>
+              </div>
+            </div>
+            <div class="mehsul-qeyd">
+              <div>
+                <strong>Məhsul:</strong> ${s.urun_aciklamasi} (${s.adet || 1} əd)
+                ${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}
+              </div>
+              ${s.ozel_not ? html`<div class="not">Not: ${s.ozel_not}</div>` : ''}
+            </div>
           </div>
-          <div class="mehsul-qeyd">
-            <div><strong>Məhsul:</strong> ${s.urun_aciklamasi} (${s.adet || 1} əd) ${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}</div>
-            ${s.ozel_not ? `<div class="not">Not: ${s.ozel_not}</div>` : ''}
-          </div>
-        </div>
-      `
-        )
-        .join('');
+        `
+      );
 
-      const html = `
+      const sayfa = html`
         <!DOCTYPE html>
         <html>
-        <head>
-          <title>KNB Kargo Paket Stikerləri</title>
-          <style>
-            @page { size: portrait; margin: 8mm; }
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; color: #0f172a; }
-            .stiker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-            .kargo-stiker { border: 2px solid #0f172a; border-radius: 8px; padding: 10px; page-break-inside: avoid; background: #fff; box-sizing: border-box; }
-            .stiker-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 4px; margin-bottom: 6px; }
-            .logo { font-weight: 900; font-size: 11px; letter-spacing: 0.5px; }
-            .yon { font-weight: bold; font-size: 9px; color: #1e3a8a; }
-            .barkod-alani { text-align: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 6px; margin-bottom: 6px; }
-            .barkod-cizgiler { font-family: monospace; font-size: 14px; letter-spacing: 2px; font-weight: bold; }
-            .takip-kod { font-family: monospace; font-size: 11px; font-weight: 800; color: #0f172a; }
-            .alici-bolumu { font-size: 10px; line-height: 1.4; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 6px; }
-            .alici-adi { font-size: 12px; color: #0f172a; }
-            .etiket-satir { margin-bottom: 2px; }
-            .etiket-baslik { font-size: 8.5px; font-weight: 700; color: #64748b; }
-            .vurgu-kod { font-family: monospace; font-weight: bold; background: #fef08a; padding: 1px 4px; border-radius: 3px; }
-            .operasyon-bolumu { display: flex; justify-content: space-between; gap: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 6px; }
-            .operasyon-kurye { flex: 1; font-size: 9.5px; }
-            .kurye-adi { font-weight: 800; color: #1e293b; margin-top: 1px; }
-            .tahsilat-kutu { padding: 4px 6px; border-radius: 4px; text-align: right; min-width: 100px; }
-            .tahsilat-kutu.borclu { background: #fef2f2; border: 1px solid #f87171; }
-            .tahsilat-kutu.odendi { background: #f0fdf4; border: 1px solid #4ade80; }
-            .tahsilat-mebleg { font-weight: 900; font-size: 11px; }
-            .tahsilat-kutu.borclu .tahsilat-mebleg { color: #b91c1c; }
-            .tahsilat-kutu.odendi .tahsilat-mebleg { color: #15803d; }
-            .mehsul-qeyd { font-size: 9px; color: #334155; line-height: 1.3; }
-            .not { color: #d97706; font-style: italic; margin-top: 2px; }
-          </style>
-        </head>
-        <body>
-          <div class="stiker-grid">
-            ${etiketKartlari}
-          </div>
-        </body>
+          <head>
+            <title>KNB Kargo Paket Stikerləri</title>
+            <style>
+              @page {
+                size: portrait;
+                margin: 8mm;
+              }
+              body {
+                font-family:
+                  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+                  sans-serif;
+                margin: 0;
+                padding: 0;
+                color: #0f172a;
+              }
+              .stiker-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+              }
+              .kargo-stiker {
+                border: 2px solid #0f172a;
+                border-radius: 8px;
+                padding: 10px;
+                page-break-inside: avoid;
+                background: #fff;
+                box-sizing: border-box;
+              }
+              .stiker-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 2px solid #0f172a;
+                padding-bottom: 4px;
+                margin-bottom: 6px;
+              }
+              .logo {
+                font-weight: 900;
+                font-size: 11px;
+                letter-spacing: 0.5px;
+              }
+              .yon {
+                font-weight: bold;
+                font-size: 9px;
+                color: #1e3a8a;
+              }
+              .barkod-alani {
+                text-align: center;
+                border-bottom: 1px dashed #cbd5e1;
+                padding-bottom: 6px;
+                margin-bottom: 6px;
+              }
+              .barkod-cizgiler {
+                font-family: monospace;
+                font-size: 14px;
+                letter-spacing: 2px;
+                font-weight: bold;
+              }
+              .takip-kod {
+                font-family: monospace;
+                font-size: 11px;
+                font-weight: 800;
+                color: #0f172a;
+              }
+              .alici-bolumu {
+                font-size: 10px;
+                line-height: 1.4;
+                border-bottom: 1px solid #e2e8f0;
+                padding-bottom: 6px;
+                margin-bottom: 6px;
+              }
+              .alici-adi {
+                font-size: 12px;
+                color: #0f172a;
+              }
+              .etiket-satir {
+                margin-bottom: 2px;
+              }
+              .etiket-baslik {
+                font-size: 8.5px;
+                font-weight: 700;
+                color: #64748b;
+              }
+              .vurgu-kod {
+                font-family: monospace;
+                font-weight: bold;
+                background: #fef08a;
+                padding: 1px 4px;
+                border-radius: 3px;
+              }
+              .operasyon-bolumu {
+                display: flex;
+                justify-content: space-between;
+                gap: 6px;
+                border-bottom: 1px solid #e2e8f0;
+                padding-bottom: 6px;
+                margin-bottom: 6px;
+              }
+              .operasyon-kurye {
+                flex: 1;
+                font-size: 9.5px;
+              }
+              .kurye-adi {
+                font-weight: 800;
+                color: #1e293b;
+                margin-top: 1px;
+              }
+              .tahsilat-kutu {
+                padding: 4px 6px;
+                border-radius: 4px;
+                text-align: right;
+                min-width: 100px;
+              }
+              .tahsilat-kutu.borclu {
+                background: #fef2f2;
+                border: 1px solid #f87171;
+              }
+              .tahsilat-kutu.odendi {
+                background: #f0fdf4;
+                border: 1px solid #4ade80;
+              }
+              .tahsilat-mebleg {
+                font-weight: 900;
+                font-size: 11px;
+              }
+              .tahsilat-kutu.borclu .tahsilat-mebleg {
+                color: #b91c1c;
+              }
+              .tahsilat-kutu.odendi .tahsilat-mebleg {
+                color: #15803d;
+              }
+              .mehsul-qeyd {
+                font-size: 9px;
+                color: #334155;
+                line-height: 1.3;
+              }
+              .not {
+                color: #d97706;
+                font-style: italic;
+                margin-top: 2px;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="stiker-grid">${etiketKartlari}</div>
+          </body>
         </html>
       `;
 
-      safePrintHtml(html, 'Kargo_Etiketleri');
+      safePrintHtml(sayfa, 'Kargo_Etiketleri');
     } catch (e) {
       console.error('Etiket yazdırma xətası:', e);
       alert('Etiket çap dialoqu açılarkən xəta baş verdi.');

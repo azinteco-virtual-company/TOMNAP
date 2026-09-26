@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { loadSpreadsheet, loadPdf, reportDocumentError } from '../utils/documentLibraries';
 import { cleanPdfText, safePrintHtml } from '../utils/pdfHelpers';
+import { html } from '../utils/guvenliHtml';
 
 interface KargoManifestoModalProps {
   siparisler: Siparis[];
@@ -543,178 +544,205 @@ export const KargoManifestoModal: React.FC<KargoManifestoModalProps> = ({
     setYazdiriliyor(true);
 
     try {
-      const printContent = `
+      const printContent = html`
         <!DOCTYPE html>
         <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Kargo Manifestosu - KNB Lojistik</title>
-          <style>
-            @page {
-              size: A4 landscape;
-              margin: 10mm;
-            }
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-              color: #1e293b;
-              margin: 0;
-              padding: 0;
-              font-size: 11px;
-            }
-            .header {
-              border-bottom: 2px solid #0f172a;
-              padding-bottom: 8px;
-              margin-bottom: 12px;
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-end;
-            }
-            .title {
-              font-size: 16px;
-              font-weight: 800;
-              text-transform: uppercase;
-              color: #0f172a;
-            }
-            .subtitle {
-              font-size: 10px;
-              color: #64748b;
-            }
-            .summary-box {
-              background: #f8fafc;
-              border: 1px solid #cbd5e1;
-              border-radius: 6px;
-              padding: 8px 12px;
-              margin-bottom: 12px;
-              display: flex;
-              gap: 24px;
-              font-size: 11px;
-            }
-            .summary-item strong {
-              color: #0f172a;
-            }
-            .debt {
-              color: #b91c1c;
-              font-weight: bold;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 12px;
-            }
-            th, td {
-              border: 1px solid #cbd5e1;
-              padding: 5px 7px;
-              text-align: left;
-              vertical-align: top;
-            }
-            th {
-              background: #f1f5f9;
-              font-weight: 700;
-              font-size: 10px;
-              text-transform: uppercase;
-            }
-            tr:nth-child(even) td {
-              background-color: #fafafa;
-            }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .badge {
-              display: inline-block;
-              padding: 2px 6px;
-              border-radius: 4px;
-              font-size: 9px;
-              font-weight: 600;
-              background: #e2e8f0;
-            }
-            .footer {
-              margin-top: 14px;
-              font-size: 9px;
-              color: #64748b;
-              display: flex;
-              justify-content: space-between;
-              border-top: 1px solid #e2e8f0;
-              padding-top: 6px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <div class="title">✈️ KNB Lojistik — Kanada ➔ Bakı Kargo Manifestosu & Çeki Listesi</div>
-              <div class="subtitle">Marşrut: Toronto / Vancouver (Kanada) ➔ Heydər Əliyev Beynəlxalq Hava Limanı (GYD / Bakı)</div>
+          <head>
+            <meta charset="utf-8" />
+            <title>Kargo Manifestosu - KNB Lojistik</title>
+            <style>
+              @page {
+                size: A4 landscape;
+                margin: 10mm;
+              }
+              body {
+                font-family:
+                  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+                color: #1e293b;
+                margin: 0;
+                padding: 0;
+                font-size: 11px;
+              }
+              .header {
+                border-bottom: 2px solid #0f172a;
+                padding-bottom: 8px;
+                margin-bottom: 12px;
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-end;
+              }
+              .title {
+                font-size: 16px;
+                font-weight: 800;
+                text-transform: uppercase;
+                color: #0f172a;
+              }
+              .subtitle {
+                font-size: 10px;
+                color: #64748b;
+              }
+              .summary-box {
+                background: #f8fafc;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                padding: 8px 12px;
+                margin-bottom: 12px;
+                display: flex;
+                gap: 24px;
+                font-size: 11px;
+              }
+              .summary-item strong {
+                color: #0f172a;
+              }
+              .debt {
+                color: #b91c1c;
+                font-weight: bold;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 12px;
+              }
+              th,
+              td {
+                border: 1px solid #cbd5e1;
+                padding: 5px 7px;
+                text-align: left;
+                vertical-align: top;
+              }
+              th {
+                background: #f1f5f9;
+                font-weight: 700;
+                font-size: 10px;
+                text-transform: uppercase;
+              }
+              tr:nth-child(even) td {
+                background-color: #fafafa;
+              }
+              .text-center {
+                text-align: center;
+              }
+              .text-right {
+                text-align: right;
+              }
+              .badge {
+                display: inline-block;
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-size: 9px;
+                font-weight: 600;
+                background: #e2e8f0;
+              }
+              .footer {
+                margin-top: 14px;
+                font-size: 9px;
+                color: #64748b;
+                display: flex;
+                justify-content: space-between;
+                border-top: 1px solid #e2e8f0;
+                padding-top: 6px;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div>
+                <div class="title">
+                  ✈️ KNB Lojistik — Kanada ➔ Bakı Kargo Manifestosu & Çeki Listesi
+                </div>
+                <div class="subtitle">
+                  Marşrut: Toronto / Vancouver (Kanada) ➔ Heydər Əliyev Beynəlxalq Hava Limanı (GYD
+                  / Bakı)
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <div><strong>Tarix:</strong> ${new Date().toLocaleDateString('az-AZ')}</div>
+                <div class="subtitle">
+                  Çap vaxtı:
+                  ${new Date().toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
             </div>
-            <div style="text-align: right;">
-              <div><strong>Tarix:</strong> ${new Date().toLocaleDateString('az-AZ')}</div>
-              <div class="subtitle">Çap vaxtı: ${new Date().toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}</div>
+
+            <div class="summary-box">
+              <div class="summary-item">
+                Toplam Bağlama: <strong>${dahilSiparisler.length}</strong>
+              </div>
+              <div class="summary-item">
+                Toplam Məhsul Sayı: <strong>${toplamAdet} ədəd</strong>
+              </div>
+              <div class="summary-item">
+                Toplam Dəyər: <strong>${toplamDeger.toFixed(2)} AZN</strong>
+              </div>
+              <div class="summary-item debt">
+                Bakıda Təhvil Zamanı Alınacaq Qalıq Borc:
+                <strong>${toplamKalanBorc.toFixed(2)} AZN</strong>
+              </div>
             </div>
-          </div>
 
-          <div class="summary-box">
-            <div class="summary-item">Toplam Bağlama: <strong>${dahilSiparisler.length}</strong></div>
-            <div class="summary-item">Toplam Məhsul Sayı: <strong>${toplamAdet} ədəd</strong></div>
-            <div class="summary-item">Toplam Dəyər: <strong>${toplamDeger.toFixed(2)} AZN</strong></div>
-            <div class="summary-item debt">Bakıda Təhvil Zamanı Alınacaq Qalıq Borc: <strong>${toplamKalanBorc.toFixed(2)} AZN</strong></div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 25px;" class="text-center">#</th>
-                <th style="width: 130px;">Müştəri & Telefon</th>
-                <th style="width: 90px;">Şəhər / Ünvan</th>
-                <th>Məhsul Təsviri & Xüsusiyyət</th>
-                <th style="width: 35px;" class="text-center">Say</th>
-                <th style="width: 65px;" class="text-right">Məbləğ</th>
-                <th style="width: 65px;" class="text-right">Qalıq Borc</th>
-                <th style="width: 100px;">Lojistik / Kod</th>
-                <th style="width: 140px;">Xüsusi Not & Bakı Təhvil Qeydi</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${dahilSiparisler
-                .map(
-                  (s, idx) => `
+            <table>
+              <thead>
                 <tr>
-                  <td class="text-center">${idx + 1}</td>
-                  <td>
-                    <strong>${s.musteri_adi || '-'}</strong>
-                    <div style="font-size: 10px; color: #475569;">${s.telefon_numarasi || ''}</div>
-                  </td>
-                  <td>
-                    <div>${s.teslimat_sehri || 'Bakı'}</div>
-                    <div style="font-size: 9px; color: #64748b;">${s.teslimat_adresi || ''}</div>
-                  </td>
-                  <td>
-                    <div>${s.urun_aciklamasi || '-'}</div>
-                    <div style="font-size: 9px; color: #64748b;">${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}</div>
-                  </td>
-                  <td class="text-center"><strong>${s.adet || 1}</strong></td>
-                  <td class="text-right">${(s.toplam_tutar || 0).toFixed(2)} AZN</td>
-                  <td class="text-right ${s.kalan_tutar > 0 ? 'debt' : ''}">
-                    ${s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN` : '<span style="color: #059669;">Ödənilib</span>'}
-                  </td>
-                  <td>
-                    <span class="badge">${getLojistikEtiketi(s.lojistik_durumu).label}</span>
-                    ${s.uluslararasi_kargo_kodu ? `<div style="font-size: 9px; font-family: monospace; margin-top: 2px;">Kod: ${s.uluslararasi_kargo_kodu}</div>` : ''}
-                    ${s.kanada_takip_kodu ? `<div style="font-size: 8px; color: #64748b;">${s.kanada_takip_kodu}</div>` : ''}
-                  </td>
-                  <td style="font-size: 9.5px;">
-                    ${s.ozel_not ? `<div><strong>📌 Not:</strong> ${s.ozel_not}</div>` : ''}
-                    ${s.baku_tahsilat_notu ? `<div style="color: #92400e; font-style: italic; margin-top: 2px;">💬 ${s.baku_tahsilat_notu}</div>` : ''}
-                    ${!s.ozel_not && !s.baku_tahsilat_notu ? '—' : ''}
-                  </td>
+                  <th style="width: 25px;" class="text-center">#</th>
+                  <th style="width: 130px;">Müştəri & Telefon</th>
+                  <th style="width: 90px;">Şəhər / Ünvan</th>
+                  <th>Məhsul Təsviri & Xüsusiyyət</th>
+                  <th style="width: 35px;" class="text-center">Say</th>
+                  <th style="width: 65px;" class="text-right">Məbləğ</th>
+                  <th style="width: 65px;" class="text-right">Qalıq Borc</th>
+                  <th style="width: 100px;">Lojistik / Kod</th>
+                  <th style="width: 140px;">Xüsusi Not & Bakı Təhvil Qeydi</th>
                 </tr>
-              `
-                )
-                .join('')}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                ${dahilSiparisler.map(
+                (s, idx) => html`
+                  <tr>
+                    <td class="text-center">${idx + 1}</td>
+                    <td>
+                      <strong>${s.musteri_adi || '-'}</strong>
+                      <div style="font-size: 10px; color: #475569;">
+                        ${s.telefon_numarasi || ''}
+                      </div>
+                    </td>
+                    <td>
+                      <div>${s.teslimat_sehri || 'Bakı'}</div>
+                      <div style="font-size: 9px; color: #64748b;">${s.teslimat_adresi || ''}</div>
+                    </td>
+                    <td>
+                      <div>${s.urun_aciklamasi || '-'}</div>
+                      <div style="font-size: 9px; color: #64748b;">
+                        ${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}
+                      </div>
+                    </td>
+                    <td class="text-center"><strong>${s.adet || 1}</strong></td>
+                    <td class="text-right">${(s.toplam_tutar || 0).toFixed(2)} AZN</td>
+                    <td class="text-right ${s.kalan_tutar > 0 ? 'debt' : ''}">
+                      ${s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN` : html`<span style="color: #059669;">Ödənilib</span>`}
+                    </td>
+                    <td>
+                      <span class="badge">${getLojistikEtiketi(s.lojistik_durumu).label}</span>
+                      ${s.uluslararasi_kargo_kodu ? html`<div style="font-size: 9px; font-family: monospace; margin-top: 2px;">Kod: ${s.uluslararasi_kargo_kodu}</div>` : ''}
+                      ${s.kanada_takip_kodu ? html`<div style="font-size: 8px; color: #64748b;">${s.kanada_takip_kodu}</div>` : ''}
+                    </td>
+                    <td style="font-size: 9.5px;">
+                      ${s.ozel_not ? html`<div><strong>📌 Not:</strong> ${s.ozel_not}</div>` : ''}
+                      ${s.baku_tahsilat_notu ? html`<div style="color: #92400e; font-style: italic; margin-top: 2px;">💬 ${s.baku_tahsilat_notu}</div>` : ''}
+                      ${!s.ozel_not && !s.baku_tahsilat_notu ? '—' : ''}
+                    </td>
+                  </tr>
+                `
+              )}
+              </tbody>
+            </table>
 
-          <div class="footer">
-            <div>Bu sənəd KNB Ekspress Lojistik sistemi tərəfindən avtomatik tərtib edilmişdir.</div>
-            <div>Çap tarixi: ${new Date().toLocaleString('az-AZ')}</div>
-          </div>
-        </body>
+            <div class="footer">
+              <div>
+                Bu sənəd KNB Ekspress Lojistik sistemi tərəfindən avtomatik tərtib edilmişdir.
+              </div>
+              <div>Çap tarixi: ${new Date().toLocaleString('az-AZ')}</div>
+            </div>
+          </body>
         </html>
       `;
 

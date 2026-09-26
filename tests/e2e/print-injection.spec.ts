@@ -41,6 +41,9 @@ async function expectPlainText(frame: Frame, fields: string[]) {
   for (const field of fields) expect(text).toContain(field.trim());
   // No element from a payload exists: the templates themselves use none of these.
   expect(await frame.locator('img, svg, script, iframe').count()).toBe(0);
+  // Second line of defence: the printed page carries its own no-script policy.
+  const policy = frame.locator('meta[http-equiv="Content-Security-Policy"]');
+  expect(await policy.getAttribute('content')).toContain("script-src 'none'");
 }
 
 test('print templates show order text as plain text and run none of it (Codex R4 F20)', async ({
@@ -48,7 +51,7 @@ test('print templates show order text as plain text and run none of it (Codex R4
 }) => {
   const blocked: string[] = [];
   page.on('console', (message) => {
-    if (/Ignored call to 'print\(\)'|sandboxed/i.test(message.text())) blocked.push(message.text());
+    if (/Ignored call to 'print\(\)'/i.test(message.text())) blocked.push(message.text());
   });
   await watchPrints(page);
   const session = await login(page, 'owner-a@example.invalid');
@@ -67,8 +70,13 @@ test('print templates show order text as plain text and run none of it (Codex R4
     const printFrame = async (title: string, click: () => Promise<void>) => {
       const attached = page.waitForSelector(`iframe[title="${title}"]`, { state: 'attached' });
       await click();
-      const frame = await (await attached).contentFrame();
+      const element = await attached;
+      // Scripts never run in the print frame; printing stays allowed.
+      expect(await element.getAttribute('sandbox')).toBe('allow-modals allow-same-origin');
+      const frame = await element.contentFrame();
       expect(frame, `${title} print frame`).toBeTruthy();
+      // Printing still happens (after the template is written) before the page moves on.
+      await expect.poll(prints).toContain(title);
       return frame!;
     };
 
@@ -91,10 +99,7 @@ test('print templates show order text as plain text and run none of it (Codex R4
     );
     await expectPlainText(collection, [payloads.musteri_adi, payloads.baku_tahsilat_notu]);
 
-    // Printing still happens, and nothing ran in the app window.
-    await expect
-      .poll(prints)
-      .toEqual(['Kargo_Manifestosu', 'Kargo_Etiketleri', 'Baki_Tahsilat_Hesabati']);
+    // Nothing ran in the app window, and no print call was refused by the sandbox.
     expect(await xss()).toBeUndefined();
     expect(blocked).toEqual([]);
 

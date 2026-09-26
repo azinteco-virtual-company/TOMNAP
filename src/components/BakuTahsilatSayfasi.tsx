@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { loadSpreadsheet, loadPdf, reportDocumentError } from '../utils/documentLibraries';
 import { cleanPdfText, safePrintHtml } from '../utils/pdfHelpers';
+import { html } from '../utils/guvenliHtml';
 
 interface BakuTahsilatSayfasiProps {
   siparisler: Siparis[];
@@ -355,84 +356,137 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
     setYazdiriliyor(true);
     try {
       const bugun = new Date().toLocaleDateString('az-AZ');
-      const rowsHtml = listelenenSiparisler
-        .map(
-          (s, idx) => `
-        <tr>
-          <td style="text-align:center; padding: 6px;">${idx + 1}</td>
-          <td style="padding: 6px;">
-            <strong>${s.musteri_adi || 'Adsız'}</strong><br/>
-            <span style="color:#64748b; font-size:10px;">${s.telefon_numarasi || '-'}</span>
-          </td>
-          <td style="padding: 6px;">
-            <strong>${s.teslimat_sehri || 'Bakı'}</strong><br/>
-            <span style="color:#64748b; font-size:10px;">${s.teslimat_adresi || 'Bakı daxili'}</span>
-          </td>
-          <td style="padding: 6px;">${s.urun_aciklamasi || '-'}</td>
-          <td style="text-align:right; font-weight:bold; padding: 6px;">${(s.toplam_tutar || 0).toFixed(2)} AZN</td>
-          <td style="text-align:right; padding: 6px; color:#15803d;">${(s.alinan_tutar || 0).toFixed(2)} AZN</td>
-          <td style="text-align:right; font-weight:bold; padding: 6px; color:#b45309; background:#fef3c7;">
-            ${(s.kalan_tutar || 0).toFixed(2)} AZN
-          </td>
-          <td style="padding: 6px; font-size:10px;">
-            ${s.baku_tahsilat_notu ? `<div>💬 ${s.baku_tahsilat_notu}</div>` : ''}
-            ${s.ozel_not ? `<div style="color:#64748b;">📌 ${s.ozel_not}</div>` : ''}
-          </td>
-        </tr>
-      `
-        )
-        .join('');
+      const rowsHtml = listelenenSiparisler.map(
+        (s, idx) => html`
+          <tr>
+            <td style="text-align:center; padding: 6px;">${idx + 1}</td>
+            <td style="padding: 6px;">
+              <strong>${s.musteri_adi || 'Adsız'}</strong><br />
+              <span style="color:#64748b; font-size:10px;">${s.telefon_numarasi || '-'}</span>
+            </td>
+            <td style="padding: 6px;">
+              <strong>${s.teslimat_sehri || 'Bakı'}</strong><br />
+              <span style="color:#64748b; font-size:10px;"
+                >${s.teslimat_adresi || 'Bakı daxili'}</span
+              >
+            </td>
+            <td style="padding: 6px;">${s.urun_aciklamasi || '-'}</td>
+            <td style="text-align:right; font-weight:bold; padding: 6px;">
+              ${(s.toplam_tutar || 0).toFixed(2)} AZN
+            </td>
+            <td style="text-align:right; padding: 6px; color:#15803d;">
+              ${(s.alinan_tutar || 0).toFixed(2)} AZN
+            </td>
+            <td
+              style="text-align:right; font-weight:bold; padding: 6px; color:#b45309; background:#fef3c7;"
+            >
+              ${(s.kalan_tutar || 0).toFixed(2)} AZN
+            </td>
+            <td style="padding: 6px; font-size:10px;">
+              ${s.baku_tahsilat_notu ? html`<div>💬 ${s.baku_tahsilat_notu}</div>` : ''}
+              ${s.ozel_not ? html`<div style="color:#64748b;">📌 ${s.ozel_not}</div>` : ''}
+            </td>
+          </tr>
+        `
+      );
 
-      const content = `
+      const content = html`
         <!DOCTYPE html>
         <html>
-        <head>
-          <title>Bakı Təhsilat Hesabatı - KNB Lojistik</title>
-          <style>
-            @page { size: landscape; margin: 12mm; }
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 10px; font-size: 11px; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #b45309; padding-bottom: 8px; margin-bottom: 12px; }
-            .title { font-size: 16px; font-weight: 800; text-transform: uppercase; color: #b45309; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-            th { background-color: #78350f; color: #ffffff; text-align: left; padding: 6px; font-size: 10px; text-transform: uppercase; }
-            td { border-bottom: 1px solid #e2e8f0; vertical-align: top; }
-            tr:nth-child(even) td { background-color: #fffbeb; }
-            .footer { margin-top: 15px; padding-top: 8px; border-top: 1px solid #cbd5e1; display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <div class="title">Bakı Təhsilat & Qalıq Borc Hesabatı</div>
-              <div>KNB Lojistik — Təhvilat və Kassa Cədvəli</div>
+          <head>
+            <title>Bakı Təhsilat Hesabatı - KNB Lojistik</title>
+            <style>
+              @page {
+                size: landscape;
+                margin: 12mm;
+              }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                color: #0f172a;
+                margin: 0;
+                padding: 10px;
+                font-size: 11px;
+              }
+              .header {
+                display: flex;
+                justify-content: space-between;
+                border-bottom: 2px solid #b45309;
+                padding-bottom: 8px;
+                margin-bottom: 12px;
+              }
+              .title {
+                font-size: 16px;
+                font-weight: 800;
+                text-transform: uppercase;
+                color: #b45309;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 8px;
+              }
+              th {
+                background-color: #78350f;
+                color: #ffffff;
+                text-align: left;
+                padding: 6px;
+                font-size: 10px;
+                text-transform: uppercase;
+              }
+              td {
+                border-bottom: 1px solid #e2e8f0;
+                vertical-align: top;
+              }
+              tr:nth-child(even) td {
+                background-color: #fffbeb;
+              }
+              .footer {
+                margin-top: 15px;
+                padding-top: 8px;
+                border-top: 1px solid #cbd5e1;
+                display: flex;
+                justify-content: space-between;
+                font-size: 12px;
+                font-weight: bold;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div>
+                <div class="title">Bakı Təhsilat & Qalıq Borc Hesabatı</div>
+                <div>KNB Lojistik — Təhvilat və Kassa Cədvəli</div>
+              </div>
+              <div style="text-align: right;">
+                <div><strong>Tarix:</strong> ${bugun}</div>
+                <div>Toplam Bağlama: <strong>${listelenenSiparisler.length}</strong></div>
+              </div>
             </div>
-            <div style="text-align: right;">
-              <div><strong>Tarix:</strong> ${bugun}</div>
-              <div>Toplam Bağlama: <strong>${listelenenSiparisler.length}</strong></div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:25px; text-align:center;">#</th>
+                  <th style="width:130px;">Müştəri & Tel</th>
+                  <th style="width:130px;">Şəhər / Ünvan</th>
+                  <th>Məhsul</th>
+                  <th style="width:85px; text-align:right;">Məbləğ</th>
+                  <th style="width:85px; text-align:right;">Ödənilib</th>
+                  <th style="width:95px; text-align:right;">Qalıq Borc</th>
+                  <th style="width:180px;">Təhvilat Qeydi</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+            <div class="footer">
+              <div>
+                Bu cədvəl Bakıdakı nümayəndənin kassa və təhvil-təslim qeydləri üçün nəzərdə
+                tutulub.
+              </div>
+              <div>Toplanacaq Cəmi Borc: ${toplamToplanacakBorc.toFixed(2)} AZN</div>
             </div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width:25px; text-align:center;">#</th>
-                <th style="width:130px;">Müştəri & Tel</th>
-                <th style="width:130px;">Şəhər / Ünvan</th>
-                <th>Məhsul</th>
-                <th style="width:85px; text-align:right;">Məbləğ</th>
-                <th style="width:85px; text-align:right;">Ödənilib</th>
-                <th style="width:95px; text-align:right;">Qalıq Borc</th>
-                <th style="width:180px;">Təhvilat Qeydi</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml}
-            </tbody>
-          </table>
-          <div class="footer">
-            <div>Bu cədvəl Bakıdakı nümayəndənin kassa və təhvil-təslim qeydləri üçün nəzərdə tutulub.</div>
-            <div>Toplanacaq Cəmi Borc: ${toplamToplanacakBorc.toFixed(2)} AZN</div>
-          </div>
-        </body>
+          </body>
         </html>
       `;
 
