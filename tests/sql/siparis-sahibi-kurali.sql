@@ -70,8 +70,10 @@ DO $$ DECLARE c record; got text; BEGIN
 END $$;
 ROLLBACK;
 
--- 3. Down (twice) restores the A8 behaviour and drops nothing.
+-- 3. Down (twice) restores the A8 behaviour and drops nothing. The newer migration that
+-- replaces the same RPC (20260925160000) rolls back first and is re-applied last.
 BEGIN;
+\ir ../../supabase/rollbacks/20260925160000_not_sozlesmesi.down.sql
 \ir ../../supabase/rollbacks/20260925100000_siparis_sahibi_kurali.down.sql
 \ir ../../supabase/rollbacks/20260925100000_siparis_sahibi_kurali.down.sql
 COMMIT;
@@ -103,6 +105,7 @@ ROLLBACK;
 
 -- 4. Up again: the rule is back.
 \ir ../../supabase/migrations/20260925100000_siparis_sahibi_kurali.sql
+\ir ../../supabase/migrations/20260925160000_not_sozlesmesi.sql
 BEGIN;
 SELECT pg_temp.sk_fixture();
 SET LOCAL ROLE service_role;

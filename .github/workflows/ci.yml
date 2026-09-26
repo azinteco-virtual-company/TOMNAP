@@ -150,6 +150,8 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/para-yazma-yetkisi.sql
           # Order edit RPC (Codex R3 F1/F2/F9): changed columns only, optimistic lock; down -> up.
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/siparis-guncelle.sql
+          # Note contract (Codex R3 F8): the v2 RPC writes the note tag, no ozel_not; down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/not-sozlesmesi.sql
           node tests/sql/siparis-satirlari-concurrency.mjs
           node tests/sql/odemeler-concurrency.mjs
           node tests/sql/kasa-concurrency.mjs
