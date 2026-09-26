@@ -88,15 +88,47 @@ export const SUPABASE_GECERLI_KOLONLAR = new Set([
   'ek_veriler',
 ]);
 
+/**
+ * Sipariş notu sözleşmesi (Codex R3 F8): teslimat notu (ozel_not) veritabanında
+ * baku_tahsilat_notu'nun başında "[TƏLİMAT: …]" etiketi olarak durur; v1 ve v2 aynı
+ * yeri okur ve yazar. Hiçbir migration fiziksel bir ozel_not kolonu oluşturmaz; eski bir
+ * şemada varsa yalnız etiket yokken okunur (ve v1 düzenlemesi onu da eşitler).
+ * Köşeli parantez etiketi bölmesin diye nottaki [ ] yuvarlak paranteze çevrilir;
+ * tomnap_v2_siparis_olustur (20260925160000) aynısını yapar.
+ */
+const TALIMAT_ETIKETI = /\[(?:TƏLİMAT|TALİMAT):\s*([\s\S]*?)\]/i;
+const TALIMAT_ETIKETLERI = /\[(?:TƏLİMAT|TALİMAT):\s*[\s\S]*?\]/gi;
+
+/** baku_tahsilat_notu'ndan teslimat notunu ayırır; etiket yoksa ozelNot null. */
+export function talimatiAyir(bakuTahsilatNotu: unknown): {
+  ozelNot: string | null;
+  tahsilatNotu: string;
+} {
+  const metin = typeof bakuTahsilatNotu === 'string' ? bakuTahsilatNotu.trim() : '';
+  const eslesme = metin.match(TALIMAT_ETIKETI);
+  if (!eslesme) return { ozelNot: null, tahsilatNotu: metin };
+  return {
+    ozelNot: eslesme[1].trim(),
+    tahsilatNotu: metin.replace(TALIMAT_ETIKETLERI, '').trim(),
+  };
+}
+
+/** Teslimat notunu tahsilat notunun başına etiket olarak ekler (boş not: etiket yok). */
+export function talimatiKatla(tahsilatNotu: string, ozelNot: unknown): string {
+  const not = typeof ozelNot === 'string' ? ozelNot.trim() : '';
+  if (!not) return tahsilatNotu;
+  const guvenli = not.replace(/\[/g, '(').replace(/\]/g, ')');
+  return `[TƏLİMAT: ${guvenli}] ${tahsilatNotu}`.trim();
+}
+
 // Supabase'e yazarken payload'ı filtreleyen, özel teslimat notunu ve metadata'yı koruyan yardımcı
 export function hazirlaSupabasePayload(input: any): Record<string, any> {
-  let tahsilatNotu = (input.baku_tahsilat_notu || '').trim();
-  if (input.ozel_not && typeof input.ozel_not === 'string' && input.ozel_not.trim()) {
-    const ozelNotTemiz = input.ozel_not.trim();
-    if (!tahsilatNotu.includes('[TƏLİMAT:') && !tahsilatNotu.includes('[TALİMAT:')) {
-      tahsilatNotu = `[TƏLİMAT: ${ozelNotTemiz}] ${tahsilatNotu}`.trim();
-    }
-  }
+  const ayrik = talimatiAyir(input.baku_tahsilat_notu);
+  // An input that still carries its tag (a raw database row) keeps it.
+  const tahsilatNotu =
+    ayrik.ozelNot === null
+      ? talimatiKatla(ayrik.tahsilatNotu, input.ozel_not)
+      : (input.baku_tahsilat_notu || '').trim();
 
   // Eksik bilgiler ve çoklu ürün/görsel metadata'sı
   let eksikBilgiler: any[] = Array.isArray(input.eksik_bilgiler) ? [...input.eksik_bilgiler] : [];
@@ -144,17 +176,10 @@ export function hazirlaSupabasePayload(input: any): Record<string, any> {
 export function formatlaSiparis(s: any): any {
   const extra = siparisEkVerileriniAl(s);
   s = { ...extra, ...s, ek_veriler: extra };
-  let bakuTahsilatNotu = (s.baku_tahsilat_notu || '').trim();
-  let ozelNot = (s.ozel_not || '').trim();
-
-  // baku_tahsilat_notu içindeki [TƏLİMAT: ...] veya [TALİMAT: ...] etiketini ayrıştır
-  const talimatMatch = bakuTahsilatNotu.match(/\[(?:TƏLİMAT|TALİMAT):\s*([\s\S]*?)\]/i);
-  if (talimatMatch) {
-    if (!ozelNot) {
-      ozelNot = talimatMatch[1].trim();
-    }
-    bakuTahsilatNotu = bakuTahsilatNotu.replace(/\[(?:TƏLİMAT|TALİMAT):\s*[\s\S]*?\]/gi, '').trim();
-  }
+  // The tag is the note; a physical ozel_not (older schemas, memory rows) only without it.
+  const ayrik = talimatiAyir(s.baku_tahsilat_notu);
+  const bakuTahsilatNotu = ayrik.tahsilatNotu;
+  const ozelNot = ayrik.ozelNot ?? (typeof s.ozel_not === 'string' ? s.ozel_not.trim() : '');
 
   // eksik_bilgiler içindeki META: verilerini ayıkla
   let urunler = Array.isArray(s.urunler) ? s.urunler : [];

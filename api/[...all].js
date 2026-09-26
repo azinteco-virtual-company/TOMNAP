@@ -5100,14 +5100,26 @@ var SUPABASE_GECERLI_KOLONLAR = /* @__PURE__ */ new Set([
   "is_demo",
   "ek_veriler"
 ]);
+var TALIMAT_ETIKETI = /\[(?:TƏLİMAT|TALİMAT):\s*([\s\S]*?)\]/i;
+var TALIMAT_ETIKETLERI = /\[(?:TƏLİMAT|TALİMAT):\s*[\s\S]*?\]/gi;
+function talimatiAyir(bakuTahsilatNotu) {
+  const metin4 = typeof bakuTahsilatNotu === "string" ? bakuTahsilatNotu.trim() : "";
+  const eslesme = metin4.match(TALIMAT_ETIKETI);
+  if (!eslesme) return { ozelNot: null, tahsilatNotu: metin4 };
+  return {
+    ozelNot: eslesme[1].trim(),
+    tahsilatNotu: metin4.replace(TALIMAT_ETIKETLERI, "").trim()
+  };
+}
+function talimatiKatla(tahsilatNotu, ozelNot) {
+  const not = typeof ozelNot === "string" ? ozelNot.trim() : "";
+  if (!not) return tahsilatNotu;
+  const guvenli = not.replace(/\[/g, "(").replace(/\]/g, ")");
+  return `[T\u018FL\u0130MAT: ${guvenli}] ${tahsilatNotu}`.trim();
+}
 function hazirlaSupabasePayload(input) {
-  let tahsilatNotu = (input.baku_tahsilat_notu || "").trim();
-  if (input.ozel_not && typeof input.ozel_not === "string" && input.ozel_not.trim()) {
-    const ozelNotTemiz = input.ozel_not.trim();
-    if (!tahsilatNotu.includes("[T\u018FL\u0130MAT:") && !tahsilatNotu.includes("[TAL\u0130MAT:")) {
-      tahsilatNotu = `[T\u018FL\u0130MAT: ${ozelNotTemiz}] ${tahsilatNotu}`.trim();
-    }
-  }
+  const ayrik = talimatiAyir(input.baku_tahsilat_notu);
+  const tahsilatNotu = ayrik.ozelNot === null ? talimatiKatla(ayrik.tahsilatNotu, input.ozel_not) : (input.baku_tahsilat_notu || "").trim();
   let eksikBilgiler = Array.isArray(input.eksik_bilgiler) ? [...input.eksik_bilgiler] : [];
   eksikBilgiler = eksikBilgiler.filter((b) => typeof b !== "string" || !b.startsWith("META:"));
   if (Array.isArray(input.urunler) && input.urunler.length > 0) {
@@ -5145,15 +5157,9 @@ function hazirlaSupabasePayload(input) {
 function formatlaSiparis(s) {
   const extra = siparisEkVerileriniAl(s);
   s = { ...extra, ...s, ek_veriler: extra };
-  let bakuTahsilatNotu = (s.baku_tahsilat_notu || "").trim();
-  let ozelNot = (s.ozel_not || "").trim();
-  const talimatMatch = bakuTahsilatNotu.match(/\[(?:TƏLİMAT|TALİMAT):\s*([\s\S]*?)\]/i);
-  if (talimatMatch) {
-    if (!ozelNot) {
-      ozelNot = talimatMatch[1].trim();
-    }
-    bakuTahsilatNotu = bakuTahsilatNotu.replace(/\[(?:TƏLİMAT|TALİMAT):\s*[\s\S]*?\]/gi, "").trim();
-  }
+  const ayrik = talimatiAyir(s.baku_tahsilat_notu);
+  const bakuTahsilatNotu = ayrik.tahsilatNotu;
+  const ozelNot = ayrik.ozelNot ?? (typeof s.ozel_not === "string" ? s.ozel_not.trim() : "");
   let urunler = Array.isArray(s.urunler) ? s.urunler : [];
   let gorselUrlleri = Array.isArray(s.gorsel_urlleri) ? s.gorsel_urlleri : [];
   let temizEksikBilgiler = [];
@@ -7521,6 +7527,8 @@ router3.patch("/siparisler/:id", async (req, res) => {
         if (JSON.stringify(sonra[key]) !== JSON.stringify(once[key])) degisiklik[key] = sonra[key];
       for (const key of courierFields) delete degisiklik[key];
       if (v2) for (const key of v2DerivedFields) delete degisiklik[key];
+      if ("ozel_not" in updates && Object.hasOwn(existing, "ozel_not"))
+        degisiklik.ozel_not = String(updates.ozel_not ?? "").trim() || null;
       if (Object.keys(degisiklik).length === 0)
         return res.json({ basarili: true, kaynak, siparis: formatted });
       const beklenen = {
@@ -11587,7 +11595,7 @@ var SATIR_ALANLARI = [
   "birim_satis_fiyati_azn",
   "kaynak_ulke"
 ];
-var BASLIK_KOLONLARI = "id,tenant_id,model_surumu,sahip_kullanici_id,musteri_adi,telefon_numarasi,instagram_kullanici_adi,teslimat_sehri,teslimat_adresi,siparis_kaynagi,ozel_not,toplam_tutar,alinan_tutar,kalan_tutar,finans_durumu,lojistik_durumu,ek_veriler,olusturma_tarihi";
+var BASLIK_KOLONLARI = "*";
 var SATIR_KOLONLARI = "id,tenant_id,siparis_id,sira,urun_aciklamasi,beden,renk,adet,birim_satis_fiyati_azn,kaynak_ulke,iptal";
 var hata = (mesaj) => new PublicResourceError(mesaj, 400);
 function metin2(value, alan, enCok, zorunlu = false) {
@@ -11767,7 +11775,9 @@ function basliktan(value, tenantId, satirlar) {
     musteriId: yaziYaDaNull2(ek.musteri_id),
     sahipKullaniciId: r.sahip_kullanici_id,
     siparisKaynagi: yaziYaDaNull2(r.siparis_kaynagi),
-    ozelNot: yaziYaDaNull2(r.ozel_not),
+    // One note contract with v1 (Codex R3 F8): the tag in baku_tahsilat_notu; the
+    // physical ozel_not only in memory rows (no database column is read for it).
+    ozelNot: talimatiAyir(r.baku_tahsilat_notu).ozelNot ?? yaziYaDaNull2(r.ozel_not),
     toplamTutar: toplam,
     alinanTutar: alinan,
     kalanTutar: r.kalan_tutar === void 0 ? toplam - alinan : Number(r.kalan_tutar),
