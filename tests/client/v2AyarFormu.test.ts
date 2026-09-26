@@ -5,7 +5,10 @@ import { ayarDegisiklikleri, ayarFormu } from '../../src/components/v2/ayarFormu
 // sends as null, so a typo silently cleared the stored price. Empty clears; invalid is
 // an error and nothing is sent.
 const ayarlar = { aylikBeyanSinirUsd: 300, varsayilanKgFiyatiAzn: 12, primOraniVarsayilan: 0.05 };
-const form = (edits: Partial<ReturnType<typeof ayarFormu>>) => ({ ...ayarFormu(ayarlar), ...edits });
+const form = (edits: Partial<ReturnType<typeof ayarFormu>>) => ({
+  ...ayarFormu(ayarlar),
+  ...edits,
+});
 
 describe('v2 settings form (Codex R3 F11)', () => {
   it('an invalid kg price is an error, never a cleared price', () => {

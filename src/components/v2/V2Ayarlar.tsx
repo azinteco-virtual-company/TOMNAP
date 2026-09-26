@@ -1,29 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../../lib/apiClient';
+import {
+  ayarDegisiklikleri,
+  ayarFormu as formdan,
+  type AyarDegerleri,
+  type AyarFormu as Form,
+} from './ayarFormu';
 
-interface Ayarlar {
-  aylikBeyanSinirUsd: number;
-  varsayilanKgFiyatiAzn: number | null;
-  /** Only the owner receives the prim rate (K15); absent for the administrator. */
-  primOraniVarsayilan?: number;
+interface Ayarlar extends AyarDegerleri {
   kayitli: boolean;
 }
-interface Form {
-  beyan: string;
-  kg: string;
-  prim: string;
-}
-
-const formdan = (ayarlar: Ayarlar): Form => ({
-  beyan: String(ayarlar.aylikBeyanSinirUsd),
-  kg: ayarlar.varsayilanKgFiyatiAzn === null ? '' : String(ayarlar.varsayilanKgFiyatiAzn),
-  // Stored as a fraction (0.05), shown as a percentage (5).
-  prim:
-    ayarlar.primOraniVarsayilan === undefined
-      ? ''
-      : String(Math.round(ayarlar.primOraniVarsayilan * 10000) / 100),
-});
-const sayi = (value: string) => Number(value.replace(',', '.'));
 const hataMetni = (error: unknown) =>
   error instanceof Error ? error.message : 'Əməliyyat tamamlanmadı.';
 
@@ -46,15 +32,13 @@ export default function V2Ayarlar() {
   const kaydet = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!ayarlar) return;
-    const degisiklik: Record<string, number | null> = {};
-    const beyan = sayi(form.beyan);
-    if (beyan !== ayarlar.aylikBeyanSinirUsd) degisiklik.aylik_beyan_sinir_usd = beyan;
-    const kg = form.kg.trim() ? sayi(form.kg) : null;
-    if (kg !== ayarlar.varsayilanKgFiyatiAzn) degisiklik.varsayilan_kg_fiyati_azn = kg;
-    if (ayarlar.primOraniVarsayilan !== undefined) {
-      const prim = Math.round(sayi(form.prim) * 100) / 10000;
-      if (prim !== ayarlar.primOraniVarsayilan) degisiklik.prim_orani_varsayilan = prim;
+    // Codex R3 F11: a typo is an error, never a cleared value.
+    const sonuc = ayarDegisiklikleri(ayarlar, form);
+    if (sonuc.hata !== undefined) {
+      setMesaj(sonuc.hata);
+      return;
     }
+    const degisiklik = sonuc.degisiklik;
     if (Object.keys(degisiklik).length === 0) {
       setMesaj('Dəyişiklik yoxdur.');
       return;
