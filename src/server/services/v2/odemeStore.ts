@@ -73,6 +73,8 @@ const ALANLAR = [
   'islem_anahtari',
 ] as const;
 const KURUS = (value: number) => Math.round(value * 100);
+/** Reads of a v2 ledger that must meet one unchanged header before giving up (F21). */
+const DEFTER_OKUMA_DENEMESI = 3;
 
 /** Payment status from the ledger total (spec §4): stored nowhere, always derived. */
 export function odemeDurumu(toplam: number, odenen: number): OdemeDurumu {
@@ -553,37 +555,62 @@ export async function v2SiparisOdemeleri(
     );
   }
   const client = supabase!;
-  const { data: baslik, error } = await client
-    .from('siparisler')
-    .select('id,tenant_id,model_surumu,toplam_tutar,alinan_tutar')
-    .eq('tenant_id', tenantId)
-    .eq('model_surumu', 2)
-    .eq('id', id)
-    .maybeSingle();
-  if (error) throw new PublicResourceError('Ödemeler okunamadı.', 503);
-  if (!baslik) return null;
-  const b = kayit(baslik);
-  if (b.tenant_id !== tenantId || b.id !== id)
-    throw new PublicResourceError('Ödemeler okunamadı.', 503);
+  const hata = () => new PublicResourceError('Ödemeler okunamadı.', 503);
+  const baslikOku = async () => {
+    const { data, error } = await client
+      .from('siparisler')
+      .select('id,tenant_id,model_surumu,toplam_tutar,alinan_tutar,guncellenme_tarihi')
+      .eq('tenant_id', tenantId)
+      .eq('model_surumu', 2)
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw hata();
+    if (!data) return null;
+    const b = kayit(data);
+    if (b.tenant_id !== tenantId || b.id !== id) throw hata();
+    return b;
+  };
   // Every payment of the order, paged in a stable order (Codex R3 F10).
-  const liste = await tumSatirlar(
-    (from, to) =>
-      client
-        .from('odemeler')
-        .select(ODEME_KOLONLARI, { count: 'exact' })
-        .eq('tenant_id', tenantId)
-        .eq('siparis_id', id)
-        .order('olusturma_zamani', { ascending: true })
-        .order('id', { ascending: true })
-        .range(from, to),
-    'Ödemeler okunamadı.'
-  );
-  const odemeler = liste.map((row) => odemeden(row, tenantId));
-  if (odemeler.some((o) => o.siparisId !== id))
-    throw new PublicResourceError('Ödemeler okunamadı.', 503);
-  // The paid total is the one SQL keeps with the ledger (trigger, same transaction as
-  // every payment), not a sum in TypeScript.
-  const odenen = Number(b.alinan_tutar);
-  if (!Number.isFinite(odenen)) throw new PublicResourceError('Ödemeler okunamadı.', 503);
-  return defter(id, Number(b.toplam_tutar), odemeler, odenen);
+  const satirlariOku = async () => {
+    const liste = await tumSatirlar(
+      (from, to) =>
+        client
+          .from('odemeler')
+          .select(ODEME_KOLONLARI, { count: 'exact' })
+          .eq('tenant_id', tenantId)
+          .eq('siparis_id', id)
+          .order('olusturma_zamani', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to),
+      'Ödemeler okunamadı.'
+    );
+    const odemeler = liste.map((row) => odemeden(row, tenantId));
+    if (odemeler.some((o) => o.siparisId !== id)) throw hata();
+    return odemeler;
+  };
+  // One snapshot (Codex R4 F21): header and rows are separate requests, so the rows are
+  // read between two reads of the header. Every payment moves the header in its own
+  // transaction (trigger: alinan_tutar, guncellenme_tarihi = the transaction's now()), so
+  // an unchanged header means no payment was committed while the rows were read. The rows
+  // must also add up to the SQL paid total, each row once. Otherwise read again.
+  let once = await baslikOku();
+  for (let deneme = 0; deneme < DEFTER_OKUMA_DENEMESI; deneme++) {
+    if (!once) return null;
+    const onceki = once;
+    const odemeler = await satirlariOku();
+    const sonra = await baslikOku();
+    if (!sonra) return null;
+    // The paid total is the one SQL keeps with the ledger, not a sum in TypeScript.
+    const odenen = Number(sonra.alinan_tutar);
+    if (!Number.isFinite(odenen)) throw hata();
+    const kipirdamadi = (['toplam_tutar', 'alinan_tutar', 'guncellenme_tarihi'] as const).every(
+      (alan) => String(onceki[alan]) === String(sonra[alan])
+    );
+    const satirToplami = odemeler.reduce((kurus, o) => kurus + KURUS(o.tutarAzn), 0);
+    const tekil = new Set(odemeler.map((o) => o.id)).size === odemeler.length;
+    if (kipirdamadi && tekil && satirToplami === KURUS(odenen))
+      return defter(id, Number(sonra.toplam_tutar), odemeler, odenen);
+    once = sonra;
+  }
+  throw new PublicResourceError('Ödemeler şu an değişiyor; lütfen tekrar deneyin.', 503);
 }

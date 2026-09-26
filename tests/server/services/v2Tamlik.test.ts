@@ -17,8 +17,11 @@ vi.mock('../../../src/server/services/supabase', () => ({
 import { v2SiparisleriListele } from '../../../src/server/services/v2/siparisStore';
 import { v2SiparisOdemeleri } from '../../../src/server/services/v2/odemeStore';
 
-/** A PostgREST-like fake: filters, ordering, ranges, exact counts and a max-rows cap. */
-function fakeDb(tables: Record<string, Row[]>, maxRows: number) {
+/**
+ * A PostgREST-like fake: filters, ordering, ranges, exact counts and a max-rows cap.
+ * `onRead` runs before each query answers, to let a concurrent writer act between reads.
+ */
+function fakeDb(tables: Record<string, Row[]>, maxRows: number, onRead?: (table: string) => void) {
   return {
     from(table: string) {
       const filters: Array<(row: Row) => boolean> = [];
@@ -29,6 +32,7 @@ function fakeDb(tables: Record<string, Row[]>, maxRows: number) {
       let to = Number.POSITIVE_INFINITY;
       let limit = Number.POSITIVE_INFINITY;
       const run = () => {
+        onRead?.(table);
         const all = (tables[table] ?? []).filter((row) => filters.every((f) => f(row)));
         all.sort((a, b) => {
           for (const [col, asc] of orders) {
@@ -166,5 +170,87 @@ describe.each([1000, 400])('v2 reads are complete past max rows = %i (Codex R3 F
       kalanTutar: 999,
       durum: 'KISMI',
     });
+  });
+});
+
+// Codex R4 F21: the ledger answer read the order header (the paid total) and the payment
+// rows in separate requests. A payment committed between them gave a paid total that did
+// not add up to the rows listed. The answer is now one snapshot: the header is read
+// again after the rows and must not have moved, and the rows must add up to its total;
+// otherwise the pair is read again, and a ledger that never holds still is an error.
+describe('the v2 ledger answer is one snapshot of header and rows (Codex R4 F21)', () => {
+  /** A payment as the RPC writes it: the row and, in the same transaction, the header. */
+  function pay(tables: Record<string, Row[]>, id: string, i: number, tutar: string) {
+    tables.odemeler.push({ ...payment(id, i), tutar_azn: tutar });
+    const kurus = tables.odemeler.reduce((k, o) => k + Math.round(Number(o.tutar_azn) * 100), 0);
+    Object.assign(tables.siparisler[0], {
+      alinan_tutar: (kurus / 100).toFixed(2),
+      guncellenme_tarihi: `2026-09-26T09:00:${String(i).padStart(2, '0')}.000000Z`,
+    });
+  }
+  function order() {
+    const id = randomUUID();
+    const tables: Record<string, Row[]> = {
+      siparisler: [header(id, { toplam_tutar: '100.00' })],
+      odemeler: [],
+    };
+    pay(tables, id, 0, '30.00');
+    return { id, tables };
+  }
+  const rowsPaid = (ledger: Awaited<ReturnType<typeof v2SiparisOdemeleri>>) =>
+    (ledger?.odemeler ?? []).reduce((k, o) => k + Math.round(o.tutarAzn * 100), 0) / 100;
+
+  // Before the ledger read, and after it (the header is then read again).
+  it.each([
+    ['the header read and the ledger read', 'odemeler', 1],
+    ['the ledger read and the next header read', 'siparisler', 2],
+  ])('a payment between %s gives no mismatched answer', async (_, table, nth) => {
+    const { id, tables } = order();
+    let seen = 0;
+    env.db = fakeDb(tables, 1000, (read) => {
+      if (read === table && ++seen === nth) pay(tables, id, 1, '20.00');
+    });
+    const ledger = await v2SiparisOdemeleri(TENANT, id);
+    expect(ledger?.odemeler).toHaveLength(2);
+    expect(ledger?.ozet).toMatchObject({ odenenTutar: 50, kalanTutar: 50, durum: 'KISMI' });
+    expect(rowsPaid(ledger)).toBe(ledger?.ozet.odenenTutar);
+  });
+
+  it('a payment and its reversal during the ledger read are seen by the header check', async () => {
+    const { id, tables } = order();
+    const reads: string[] = [];
+    let concurrent = true;
+    env.db = fakeDb(tables, 1000, (table) => {
+      reads.push(table);
+      if (table === 'odemeler' && concurrent) {
+        concurrent = false;
+        pay(tables, id, 1, '20.00');
+        pay(tables, id, 2, '-20.00');
+      }
+    });
+    const ledger = await v2SiparisOdemeleri(TENANT, id);
+    expect(ledger?.odemeler).toHaveLength(3);
+    expect(ledger?.ozet.odenenTutar).toBe(30);
+    // The rows were read again between two equal versions of the header.
+    expect(reads.filter((t) => t === 'odemeler')).toHaveLength(2);
+  });
+
+  it('a ledger that keeps moving is an error, never a mismatched pair', async () => {
+    const { id, tables } = order();
+    let i = 1;
+    env.db = fakeDb(tables, 1000, (table) => {
+      if (table === 'odemeler') pay(tables, id, i++, '1.00');
+    });
+    await expect(v2SiparisOdemeleri(TENANT, id)).rejects.toMatchObject({ status: 503 });
+    expect(i - 1).toBeLessThanOrEqual(3);
+  });
+
+  it('a quiet ledger is read once: header, rows, header', async () => {
+    const { id, tables } = order();
+    const reads: string[] = [];
+    env.db = fakeDb(tables, 1000, (table) => reads.push(table));
+    const ledger = await v2SiparisOdemeleri(TENANT, id);
+    expect(ledger?.ozet).toMatchObject({ odenenTutar: 30, kalanTutar: 70 });
+    expect(reads).toEqual(['siparisler', 'odemeler', 'siparisler']);
   });
 });

@@ -160,8 +160,9 @@ from (values
 order by m.sira;
 
 -- Ön koşul kolonları: hiçbir migration'ın oluşturmadığı (eski temel şemadan gelen), kodun
--- okuyup yazdığı siparisler kolonları. 'gerekli' satırlarından biri false ise durun:
--- sipariş yazma o kolonda hata verir. Sipariş notu baku_tahsilat_notu'ndadır (Codex R3 F8).
+-- okuyup yazdığı siparisler kolonları. 'gerekli' ya da 'v2 için gerekli' satırlarından biri
+-- false ise durun: sipariş yazma o kolonda hata verir. Sipariş notu baku_tahsilat_notu'ndadır
+-- (Codex R3 F8).
 select k.kolon, k.gerekli,
   exists (select 1 from pg_catalog.pg_attribute a
           where a.attrelid = to_regclass('public.siparisler') and a.attname = k.kolon
@@ -178,10 +179,31 @@ from (values
   ('teslim_tarihi', 'gerekli'), ('teslim_eden_kisi', 'gerekli'), ('baku_tahsilat_notu', 'gerekli'),
   ('kanada_takip_kodu', 'gerekli'), ('uluslararasi_kargo_kodu', 'gerekli'),
   ('eksik_bilgiler', 'gerekli'), ('ai_guven_skoru', 'gerekli'), ('is_demo', 'gerekli'),
-  -- Yoksa da çalışır: düzenleme zamanı yazılmaz; fiziksel not yalnız etiket yokken okunur.
-  ('guncellenme_tarihi', 'isteğe bağlı'), ('ozel_not', 'isteğe bağlı')
+  -- v2 ödeme tetikleyicisi (12), kaçaklar Q4 (14) ve v2 defter okuması (Codex R4 F21) bu
+  -- kolonu şart koşar; hepsi plpgsql, eksikliği ancak çalışırken görülür. 26 Eylül: canlıda var.
+  ('guncellenme_tarihi', 'v2 için gerekli'),
+  -- Yoksa da çalışır (canlıda yok): fiziksel not yalnız etiket yokken okunur.
+  ('ozel_not', 'isteğe bağlı')
 ) as k(kolon, gerekli)
 order by k.gerekli, k.kolon;
+
+-- Kodlama kalkanı (26 Eylül olayı): SQL panoya UTF-8 dışında konunca ASCII dışı harfler
+-- bozulur. tomnap_* gövdelerinde Mac Roman (√ ∆ º ƒ ≈) ya da Latin-1 (Ã Ä Å Æ) izi olmamalı;
+-- v2 sipariş fonksiyonu 'Bakü' ve '[TƏLİMAT: ' metnini birebir içermeli (10, 11 ve 17
+-- uygulanmadan ikinci satır false olur). Aranan harfler U& kaçışıyla yazıldı: çalışan kısım
+-- ASCII, bozuk bir pano aranan metni de bozup kontrolü yanlışlıkla geçiremez.
+select 'kodlama: tomnap_* gövdelerinde bozuk harf izi yok' as kontrol,
+  not exists (select 1 from pg_catalog.pg_proc p
+              join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.proname like 'tomnap\_%'
+                and p.prosrc ~ U&'[\221A\2206\00BA\0192\2248\00C3\00C4\00C5\00C6]') as dogru
+union all
+select 'kodlama: tomnap_v2_siparis_olustur metinleri birebir',
+  exists (select 1 from pg_catalog.pg_proc p
+          join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname = 'tomnap_v2_siparis_olustur'
+            and strpos(p.prosrc, U&'''Bak\00FC''') > 0
+            and strpos(p.prosrc, U&'''[T\018FL\0130MAT: ') > 0);
 
 select to_regclass('supabase_migrations.schema_migrations') is not null as gecmis_tablosu_var;
 -- Yalnız yukarıdaki true ise:
@@ -194,13 +216,17 @@ select to_regclass('supabase_migrations.schema_migrations') is not null as gecmi
 psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "begin transaction read only" -f migration-durumu.sql -c "rollback"
 ```
 
-Sorgu 25 Eylül'de, CI şemasının kurulu olduğu yerel bir veritabanında denendi: 15 satırın hepsi `true` döndü; 11'in ya da 15'in down dosyası bir transaction içinde uygulanınca yalnız o satır `false` oldu. 26 Eylül'de 17 satırla yeniden denendi: hepsi `true`; 17'nin down dosyası uygulanınca yalnız 17 `false` oldu. 18 satırla da denendi: hepsi `true`; 18'in down dosyası uygulanınca yalnız 18 `false` oldu. Ön koşul sorgusu aynı veritabanında 33 kolonun hepsi için `true` döndü.
+Sorgu 25 Eylül'de, CI şemasının kurulu olduğu yerel bir veritabanında denendi: 15 satırın hepsi `true` döndü; 11'in ya da 15'in down dosyası bir transaction içinde uygulanınca yalnız o satır `false` oldu. 26 Eylül'de 17 satırla yeniden denendi: hepsi `true`; 17'nin down dosyası uygulanınca yalnız 17 `false` oldu. 18 satırla da denendi: hepsi `true`; 18'in down dosyası uygulanınca yalnız 18 `false` oldu. Ön koşul sorgusu aynı veritabanında 33 kolonun hepsi için `true` döndü. Canlıda (26 Eylül) `guncellenme_tarihi` var, `ozel_not` yok. CI bu sorguyu `ozel_not` kolonu olmayan ikinci bir veritabanında da çalıştırır; orada yalnız `ozel_not` satırı `false` olabilir.
+
+Kodlama kalkanının iki satırı CI'da her PR'da `true` döner. Yerelde 17'nin gövdesindeki `'Bakü'` Mac Roman'a çevrilip (`'Bak√º'`) yeniden oluşturulunca ikisi de `false` oldu.
 
 SQL Editor'da elle uygulanan migration'lar `schema_migrations` tablosuna yazılmaz. Bu yüzden asıl ölçü imza nesnesinin varlığıdır.
 
 ### Uygulama
 
 Eksik olanlar sırayla, her dosya tek transaction olarak uygulanır (CI ile aynı biçim):
+
+- **Pano (26 Eylül olayından sonra):** SQL Editor'a kopyalanacak dosya panoya yalnız `LANG=en_US.UTF-8 pbcopy < <dosya>.sql` ile konur; dil ayarı boş bir kabukta düz `pbcopy` metni Mac Roman yapar. Ardından `LANG=en_US.UTF-8 osascript -e 'the clipboard as text' | wc -c` dosyanın `wc -c` değeriyle karşılaştırılır (sonda en çok bir satır sonu fark eder). Her uygulamadan sonra durum sorgusundaki kodlama kalkanı satırları `true` olmalı.
 
 ```bash
 psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/migrations/<dosya>.sql
@@ -327,8 +353,17 @@ Ayrı bir staging yok. Preview'a verilen veritabanı değişkenleri **aynı Supa
 
 - **Eski sürümde v2 verisinin sorunu:** Eski kod v2 siparişini (`model_surumu = 2`) tanımaz. Siparişi okuyup tamamını geri yazar (F1/F2'deki eski davranış). Bu yazma, satırlardan türetilen toplamları ve defterin tuttuğu `alinan_tutar`'ı ezer.
 - **Paylaşılan veritabanı:** Preview de aynı veritabanını kullanır. Bu yüzden v2 yalnız Preview'da açılmış olsa bile veri oluşur.
+- **Sıra (Codex R4):** önce yazanlar durdurulur (1), sonra v2 verisi sayılır (2), eski koda en son dönülür (3). Sayım yazanlar açıkken yapılırsa, sayım ile dönüş arasında yazılan bir v2 kaydı eski kodun eline geçer.
 
-**1. v2 verisi var mı (salt okunur):**
+**1. Yazanları durdur:**
+
+1. Vercel → Settings → Environment Variables: `FF_V2_FLOW`, `VITE_FF_V2_FLOW`, `FF_AWB_REVIEW`, `VITE_FF_AWB_REVIEW` Production'da ve Preview'da boşaltılır.
+2. (d2)'de `v2-deneme` dalına verilen Preview değişkenlerinin **hepsi** silinir (veritabanı anahtarları dahil): o dalın yeni bir derlemesi veritabanına hiç bağlanamaz.
+3. Yeni kodun son Production deployment'ı yeniden deploy edilir. `VITE_` bayrakları derlemede okunduğu için derleme önbelleği kullanılmaz.
+4. **Eski Preview deployment'ları:** Bir deployment'ın değişkenleri derlendiği anda sabitlenir; değişken silmek çalışan eski deployment'ları kapatmaz. Vercel → Deployments'ta `v2-deneme` dalının (ve v2 bayrağıyla derlenmiş her Preview'ın) deployment'ları silinir. Silinen adres 404 vermeli: `curl -s -o /dev/null -w '%{http_code}\n' <preview-adresi>/api/health`.
+5. Production'da `/api/v2/durum` 404 dönmeli. Sürmekte olan istekler için 5 dakika beklenir (fonksiyonların en uzun süresi).
+
+**2. v2 verisi var mı (salt okunur; 1'den sonra, 3'ten hemen önce):**
 
 ```sql
 -- Salt okunur: v2 verisi var mı? Tablo yoksa 0; sorgu yalnız okur.
@@ -350,13 +385,9 @@ from (values
 
 Tüm satırlar `0` ise eski sürüme dönülebilir; değilse dönülmez, düzeltme yeni kod üzerinde yapılır. Sorgu 26 Eylül'de yerel CI şemasında denendi: v2 siparişi, satırı ve ödemesi olan veritabanında o üç satır `1` döndü; tablo yoksa `0` döner.
 
-**2. Kod:**
+**3. Eski koda dönüş (en son):** Sorun bayrak arkasında değilse, yani yeni kodun kendisindeyse, ve 2'deki kontrol tümüyle `0` ise: Vercel → Deployments → eski production deployment'ı → **Instant Rollback** (`vercel rollback <url>`). 2 ile 3 arasında 1'deki hiçbir adım geri alınmaz. (a) durumunda buna ek olarak Production'da `SUPABASE_SERVICE_ROLE_KEY` tanımlı olmalıdır: eski sürüm bu anahtar yoksa anon anahtara düşer, migration 1 de anon erişimini kapatır.
 
-1. Vercel → Settings → Environment Variables: `FF_V2_FLOW`, `VITE_FF_V2_FLOW`, `FF_AWB_REVIEW`, `VITE_FF_AWB_REVIEW` Production'da ve Preview'da boşaltılır.
-2. Yeni kodun son deployment'ı yeniden deploy edilir. `VITE_` bayrakları derlemede okunduğu için derleme önbelleği kullanılmaz.
-3. Sorun bayrak arkasında değilse, yani yeni kodun kendisindeyse, ve 1'deki kontrol tümüyle `0` ise: Vercel → Deployments → eski production deployment'ı → **Instant Rollback** (`vercel rollback <url>`). (a) durumunda buna ek olarak Production'da `SUPABASE_SERVICE_ROLE_KEY` tanımlı olmalıdır: eski sürüm bu anahtar yoksa anon anahtara düşer, migration 1 de anon erişimini kapatır.
-
-**3. Veritabanı — tek sıra (Codex R3 F17):** Önce kod (2). Sonra down dosyaları **yalnız bu sırayla**, yeniden eskiye, her biri tek transaction olarak uygulanır:
+**4. Veritabanı — tek sıra (Codex R3 F17):** Önce 1–3. Sonra down dosyaları **yalnız bu sırayla**, yeniden eskiye, her biri tek transaction olarak uygulanır:
 
 ```bash
 psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/<sürüm>_<ad>.down.sql
