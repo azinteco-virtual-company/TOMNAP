@@ -481,6 +481,11 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **v1 de kapandı:** SUPER_ADMIN v1 siparişte de `alinan_tutar` ve `finans_durumu`'nu
       değiştiremez, artıramaz da (403). Sipariş tablosunda ödeme durumu seçimi ona kapalı.
       Azaltma zaten yalnız PATRON'da (20).
+    - **Oluşturmada da (26 Eylül, Codex R4 F19):** İlk tahsilat (tutar > 0 ya da ödendi/kısmi
+      durumu) yalnız PAYMENT_WRITE rollerinde: PATRON, SATIS_SORUMLUSU, BAKU_FINANS. Kural
+      tek yerde (`services/siparisYetkisi`) ve doğrudan oluşturma, inbox onayı, AI otomatik
+      kaydı ve düzenleme aynısını kullanır. SUPER_ADMIN ve satın almacılar 403 alır; parasız
+      sipariş oluşturmaya devam ederler. Satın almacılar düzenlemede de tahsilat yazamıyordu.
 
 33. **v1 sipariş düzenlemesi: yalnız değişen alanlar (Codex R3 F1/F2/F9, varsayım).**
     - **Nasıl:** `PATCH /api/siparisler/:id` artık okuduğu satırın tamamını geri yazmıyor;
@@ -513,6 +518,9 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       de görür. Daraltmak isterseniz ayrı iş. Modalda pasaport alanı için giriş kutusu yok
       (alan yalnız sunucuda yazılabilir oldu). Fatura görseli hâlâ satır içi base64 olarak
       `ek_veriler`'e yazılıyor (en fazla 3 MB); dosya deposuna taşımak K22 / Faz B işi.
+    - **Genel veri hakkı (karar 26 Eylül, Codex R4 F22):** Bu haklar yalnız detay formu için
+      değil, verinin kendisi içindir: sipariş oluşturma, inbox onayı ve AI kaydında da aynen
+      geçerli; biçim kontrolü ve büyük harfe çevirme de. Kural `services/siparisYetkisi`'de.
 
 35. **Sipariş notu sözleşmesi (Codex R3 F8, varsayım).**
     - **Tek yer:** Teslimat notu (`ozel_not`) `baku_tahsilat_notu`'nun başındaki
