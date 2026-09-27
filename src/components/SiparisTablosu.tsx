@@ -597,7 +597,8 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
           {/* Tablo İçeriği (Masaüstü və ya istifadəçi Cədvəl seçdikdə) */}
           <div
             className={`overflow-x-auto max-h-[72vh] border border-slate-200/80 rounded-xl shadow-xs ${
-              gorunumTipi === 'tablo' ? 'block' : 'hidden'
+              // Codex R4 T3: on a phone the cards are the one list; the table from md up.
+              gorunumTipi === 'tablo' ? 'hidden md:block' : 'hidden'
             }`}
           >
             <table className="w-full text-left text-xs min-w-[1040px]">
