@@ -412,8 +412,9 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
       {/* 1. Kanban Görünüşü */}
       {gorunumTipi === 'kanban' ? (
         <div className="p-3">
+          {/* Codex R4 T2: the Kanban shows the same filtered list as the table and cards. */}
           <KanbanGorunumu
-            siparisler={siparisler}
+            siparisler={filtrelenmisSiparisler}
             onDurumGuncelle={onDurumGuncelle}
             onSiparisSec={onSiparisSec}
             onWhatsAppSec={onWhatsAppSec || (() => {})}
