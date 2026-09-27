@@ -104,8 +104,9 @@ Repodaki migration'ların **hepsi** `90b8eae`'den sonra geldi; canlı kodda hiç
 | 16  | `20260925150000_siparis_guncelle.sql` (v1 düzenleme, Codex R3 F1/F2)      | PR #27    | `tomnap_siparis_guncelle()`                | var          | **hayır**                  | okunamadı |
 | 17  | `20260925160000_not_sozlesmesi.sql` (not sözleşmesi, Codex R3 F8)         | PR #29    | `tomnap_v2_siparis_olustur()` gövdesi      | var          | evet (`OR REPLACE`)        | okunamadı |
 | 18  | `20260926100000_odeme_islem_anahtari.sql` (işlem anahtarı, Codex R3 F15)  | PR #30    | `tomnap_v2_odeme_kaydet()` gövdesi         | var          | **hayır**                  | okunamadı |
+| 19  | `20260927100000_v2_asama_koprusu.sql` (v2 aşama köprüsü, GEÇİCİ, O-38)    | PR #38    | `tomnap_v2_asama_ilerlet()`                | var          | **hayır**                  | yok       |
 
-Toplam 18 migration. 7–18'in her biri CI'da `up → down → down → up` ile sınanıyor.
+Toplam 19 migration. 7–19'un her biri CI'da `up → down → down → up` ile sınanıyor.
 
 - **16 Deploy 1 ile gider:** Sipariş düzenleme rotası (`PATCH /api/siparisler/:id`) 16'nın fonksiyonunu çağırıyor. Bu yüzden 16, 1–6 ile birlikte ve yeni koddan **önce** uygulanır. 7–15'e bağlı değil.
 
@@ -113,11 +114,12 @@ Toplam 18 migration. 7–18'in her biri CI'da `up → down → down → up` ile 
 
 - **7–15, 17 ve 18 ne zaman:** faz-a-plan'a göre Deploy 1'den **sonra**, `FF_V2_FLOW` kapalıyken, ayrı yayınlarla. 7 ve 8, Deploy 1'deki kodun `ABD_SATINALMA` davetini açar; yoksa bu davet 409 ile reddedilir, diğer roller etkilenmez. 9–15 yalnız v2 akışı içindir.
 - **17 v2 ile gider:** 7–15 ile birlikte, 11'den sonra. 11'in fonksiyonunu değiştirir: v2 sipariş notu artık fiziksel bir `ozel_not` kolonuna değil, v1 gibi `baku_tahsilat_notu`'daki `[TƏLİMAT: …]` etiketine yazılır (hiçbir migration `ozel_not` kolonu oluşturmuyor; kolonsuz şemada v2 siparişi hiç oluşturulamıyordu). 11 herhangi bir nedenle yeniden uygulanırsa 17 de ardından yeniden uygulanır.
-- **18 v2 ile gider:** 12, 13 ve 15'ten sonra, en son. `odemeler`'e yeni bir kolon (`islem_anahtari`, var olan satırlarda boş) ve kiracı başına benzersiz bir indeks ekler; ödeme kaydı ve yeni beş argümanlı kurye tahsilatı aynı anahtarla gelen tekrarı yeni kayıt yazmadan ilk ödemeyle yanıtlar. v2 ödeme ve kurye ekranları her zaman anahtar gönderir: 18 olmadan kurye tahsilatı çalışmaz. 15 yeniden uygulanırsa 18 de ardından yeniden uygulanır.
+- **19 v2 ile gider, Deploy 3'te:** 1–18'den sonra; yalnız yeni bir fonksiyon, hiçbir tabloya dokunmaz. v2 siparişini bir sonraki lojistik aşamaya taşır (K20 birim ekseni gelene kadar GEÇİCİ köprü, OPEN_QUESTIONS 38). 19 olmadan v2 ekranındaki "Sonraki aşama" düğmesi 503 alır; kurye nakdi ve kasa teslimi için v2 siparişi Bakü dağıtımına geçemez.
+- **18 v2 ile gider:** 12, 13 ve 15'ten sonra. `odemeler`'e yeni bir kolon (`islem_anahtari`, var olan satırlarda boş) ve kiracı başına benzersiz bir indeks ekler; ödeme kaydı ve yeni beş argümanlı kurye tahsilatı aynı anahtarla gelen tekrarı yeni kayıt yazmadan ilk ödemeyle yanıtlar. v2 ödeme ve kurye ekranları her zaman anahtar gönderir: 18 olmadan kurye tahsilatı çalışmaz. 15 yeniden uygulanırsa 18 de ardından yeniden uygulanır.
 - **7–15 arası bağımlılık:** 11, 10'un fonksiyonunu değiştirir; 12, 10'un v2 siparişlerine bağlanır; 13, 12'ye ve 3'teki `kuryeler`'e; 14'ün Q5'i 13'ün bakiye fonksiyonunu çağırır; 15, 12 ve 13'ün üç yazma fonksiyonunu değiştirir (SUPER_ADMIN ödeme kaydı, ters kayıt ve kasa teslimi yazamaz). Sırayı bozmayın.
 - **2, 3, 4, 6, 7, 8, 9, 10, 12, 13 ve 14 kısmen uygulanmışsa yeniden çalıştırılamaz:** `CREATE FUNCTION` / `CREATE TABLE` komutları `OR REPLACE` ya da `IF NOT EXISTS` içermiyor. Önce imza kontrolünü yapın; imzası var olan migration'ı yeniden çalıştırmayın.
 - **1–4'ün down dosyası yok.** Veritabanında geri dönüş ancak yedekten yapılabilir; uygulamadan önce yedek alın.
-- **Beklenmedik migration:** `schema_migrations` tablosunda bu on sekiz sürümden başka bir kayıt görürseniz durun ve raporlayın. Bu, repoda olmayan bir değişikliğin uzakta uygulandığı anlamına gelir.
+- **Beklenmedik migration:** `schema_migrations` tablosunda bu on dokuz sürümden başka bir kayıt görürseniz durun ve raporlayın. Bu, repoda olmayan bir değişikliğin uzakta uygulandığı anlamına gelir.
 
 ### Salt okunur kontrol (Supabase SQL Editor ya da `psql`)
 
@@ -155,7 +157,8 @@ from (values
   (15, '20260925140000_para_yazma_yetkisi.sql', 'govde', 'tomnap_v2_odeme_kaydet:para-yazma-yetkisi'),
   (16, '20260925150000_siparis_guncelle.sql', 'fonksiyon', 'tomnap_siparis_guncelle'),
   (17, '20260925160000_not_sozlesmesi.sql', 'govde', 'tomnap_v2_siparis_olustur:Codex R3 F8'),
-  (18, '20260926100000_odeme_islem_anahtari.sql', 'govde', 'tomnap_v2_odeme_kaydet:Codex R3 F15')
+  (18, '20260926100000_odeme_islem_anahtari.sql', 'govde', 'tomnap_v2_odeme_kaydet:Codex R3 F15'),
+  (19, '20260927100000_v2_asama_koprusu.sql', 'fonksiyon', 'tomnap_v2_asama_ilerlet')
 ) as m(sira, dosya, tur, imza)
 order by m.sira;
 
@@ -401,6 +404,7 @@ psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/<sürüm>_<ad>.
 
 | #   | Down dosyası                                     | Ne zaman                                                                               | Reddettiği durum / kaybolan veri                                   |
 | --- | ------------------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 19  | `20260927100000_v2_asama_koprusu.down.sql`       | v2 geri alınırken                                                                      | yok; ilerletilmiş aşamalar ve geçmiş kayıtları kalır               |
 | 18  | `20260926100000_odeme_islem_anahtari.down.sql`   | v2 geri alınırken                                                                      | yok; ödemeler kalır, yalnız işlem anahtarları silinir              |
 | 17  | `20260925160000_not_sozlesmesi.down.sql`         | v2 geri alınırken                                                                      | yok; v2 notu yeniden fiziksel `ozel_not`'a yazılır (kolon gerekir) |
 | 16  | `20260925150000_siparis_guncelle.down.sql`       | **yalnız kod 16'dan önceki bir sürüme döndüyse**; yeni kodun düzenlemesi 16'yı çağırır | yok; yalnız bir fonksiyon                                          |
@@ -417,7 +421,7 @@ psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/<sürüm>_<ad>.
 | 5   | `20260923023659_awb_match_confirmation.down.sql` | 6'dan sonra                                                                            | yok; yalnız bir fonksiyon                                          |
 
 - **Neden tek sıra:** 8'in down dosyası `tomnap_approve_awb_matches`'i 6'nın sürümüne geri yazar. 6 önce geri alınırsa bu fonksiyon, tablosu olmadan yeniden oluşur. Eski belgedeki "önce 6 → 5, sonra 15 → 7" sırası tam da bunu yapıyordu.
-- **Kısmi geri alma:** Yalnız bir kısım geri alınacaksa da aynı sıranın başından başlanır ve istenen satırda durulur. Örneğin yalnız v2 için 18'den 7'ye inilir; kod yeni kalıyorsa 16 atlanır.
+- **Kısmi geri alma:** Yalnız bir kısım geri alınacaksa da aynı sıranın başından başlanır ve istenen satırda durulur. Örneğin yalnız v2 için 19'dan 7'ye inilir; kod yeni kalıyorsa 16 atlanır.
 - **CI:** Bu tabloyu `tests/sql/tum-zincir-gidis-donus.mjs` okur. Her PR'da bütün down dosyalarını bu sırayla tek transaction'da uygular, geride nesne kalmadığını denetler, migration'ları yeniden uygular, şemanın başlangıçtakiyle aynı olduğunu ve durum sorgusunun tümüyle `true` döndüğünü doğrular.
 - **Reddetme bilerek:** Defterler ve v2 siparişleri sessizce silinmesin diye down dosyası çalışmaz. Önce veriyi dışa aktarıp çözün.
 - **Veri geri alınmaz:** Down dosyaları yalnız kendi migration'larının oluşturduğu nesneleri siler. Onaylanarak siparişlere yazılmış AWB değerleri siparişlerde kalır.
