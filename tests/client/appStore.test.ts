@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAppStore } from '../../src/store/appStore';
 import { Siparis } from '../../src/types';
 
@@ -141,6 +141,37 @@ describe('useAppStore (Zustand State Management)', () => {
     useAppStore.getState().setSeciliFirmaId('another-tenant');
     expect(useAppStore.getState().seciliFirmaId).toBe('test-tenant');
     expect(useAppStore.getState().aktifRol).toBe('PATRON');
+  });
+
+  // Deploy 2 finding 4: buyers and Baku finance may not open the inbox (GET /api/inbox is
+  // SALES), yet every page load asked for its count and showed the 403 as a warning.
+  it('asks for the inbox count only in roles that may open the inbox', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ basarili: true, mesajlar: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      for (const rol of ['KANADA_SATINALMA', 'ABD_SATINALMA', 'BAKU_FINANS'] as const) {
+        useAppStore.setState({
+          aktifRol: rol,
+          seciliFirmaId: 'test-tenant',
+          inboxSayisi: 3,
+          inboxYuklemeHatasi: null,
+        });
+        await useAppStore.getState().inboxSayisiGuncelle('test-tenant');
+        expect([rol, fetchMock.mock.calls.length]).toEqual([rol, 0]);
+        expect(useAppStore.getState()).toMatchObject({ inboxSayisi: 0, inboxYuklemeHatasi: null });
+      }
+      useAppStore.setState({ aktifRol: 'PATRON', seciliFirmaId: 'test-tenant' });
+      await useAppStore.getState().inboxSayisiGuncelle('test-tenant');
+      expect(fetchMock).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('setBildirim ve setInboxSayisi doğru çalışmalı', () => {
