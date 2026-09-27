@@ -209,6 +209,23 @@ describe('v2 orders with lines and an owner (A8)', () => {
     ]);
   });
 
+  // Deploy 2 finding 5: roles without the owner picker saw the owner's id in the list.
+  it("shows the owner's name in the list to every role", async () => {
+    const created = await agents.PATRON.post('/api/v2/siparisler').send(
+      siparis({ sahip_kullanici_id: 'v2-diger-satis', musteri_adi: 'Sahib adı' })
+    );
+    expect(created.status).toBe(201);
+    for (const role of ['PATRON', 'SATIS_SORUMLUSU', 'KANADA_SATINALMA']) {
+      const list = await agents[role].get('/api/v2/siparisler');
+      const row = list.body.siparisler.find(
+        (s: { id: string }) => s.id === created.body.siparis.id
+      );
+      expect([role, row?.sahipAdSoyad]).toEqual([role, 'v2-diger-satis']);
+    }
+    const one = await agents.KANADA_SATINALMA.get(`/api/v2/siparisler/${created.body.siparis.id}`);
+    expect(one.body.siparis.sahipAdSoyad).toBe('v2-diger-satis');
+  });
+
   it('keeps the derived old columns of a v2 order away from the generic PATCH (K20)', async () => {
     const id = (await agents.PATRON.post('/api/v2/siparisler').send(siparis())).body.siparis.id;
     for (const body of [

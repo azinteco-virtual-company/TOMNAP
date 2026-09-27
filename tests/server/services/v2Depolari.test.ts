@@ -265,6 +265,45 @@ describe('v2 order store on Supabase: one RPC per order, tenant-scoped reads (A8
     await expect(v2SiparisOlustur('t-a', 'u-1', girdi())).rejects.toMatchObject({ status: 503 });
   });
 
+  // Deploy 2 finding 5: a role without the owner picker saw the owner's id, not a name.
+  it("names each owner from the session tenant's users only", async () => {
+    const names = (rows: unknown[]) => (call: { table: string }) => ({
+      data:
+        call.table === 'siparisler'
+          ? [header('t-a')]
+          : call.table === 'kullanicilar'
+            ? rows
+            : [orderLine('t-a')],
+      error: null,
+    });
+    db.answer = names([
+      { id: 'u-1', tenant_id: 't-a', ad_soyad: 'Aytən Sahib' },
+      { id: 'u-2', tenant_id: 't-b', ad_soyad: 'Yabancı' },
+    ]);
+    const [first] = await v2SiparisleriListele('t-a');
+    expect(first.sahipAdSoyad).toBe('Aytən Sahib');
+    const users = db.calls.find((call) => call.table === 'kullanicilar');
+    expect(users?.filters).toEqual(
+      expect.arrayContaining([
+        ['tenant_id', 't-a'],
+        ['id:in', ['u-1']],
+      ])
+    );
+    // Another tenant's user never names an order, whatever the answer carries.
+    db.answer = names([{ id: 'u-1', tenant_id: 't-b', ad_soyad: 'Yabancı' }]);
+    expect((await v2SiparisleriListele('t-a'))[0].sahipAdSoyad).toBeNull();
+    db.answer = (call) => ({
+      data:
+        call.table === 'siparisler'
+          ? header('t-a')
+          : call.table === 'kullanicilar'
+            ? [{ id: 'u-1', tenant_id: 't-a', ad_soyad: 'Aytən Sahib' }]
+            : [orderLine('t-a')],
+      error: null,
+    });
+    expect((await v2SiparisGetir('t-a', ORDER))?.sahipAdSoyad).toBe('Aytən Sahib');
+  });
+
   it('reads v2 headers and their lines with tenant filters on every query', async () => {
     db.answer = (call) => ({
       data: call.table === 'siparisler' ? [header('t-a')] : [orderLine('t-a')],
