@@ -1,5 +1,6 @@
 import { apiFetch } from '../lib/apiClient';
 import React, { useState } from 'react';
+import { odemeOzeti } from '../utils/siparisOdemeOzeti';
 import { Siparis, FinansDurumu, LojistikDurumu } from '../types';
 import {
   Search,
@@ -428,9 +429,8 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
               </div>
             ) : (
               filtrelenmisSiparisler.map((siparis) => {
-                const qaliq =
-                  siparis.kalan_baku_tahsilat_azn ??
-                  (siparis.baku_tahsilat_azn || 0) - (siparis.baku_tahsil_edilen_azn || 0);
+                // Codex R4 T1: the same total/received/remaining model as the table.
+                const odeme = odemeOzeti(siparis);
                 const ilkGorsel =
                   siparis.urunler?.[0]?.urun_gorseli ||
                   siparis.gorsel_urlleri?.[0] ||
@@ -570,17 +570,19 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
                           Məbləğ & Qalıq
                         </span>
                         <div className="font-extrabold text-slate-900 text-xs">
-                          {siparis.toplam_tutar_cad ? `${siparis.toplam_tutar_cad} CAD` : '-'}
+                          {odeme.toplam.toFixed(2)} {odeme.paraBirimi}
                         </div>
                         <div className="text-[11px] font-bold mt-0.5">
-                          {qaliq > 0 ? (
+                          {odeme.kalan > 0 ? (
                             <span className="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 inline-block">
-                              Qalıq: {qaliq} ₼
+                              Qalıq: {odeme.kalan.toFixed(2)} {odeme.paraBirimi}
                             </span>
-                          ) : (
+                          ) : odeme.tamOdendi ? (
                             <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 inline-block">
                               Tam Ödənildi ✓
                             </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
                           )}
                         </div>
                       </div>
@@ -619,6 +621,7 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
                   </tr>
                 ) : (
                   filtrelenmisSiparisler.map((siparis) => {
+                    const odeme = odemeOzeti(siparis);
                     return (
                       <tr key={siparis.id} className="hover:bg-slate-50/80 transition-colors group">
                         {/* 1. Müşteri */}
@@ -838,14 +841,16 @@ export const SiparisTablosu: React.FC<SiparisTablosuProps> = ({
                             </span>
                           </div>
                           <div className="text-[11px] mt-0.5">
-                            {siparis.kalan_tutar > 0 ? (
+                            {odeme.kalan > 0 ? (
                               <span className="text-amber-700 font-semibold font-mono tracking-tight">
-                                Qalıq: {siparis.kalan_tutar.toFixed(2)} {siparis.para_birimi}
+                                Qalıq: {odeme.kalan.toFixed(2)} {odeme.paraBirimi}
                               </span>
-                            ) : (
+                            ) : odeme.tamOdendi ? (
                               <span className="text-emerald-700 font-semibold text-[11px]">
                                 Tam Ödənildi
                               </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
                             )}
                           </div>
                         </td>
