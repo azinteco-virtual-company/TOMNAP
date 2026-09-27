@@ -551,7 +551,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       artık iki bayraklı ekranı da kapsar. CI'ın açık-bayrak derlemesi iki bayrağı da açar.
 
 37. **AI otomatik kaydında ödeme bildirimi (Codex R4, F19'un yan etkisi; varsayım).**
-    - **Kapsam:** Yalnız `otomatik_kaydet` açık AI kaydı (mesaj ve görsel masası). Orada
+    - **Kapsam:** Yalnız `otomatik_kaydet` açık AI kaydı (görsel masası; mesaj bileşeni hiçbir ekrana bağlı değildi ve kaldırıldı). Orada
       tutarı kullanıcı değil AI yazar. Tahsilat yazamayan rol (SUPER_ADMIN, satın almacılar)
       siparişi kaybetmez: `alinan_tutar` 0, `BEKLIYOR`. Doğrudan oluşturma ve inbox onayı
       403 ile reddetmeye devam eder; orada tutarı kullanıcı kendisi yazar.
