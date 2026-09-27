@@ -160,11 +160,14 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/not-sozlesmesi.sql
           # Payment operation key (Codex R3 F15): one payment per key, replay, PT412; down -> up.
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/odeme-islem-anahtari.sql
+          # v2 stage bridge (TEMPORARY, O-38): one step forward, roles, history; down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/v2-asama-koprusu.sql
           node tests/sql/siparis-satirlari-concurrency.mjs
           node tests/sql/odemeler-concurrency.mjs
           node tests/sql/kasa-concurrency.mjs
           node tests/sql/siparis-guncelle-concurrency.mjs
           node tests/sql/odeme-islem-anahtari-concurrency.mjs
+          node tests/sql/v2-asama-koprusu-concurrency.mjs
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/cargo-settings.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/courier-access.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/legacy-upload-migrations.sql
