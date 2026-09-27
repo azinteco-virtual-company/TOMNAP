@@ -280,15 +280,19 @@ export const GorselVeAiSiparisMasasi: React.FC<GorselVeAiSiparisMasasiProps> = (
       }
 
       const bulunanSiparis = data.siparis || data.ayristirilan_veri;
-      setAyristirilanTaslak(bulunanSiparis);
 
       if (otomatikKaydet) {
+        // The server already saved the order: no draft (and no "approve" button) is left
+        // open to write it a second time (Deploy 2 finding 6).
+        setAyristirilanTaslak(null);
         setBasari(true);
         setOdemeUyarisi(typeof data.uyari === 'string' ? data.uyari : null);
         onSiparisEklendi(bulunanSiparis);
         // Formu sıfırla
         setHamMetin('');
         tumGorselleriTemizle();
+      } else {
+        setAyristirilanTaslak(bulunanSiparis);
       }
     } catch (err: any) {
       setHata(err.message || 'Sunucu ile bağlantı kurulurken bir hata oluştu.');
