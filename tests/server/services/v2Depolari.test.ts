@@ -83,6 +83,7 @@ import {
   kuryeTahsilatiKaydet,
 } from '../../../src/server/services/v2/kasaStore';
 import { kacaklariOku } from '../../../src/server/services/v2/kacakStore';
+import { v2AsamaIlerlet } from '../../../src/server/services/v2/asamaStore';
 
 const rate = (tenant: string, extra: Record<string, unknown> = {}) => ({
   id: `${tenant}-rate`,
@@ -480,6 +481,74 @@ describe('v2 payment ledger on Supabase: one RPC per write, tenant-scoped reads 
     db.calls = [];
     expect(await v2SiparisOdemeleri('t-a', 'not-a-uuid')).toBeNull();
     expect(db.calls).toEqual([]);
+  });
+});
+
+describe('v2 stage bridge on Supabase: one RPC with the session tenant and user (O-38)', () => {
+  const answer = (tenant: string) => ({
+    data: {
+      siparis: {
+        id: ORDER,
+        tenant_id: tenant,
+        lojistik_durumu: 'KANADA_DEPO',
+        onceki_asama: 'KANADA_SATINALIM_BEKLIYOR',
+      },
+    },
+    error: null,
+  });
+
+  it('calls the RPC with the session scope and the expected stage', async () => {
+    db.rpcAnswer = () => answer('t-a');
+    const sonuc = await v2AsamaIlerlet(
+      't-a',
+      'u-1',
+      ORDER.toUpperCase(),
+      'KANADA_SATINALIM_BEKLIYOR'
+    );
+    expect(db.rpcs).toEqual([
+      {
+        name: 'tomnap_v2_asama_ilerlet',
+        args: {
+          p_tenant_id: 't-a',
+          p_user_id: 'u-1',
+          p_siparis_id: ORDER,
+          p_beklenen_asama: 'KANADA_SATINALIM_BEKLIYOR',
+        },
+      },
+    ]);
+    expect(sonuc).toEqual({
+      id: ORDER,
+      lojistikDurumu: 'KANADA_DEPO',
+      oncekiAsama: 'KANADA_SATINALIM_BEKLIYOR',
+    });
+  });
+
+  it('maps RPC refusals, refuses foreign rows and checks input before any call', async () => {
+    for (const [code, status] of [
+      ['PT403', 403],
+      ['PT404', 404],
+      ['PT409', 409],
+      ['22023', 400],
+      ['42883', 503],
+    ] as const) {
+      db.rpcAnswer = () => ({ data: null, error: { code } });
+      await expect(
+        v2AsamaIlerlet('t-a', 'u-1', ORDER, 'KANADA_SATINALIM_BEKLIYOR')
+      ).rejects.toMatchObject({ status });
+    }
+    db.rpcAnswer = () => answer('t-b');
+    await expect(
+      v2AsamaIlerlet('t-a', 'u-1', ORDER, 'KANADA_SATINALIM_BEKLIYOR')
+    ).rejects.toMatchObject({ status: 503 });
+    db.rpcs = [];
+    await expect(v2AsamaIlerlet('all', 'u-1', ORDER, 'KANADA_DEPO')).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(v2AsamaIlerlet('t-a', 'u-1', 'x', 'KANADA_DEPO')).rejects.toMatchObject({
+      status: 404,
+    });
+    await expect(v2AsamaIlerlet('t-a', 'u-1', ORDER, '')).rejects.toMatchObject({ status: 400 });
+    expect(db.rpcs).toEqual([]);
   });
 });
 
