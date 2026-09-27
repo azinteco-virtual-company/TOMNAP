@@ -11974,6 +11974,7 @@ function basliktan(value, tenantId, satirlar) {
     teslimatAdresi: yaziYaDaNull2(r.teslimat_adresi),
     musteriId: yaziYaDaNull2(ek.musteri_id),
     sahipKullaniciId: r.sahip_kullanici_id,
+    sahipAdSoyad: null,
     siparisKaynagi: yaziYaDaNull2(r.siparis_kaynagi),
     // One note contract with v1 (Codex R3 F8): the tag in baku_tahsilat_notu; the
     // physical ozel_not only in memory rows (no database column is read for it).
@@ -12051,17 +12052,38 @@ async function satirlariOku(tenantId, siparisIdleri) {
   );
   return rows.map((row) => satirdan3(row, tenantId));
 }
+async function sahipleriAdlandir(tenantId, siparisler) {
+  const idler = [...new Set(siparisler.map((s) => s.sahipKullaniciId))];
+  if (idler.length === 0) return siparisler;
+  let rows = [];
+  if (bellekModu2(tenantId)) {
+    rows = kullanicilarVeritabani.filter((u) => u.tenant_id === tenantId && idler.includes(u.id));
+  } else {
+    const { data, error: error2 } = await supabase.from("kullanicilar").select("id,tenant_id,ad_soyad").eq("tenant_id", tenantId).in("id", idler);
+    if (!error2 && Array.isArray(data)) rows = data;
+  }
+  const adlar = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const r = row;
+    if (r.tenant_id === tenantId && typeof r.id === "string" && typeof r.ad_soyad === "string")
+      adlar.set(r.id, r.ad_soyad.trim());
+  }
+  return siparisler.map((s) => ({ ...s, sahipAdSoyad: adlar.get(s.sahipKullaniciId) || null }));
+}
 async function v2SiparisleriListele(tenant2) {
   const tenantId = v2Tenant(tenant2);
   if (bellekModu2(tenantId)) {
     const basliklar = havuz2(tenantId).filter((row) => row.tenant_id === tenantId && row.model_surumu === 2).sort(
       (a, b) => String(b.olusturma_tarihi).localeCompare(String(a.olusturma_tarihi)) || String(b.id).localeCompare(String(a.id))
     ).slice(0, V2_LISTE_SINIRI);
-    return basliklar.map(
-      (row) => basliktan(
-        row,
-        tenantId,
-        satirBellegi.filter((s) => s.tenantId === tenantId && s.siparisId === row.id)
+    return sahipleriAdlandir(
+      tenantId,
+      basliklar.map(
+        (row) => basliktan(
+          row,
+          tenantId,
+          satirBellegi.filter((s) => s.tenantId === tenantId && s.siparisId === row.id)
+        )
       )
     );
   }
@@ -12070,11 +12092,14 @@ async function v2SiparisleriListele(tenant2) {
   const rows = data;
   const ids = rows.map((row) => String(kayit2(row).id));
   const satirlar = await satirlariOku(tenantId, ids);
-  return rows.map(
-    (row) => basliktan(
-      row,
-      tenantId,
-      satirlar.filter((s) => s.siparisId === kayit2(row).id)
+  return sahipleriAdlandir(
+    tenantId,
+    rows.map(
+      (row) => basliktan(
+        row,
+        tenantId,
+        satirlar.filter((s) => s.siparisId === kayit2(row).id)
+      )
     )
   );
 }
@@ -12085,16 +12110,23 @@ async function v2SiparisGetir(tenant2, id) {
     const row = havuz2(tenantId).find(
       (r) => r.id === id && r.tenant_id === tenantId && r.model_surumu === 2
     );
-    return row ? basliktan(
-      row,
-      tenantId,
-      satirBellegi.filter((s) => s.tenantId === tenantId && s.siparisId === id)
-    ) : null;
+    if (!row) return null;
+    const [siparis2] = await sahipleriAdlandir(tenantId, [
+      basliktan(
+        row,
+        tenantId,
+        satirBellegi.filter((s) => s.tenantId === tenantId && s.siparisId === id)
+      )
+    ]);
+    return siparis2;
   }
   const { data, error: error2 } = await supabase.from("siparisler").select(BASLIK_KOLONLARI).eq("tenant_id", tenantId).eq("model_surumu", 2).eq("id", id).maybeSingle();
   if (error2) throw new PublicResourceError("Sipari\u015Fler okunamad\u0131.", 503);
   if (!data) return null;
-  return basliktan(data, tenantId, await satirlariOku(tenantId, [id]));
+  const [siparis] = await sahipleriAdlandir(tenantId, [
+    basliktan(data, tenantId, await satirlariOku(tenantId, [id]))
+  ]);
+  return siparis;
 }
 
 // src/server/services/v2/siparisAyristirma.ts
