@@ -8,6 +8,7 @@ export interface V2SiparisOzeti {
   id: string;
   musteriAdi: string;
   sahipKullaniciId: string;
+  sahipAdSoyad?: string | null;
   toplamTutar: number;
   lojistikDurumu: string;
   olusturmaTarihi: string;
@@ -80,7 +81,9 @@ export default function SiparisListesi({
               </td>
               <td>{siparis.musteriAdi}</td>
               <td>{siparis.satirlar.length}</td>
-              <td className="text-slate-400">{sahipAdi(siparis.sahipKullaniciId)}</td>
+              <td className="text-slate-400">
+                {siparis.sahipAdSoyad ?? sahipAdi(siparis.sahipKullaniciId)}
+              </td>
               <td className="text-slate-400">
                 <span>{siparis.lojistikDurumu}</span>
                 {asamaIlerletebilir(aktifRol, siparis.lojistikDurumu) && (

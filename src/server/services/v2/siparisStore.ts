@@ -61,6 +61,8 @@ export interface V2Siparis {
   teslimatAdresi: string | null;
   musteriId: string | null;
   sahipKullaniciId: string;
+  /** The owner's name for display; null when not a user of this tenant (Deploy 2 finding 5). */
+  sahipAdSoyad: string | null;
   siparisKaynagi: string | null;
   ozelNot: string | null;
   toplamTutar: number;
@@ -350,6 +352,7 @@ function basliktan(
     teslimatAdresi: yaziYaDaNull(r.teslimat_adresi),
     musteriId: yaziYaDaNull(ek.musteri_id),
     sahipKullaniciId: r.sahip_kullanici_id,
+    sahipAdSoyad: null,
     siparisKaynagi: yaziYaDaNull(r.siparis_kaynagi),
     // One note contract with v1 (Codex R3 F8): the tag in baku_tahsilat_notu; the
     // physical ozel_not only in memory rows (no database column is read for it).
@@ -452,6 +455,34 @@ async function satirlariOku(tenantId: string, siparisIdleri: string[]) {
   return rows.map((row) => satirdan(row, tenantId));
 }
 
+/**
+ * Owner names for display (Deploy 2 finding 5): only users of the session tenant. The name
+ * is not needed to work with the order, so a failed name read leaves it null rather than
+ * failing the list.
+ */
+async function sahipleriAdlandir(tenantId: string, siparisler: V2Siparis[]): Promise<V2Siparis[]> {
+  const idler = [...new Set(siparisler.map((s) => s.sahipKullaniciId))];
+  if (idler.length === 0) return siparisler;
+  let rows: unknown[] = [];
+  if (bellekModu(tenantId)) {
+    rows = kullanicilarVeritabani.filter((u) => u.tenant_id === tenantId && idler.includes(u.id));
+  } else {
+    const { data, error } = await supabase!
+      .from('kullanicilar')
+      .select('id,tenant_id,ad_soyad')
+      .eq('tenant_id', tenantId)
+      .in('id', idler);
+    if (!error && Array.isArray(data)) rows = data;
+  }
+  const adlar = new Map<string, string>();
+  for (const row of rows) {
+    const r = row as Record<string, unknown>;
+    if (r.tenant_id === tenantId && typeof r.id === 'string' && typeof r.ad_soyad === 'string')
+      adlar.set(r.id, r.ad_soyad.trim());
+  }
+  return siparisler.map((s) => ({ ...s, sahipAdSoyad: adlar.get(s.sahipKullaniciId) || null }));
+}
+
 /** The session tenant's latest v2 orders with their lines (newest first). */
 export async function v2SiparisleriListele(tenant: unknown): Promise<V2Siparis[]> {
   const tenantId = v2Tenant(tenant);
@@ -464,11 +495,14 @@ export async function v2SiparisleriListele(tenant: unknown): Promise<V2Siparis[]
           String(b.id).localeCompare(String(a.id))
       )
       .slice(0, V2_LISTE_SINIRI);
-    return basliklar.map((row) =>
-      basliktan(
-        row,
-        tenantId,
-        satirBellegi.filter((s) => s.tenantId === tenantId && s.siparisId === row.id)
+    return sahipleriAdlandir(
+      tenantId,
+      basliklar.map((row) =>
+        basliktan(
+          row,
+          tenantId,
+          satirBellegi.filter((s) => s.tenantId === tenantId && s.siparisId === row.id)
+        )
       )
     );
   }
@@ -484,11 +518,14 @@ export async function v2SiparisleriListele(tenant: unknown): Promise<V2Siparis[]
   const rows: unknown[] = data;
   const ids = rows.map((row) => String(kayit(row).id));
   const satirlar = await satirlariOku(tenantId, ids);
-  return rows.map((row) =>
-    basliktan(
-      row,
-      tenantId,
-      satirlar.filter((s) => s.siparisId === kayit(row).id)
+  return sahipleriAdlandir(
+    tenantId,
+    rows.map((row) =>
+      basliktan(
+        row,
+        tenantId,
+        satirlar.filter((s) => s.siparisId === kayit(row).id)
+      )
     )
   );
 }
@@ -501,13 +538,15 @@ export async function v2SiparisGetir(tenant: unknown, id: unknown): Promise<V2Si
     const row = havuz(tenantId).find(
       (r) => r.id === id && r.tenant_id === tenantId && r.model_surumu === 2
     );
-    return row
-      ? basliktan(
-          row,
-          tenantId,
-          satirBellegi.filter((s) => s.tenantId === tenantId && s.siparisId === id)
-        )
-      : null;
+    if (!row) return null;
+    const [siparis] = await sahipleriAdlandir(tenantId, [
+      basliktan(
+        row,
+        tenantId,
+        satirBellegi.filter((s) => s.tenantId === tenantId && s.siparisId === id)
+      ),
+    ]);
+    return siparis;
   }
   const { data, error } = await supabase!
     .from('siparisler')
@@ -518,7 +557,10 @@ export async function v2SiparisGetir(tenant: unknown, id: unknown): Promise<V2Si
     .maybeSingle();
   if (error) throw new PublicResourceError('Siparişler okunamadı.', 503);
   if (!data) return null;
-  return basliktan(data, tenantId, await satirlariOku(tenantId, [id]));
+  const [siparis] = await sahipleriAdlandir(tenantId, [
+    basliktan(data, tenantId, await satirlariOku(tenantId, [id])),
+  ]);
+  return siparis;
 }
 
 /** Tenant-scoped copy of the in-memory order lines (development and demo only). */
