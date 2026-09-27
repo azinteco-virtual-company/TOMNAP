@@ -30,6 +30,7 @@ import {
 import { useDil } from '../context/DilKonteksti';
 import { fetchWithRetry } from '../lib/apiClient';
 import { useAppStore } from '../store/appStore';
+import { KargoButikSecimi, kargoButikGerekli } from './KargoButikSecimi';
 import { AWB_REVIEW_ENABLED } from '../lib/featureFlags';
 
 // Manifest AWB review: a separate chunk, built and loaded only when VITE_FF_AWB_REVIEW
@@ -138,8 +139,10 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
       .finally(() => setAyarlarYukleniyor(false));
   };
 
+  // Cargo settings belong to one boutique: nothing is asked for "all boutiques".
+  const butikGerekli = kargoButikGerekli(seciliFirmaId);
   useEffect(() => {
-    yukleAyarlar();
+    if (!butikGerekli) yukleAyarlar();
   }, [seciliFirmaId]);
 
   // Toplu Senkronizasyon (Tüm Kargoları Aramex API ile Sorgula)
@@ -351,6 +354,8 @@ export const KargoMerkeziSayfasi: React.FC<KargoMerkeziSayfasiProps> = ({
   const teslimSayisi = useMemo(() => {
     return siparisler.filter((s) => s.lojistik_durumu === 'TESLIM_EDILDI').length;
   }, [siparisler]);
+
+  if (butikGerekli) return <KargoButikSecimi />;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">

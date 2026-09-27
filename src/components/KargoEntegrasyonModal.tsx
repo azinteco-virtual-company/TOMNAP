@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { KargoButikSecimi, kargoButikGerekli } from './KargoButikSecimi';
 import {
   Plane,
   Truck,
@@ -90,7 +91,7 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
 
   // Ayarları Yükle
   useEffect(() => {
-    if (!acik) return;
+    if (!acik || kargoButikGerekli(seciliTenantId)) return;
     setYukleniyor(true);
     setTestSonucu(null);
     setBildirim(null);
@@ -248,6 +249,21 @@ export const KargoEntegrasyonModal: React.FC<KargoEntegrasyonModalProps> = ({
   };
 
   if (!acik) return null;
+  if (kargoButikGerekli(seciliTenantId))
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+        <div className="w-full max-w-md space-y-3">
+          <KargoButikSecimi />
+          <button
+            type="button"
+            onClick={onKapat}
+            className="w-full rounded-xl bg-slate-800 py-2 text-sm font-semibold text-white"
+          >
+            Bağla
+          </button>
+        </div>
+      </div>
+    );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
