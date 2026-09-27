@@ -82,6 +82,12 @@ saveIdentitySnapshot({
       email: fixture.courier,
       rol: 'BAKU_KURYE' as const,
     },
+    {
+      id: 'e2e-platform-admin',
+      tenant_id: fixture.tenantA,
+      email: fixture.platformAdmin,
+      rol: 'SUPER_ADMIN' as const,
+    },
   ].map((user) => ({
     ...user,
     ad_soyad: user.id,
