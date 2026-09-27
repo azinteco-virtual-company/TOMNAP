@@ -3,6 +3,7 @@ import { apiFetch } from '../../lib/apiClient';
 import { useAppStore } from '../../store/appStore';
 import { PLATFORM_ROLU, rolGrubunda } from '../../shared/roller';
 import SatirTablosu from './SatirTablosu';
+import SiparisListesi, { type V2SiparisOzeti } from './SiparisListesi';
 import { KUCULTME, gorseliKucult, type GonderilecekGorsel } from './gorselKucult';
 import {
   bosForm,
@@ -17,15 +18,6 @@ interface Sahip {
   id: string;
   adSoyad: string;
   rol: string;
-}
-interface V2SiparisOzeti {
-  id: string;
-  musteriAdi: string;
-  sahipKullaniciId: string;
-  toplamTutar: number;
-  lojistikDurumu: string;
-  olusturmaTarihi: string;
-  satirlar: unknown[];
 }
 
 const girdi = 'mt-1 w-full rounded-lg bg-slate-800 p-2 text-sm text-white';
@@ -320,32 +312,7 @@ export default function SiparisGirisi() {
         </p>
       )}
 
-      <table className="w-full text-left text-sm">
-        <thead className="text-xs text-slate-400">
-          <tr>
-            <th className="py-2">Tarix</th>
-            <th>Müştəri</th>
-            <th>Sətir</th>
-            <th>Sahib</th>
-            <th>Vəziyyət</th>
-            <th className="text-right">Cəm (AZN)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {siparisler.map((siparis) => (
-            <tr key={siparis.id} className="border-t border-slate-800">
-              <td className="py-2 text-slate-400">
-                {new Date(siparis.olusturmaTarihi).toLocaleDateString()}
-              </td>
-              <td>{siparis.musteriAdi}</td>
-              <td>{siparis.satirlar.length}</td>
-              <td className="text-slate-400">{sahipAdi(siparis.sahipKullaniciId)}</td>
-              <td className="text-slate-400">{siparis.lojistikDurumu}</td>
-              <td className="text-right">{siparis.toplamTutar.toFixed(2)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <SiparisListesi siparisler={siparisler} sahipAdi={sahipAdi} onDegisti={listeyiYukle} />
     </section>
   );
 }
