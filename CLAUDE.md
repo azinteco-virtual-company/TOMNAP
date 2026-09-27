@@ -58,6 +58,11 @@ GUARDRAIL — bu projedeki her görev için geçerli:
 - Yeni kod TypeScript strict kurallarına uygun yazılsın (any ve ts-ignore yok).
 - Yeni istemci bileşenleri 400 satırı geçmesin; geçiyorsa böl. Yeni v2 ekranları
   React.lazy ile yüklensin; ilk yük paketine girmesin.
+- SİLME GÜVENLİĞİ: `rm -rf` yalnız tırnaklı ve boş olamayan değişkenle yazılır
+  (`rm -rf -- "${dizin:?}"`) ve yalnız oturumun scratch dizini ya da `mktemp` ile açılmış
+  bir dizin altında çalışır; repo içinde ve $HOME'da asla. Yardımcı betikler
+  `set -euo pipefail` ile başlar.
+  Not (27 Eylül 2026): tırnaksız `rm -rf $data` tests/sql/base-fixture.sql'i sildi; commit'ten önce git'ten geri alındı.
 - Emin olmadığın yerde kod yazma; varsayımını docs/OPEN_QUESTIONS.md dosyasına yaz ve sor.
 - Bitirince: değiştirdiğin dosyaların listesi + neyi neden yaptığın + tsc, npm test ve SQL
   test sonuçları.
