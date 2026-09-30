@@ -80,6 +80,9 @@ export default defineConfig(async ({ command }) => {
           // Optional export engines should not download during SW installation.
           // Private API/upload data remains excluded from all application caches.
           globIgnores: ['**/uploads/**', '**/optional-doc-*.js'],
+          // Address-bar navigations get the app shell, except API and upload URLs: those
+          // go to the network (Deploy 2 finding 3; checked by check:client-artifacts).
+          navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

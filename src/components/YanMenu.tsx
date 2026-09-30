@@ -28,6 +28,8 @@ import { KullaniciRolu } from '../types';
 import { rolGrubunda } from '../shared/roller';
 import { useDil } from '../context/DilKonteksti';
 import { PWAInstallButton } from './PWAInstallButton';
+import { useNavigate } from 'react-router-dom';
+import { v2MenuGorunur } from '../lib/v2Menu';
 
 interface YanMenuProps {
   aktifSekme:
@@ -95,6 +97,7 @@ export const YanMenu: React.FC<YanMenuProps> = ({
   bekleyenTenantSayisi = 0,
 }) => {
   const { t } = useDil();
+  const navigate = useNavigate();
 
   const panelGit = () => {
     setAktifSekme('panel');
@@ -692,6 +695,39 @@ export const YanMenu: React.FC<YanMenuProps> = ({
               {dar && (
                 <div className="absolute left-full ml-3 px-3 py-1.5 bg-slate-950 text-white text-xs font-semibold rounded-lg whitespace-nowrap shadow-xl border border-slate-700 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 flex items-center gap-2">
                   <span>Komanda Dəvət Linki</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* v2 önizləmə (VITE_FF_V2_FLOW): səhifəni yeniləmir, seçilmiş butik qalır. */}
+          {v2MenuGorunur(aktifRol) && (
+            <div className="relative group flex justify-center w-full">
+              <button
+                id="nav-btn-v2"
+                onClick={() => {
+                  setMobilAcik(false);
+                  navigate('/v2');
+                }}
+                className={`flex items-center rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                  dar
+                    ? 'w-11 h-11 justify-center relative bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    : 'w-full justify-between px-3 py-2.5 mt-1 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                <div className="flex items-center min-w-0">
+                  <Layers className={`w-4 h-4 shrink-0 ${!dar ? 'mr-3' : ''} text-cyan-400`} />
+                  {!dar && <span className="truncate">TOMNAP v2</span>}
+                </div>
+                {!dar && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">
+                    Önizləmə
+                  </span>
+                )}
+              </button>
+              {dar && (
+                <div className="absolute left-full ml-3 px-3 py-1.5 bg-slate-950 text-white text-xs font-semibold rounded-lg whitespace-nowrap shadow-xl border border-slate-700 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50 flex items-center gap-2">
+                  <span>TOMNAP v2 (önizləmə)</span>
                 </div>
               )}
             </div>

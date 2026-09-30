@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { readSession, type AuthContext } from '../services/sessions';
 import { allowedOrigins } from './security';
-import { ROL_GRUPLARI } from '../../shared/roller';
+import { PLATFORM_ROLU, ROL_GRUPLARI } from '../../shared/roller';
 
 declare global {
   namespace Express {
@@ -75,6 +75,13 @@ const rules: Rule[] = [
   ['POST', /^\/api\/v2\/siparisler\/ayristir$/, SALES],
   ['GET', /^\/api\/v2\/siparis-sahipleri$/, OWNERS],
   ['GET', /^\/api\/v2\/siparisler(?:\/[^/]+)?$/, STAFF],
+  // GEÇİCİ aşama köprüsü (O-38): SHIPPING without the platform admin, who is not a team
+  // member; the Baku step is narrowed to COURIER_ASSIGN in the store and the RPC.
+  [
+    'POST',
+    /^\/api\/v2\/siparisler\/[^/]+\/asama$/,
+    SHIPPING.filter((rol) => rol !== PLATFORM_ROLU),
+  ],
   // Payment ledger (A10): PAYMENT_WRITE writes (no SUPER_ADMIN; the RPC narrows sales to
   // the boutique); STAFF, SUPER_ADMIN included, reads.
   ['POST', /^\/api\/v2\/odemeler$/, PAYMENT_WRITE],

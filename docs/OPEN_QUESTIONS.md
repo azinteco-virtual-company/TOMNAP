@@ -551,7 +551,7 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       artık iki bayraklı ekranı da kapsar. CI'ın açık-bayrak derlemesi iki bayrağı da açar.
 
 37. **AI otomatik kaydında ödeme bildirimi (Codex R4, F19'un yan etkisi; varsayım).**
-    - **Kapsam:** Yalnız `otomatik_kaydet` açık AI kaydı (mesaj ve görsel masası). Orada
+    - **Kapsam:** Yalnız `otomatik_kaydet` açık AI kaydı (görsel masası; mesaj bileşeni hiçbir ekrana bağlı değildi ve kaldırıldı). Orada
       tutarı kullanıcı değil AI yazar. Tahsilat yazamayan rol (SUPER_ADMIN, satın almacılar)
       siparişi kaybetmez: `alinan_tutar` 0, `BEKLIYOR`. Doğrudan oluşturma ve inbox onayı
       403 ile reddetmeye devam eder; orada tutarı kullanıcı kendisi yazar.
@@ -561,3 +561,21 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       kaydetmeli: 100 AZN"; tutar yoksa "tutar belirtilmemiş".
     - **Öneri modu** (`otomatik_kaydet: false`) değişmedi: hiçbir şey yazmaz; taslak
       doğrudan oluşturmayla kaydedilirse kural orada uygulanır.
+
+38. **GEÇİCİ v2 aşama köprüsü (Deploy 2 bulgusu 1; karar 27 Eylül 2026).**
+    - **Neden:** K20'ye göre v2 siparişinin lojistik aşaması birim ekseninden türetilecek
+      (Faz B–C). O gelene kadar v2 siparişini ilerletecek bir yol yoktu; kurye nakdi, kasa
+      teslimi ve Q4 uçtan uca çalışamıyordu.
+    - **Ne:** `tomnap_v2_asama_ilerlet` (migration 19) ve `POST /api/v2/siparisler/:id/asama`.
+      Yalnız bir sonraki aşama: KANADA_SATINALIM_BEKLIYOR → KANADA_DEPO → ULUSLARARASI_KARGO →
+      BAKU_DAGITIM_ARKADAS. Geri alma, atlama ve TESLIM_EDILDI yok (teslimi kurye akışı yazar).
+      Çağıran gördüğü aşamayı gönderir; satır kilidinden sonra uyuşmazsa 409. Yalnız v2.
+      Her adım `ek_veriler.islem_gecmisi`'ne yazılır (kim, ne zaman, eski → yeni).
+    - **Roller (seçim, yeni grup yok):** Kanada ve kargo adımları v1 `SHIPPING` (PATRON,
+      KANADA_SATINALMA, ABD_SATINALMA); Bakü dağıtımına geçiş v1 `COURIER_ASSIGN` (PATRON,
+      KANADA_SATINALMA). SUPER_ADMIN ekip üyesi değil, hiçbir geçişi yapamaz. Satış, finans
+      ve kurye yapamaz. Tek kaynak `src/shared/v2Asama.ts`; SQL aynı listeyi uygular.
+    - **Arayüz:** v2 sipariş listesinde yetkili role "Növbəti mərhələ →" düğmesi; onay
+      sorulur. Metin v2 ekranlarının dili olan Azerbaycan dilinde.
+    - **Geçici:** Faz C'de birim ekseni gelince köprü birimi olan siparişi reddedecek, sonra
+      kaldırılacak (fonksiyon yorumu ve `COMMENT ON FUNCTION` "TEMPORARY" der).

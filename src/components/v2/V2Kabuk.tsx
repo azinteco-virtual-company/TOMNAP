@@ -5,6 +5,7 @@ import { useAppStore } from '../../store/appStore';
 import { rolGrubunda } from '../../shared/roller';
 import V2Kurlar from './V2Kurlar';
 import V2Ayarlar from './V2Ayarlar';
+import { v2ButikSecimi } from './butikSecimi';
 
 // Sipariş girişi kendi parçasında: kabuk açılınca değil, sekme seçilince yüklenir.
 const SiparisGirisi = lazy(() => import('./SiparisGirisi'));
@@ -23,6 +24,11 @@ type Sekme = 'siparisler' | 'kasa' | 'kacaklar' | 'kurlar' | 'ayarlar';
 export default function V2Kabuk() {
   const navigate = useNavigate();
   const aktifRol = useAppStore((state) => state.aktifRol);
+  const firmalar = useAppStore((state) => state.firmalar);
+  const seciliFirmaId = useAppStore((state) => state.seciliFirmaId);
+  const setSeciliFirmaId = useAppStore((state) => state.setSeciliFirmaId);
+  // Platform admin: the v1 boutique list and mechanism; v2 data needs one boutique.
+  const butik = v2ButikSecimi(aktifRol, seciliFirmaId, firmalar);
   const [durum, setDurum] = useState<SunucuDurumu>('yukleniyor');
   const sekmeler: Array<{ id: Sekme; ad: string }> = [
     ...(rolGrubunda(aktifRol, 'STAFF') ? [{ id: 'siparisler' as const, ad: 'Sifarişlər' }] : []),
@@ -56,6 +62,25 @@ export default function V2Kabuk() {
           <h1 className="text-lg font-bold">TOMNAP v2</h1>
           <p className="text-xs text-slate-400">Önizləmə — yeni axın hələ hazırlanır</p>
         </div>
+        {butik.secici && (
+          <label className="text-xs text-slate-400">
+            Butik
+            <select
+              value={butik.secimGerekli ? '' : seciliFirmaId}
+              onChange={(event) => event.target.value && setSeciliFirmaId(event.target.value)}
+              className="ml-2 rounded-lg bg-slate-800 px-2 py-1.5 text-sm text-white"
+            >
+              <option value="" disabled>
+                Butik seçin
+              </option>
+              {butik.secenekler.map((firma) => (
+                <option key={firma.id} value={firma.id}>
+                  {firma.ad}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           type="button"
           onClick={() => navigate('/app')}
@@ -64,7 +89,8 @@ export default function V2Kabuk() {
           Mövcud panelə qayıt
         </button>
       </header>
-      <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
+      {/* A new boutique remounts every screen, so each one reads its own data again. */}
+      <main key={seciliFirmaId} className="mx-auto max-w-4xl space-y-6 px-6 py-8">
         {durum !== 'acik' && (
           <p role="status" className="text-sm text-slate-300">
             {durum === 'yukleniyor'
@@ -74,7 +100,12 @@ export default function V2Kabuk() {
                 : 'Server v2 vəziyyəti yoxlanıla bilmədi.'}
           </p>
         )}
-        {durum === 'acik' && sekmeler.length > 1 && (
+        {durum === 'acik' && butik.secimGerekli && (
+          <p role="status" className="text-sm text-slate-300">
+            v2 məlumatı bir butikə aiddir. Davam etmək üçün yuxarıdan butik seçin.
+          </p>
+        )}
+        {durum === 'acik' && !butik.secimGerekli && sekmeler.length > 1 && (
           <nav className="flex gap-2" aria-label="v2 bölmələri">
             {sekmeler.map((sekme) => (
               <button
@@ -91,24 +122,24 @@ export default function V2Kabuk() {
             ))}
           </nav>
         )}
-        {durum === 'acik' && aktif === 'siparisler' && (
+        {durum === 'acik' && !butik.secimGerekli && aktif === 'siparisler' && (
           <Suspense fallback={<p className="text-sm text-slate-400">Yüklənir…</p>}>
             <SiparisGirisi />
           </Suspense>
         )}
-        {durum === 'acik' && aktif === 'kasa' && (
+        {durum === 'acik' && !butik.secimGerekli && aktif === 'kasa' && (
           <Suspense fallback={<p className="text-sm text-slate-400">Yüklənir…</p>}>
             <V2Kasa />
           </Suspense>
         )}
-        {durum === 'acik' && aktif === 'kacaklar' && (
+        {durum === 'acik' && !butik.secimGerekli && aktif === 'kacaklar' && (
           <Suspense fallback={<p className="text-sm text-slate-400">Yüklənir…</p>}>
             <KacaklarPanosu />
           </Suspense>
         )}
-        {durum === 'acik' && aktif === 'kurlar' && <V2Kurlar />}
-        {durum === 'acik' && aktif === 'ayarlar' && <V2Ayarlar />}
-        {durum === 'acik' && aktif === null && (
+        {durum === 'acik' && !butik.secimGerekli && aktif === 'kurlar' && <V2Kurlar />}
+        {durum === 'acik' && !butik.secimGerekli && aktif === 'ayarlar' && <V2Ayarlar />}
+        {durum === 'acik' && !butik.secimGerekli && aktif === null && (
           <p className="text-sm text-slate-400">Rolunuz üçün hələ v2 bölməsi yoxdur.</p>
         )}
       </main>

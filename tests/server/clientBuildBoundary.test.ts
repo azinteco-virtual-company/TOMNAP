@@ -3,7 +3,10 @@ import path from 'node:path';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp, mountClientAssets } from '../../src/server/index';
-import { assertClientBuildSafe } from '../../src/server/services/clientBuildBoundary';
+import {
+  assertClientBuildSafe,
+  assertServiceWorkerNavigation,
+} from '../../src/server/services/clientBuildBoundary';
 
 const root = path.join(process.env.DATA_DIR!, 'client-build');
 const privateMarker = 'PRIVATE-SERVER-SOURCE-SENTINEL';
@@ -88,5 +91,39 @@ describe('production client/server artifact boundary', () => {
     write('sw.js', '/* client service worker */');
     write('manifest.webmanifest', '{}');
     expect(() => assertClientBuildSafe(root)).not.toThrow();
+  });
+});
+
+// Deploy 2 finding 3: the service worker answered every address-bar navigation with the
+// app shell, API and upload URLs included (an opened /uploads/ link showed the app).
+describe('service worker navigation fallback', () => {
+  // The minified text workbox writes (String.raw keeps the regex escapes).
+  const sw = (options: string) =>
+    String.raw`e.registerRoute(new e.NavigationRoute(e.createHandlerBoundToURL("index.html")` +
+    options +
+    String.raw`)),e.registerRoute(/^https:\/\/fonts\.googleapis\.com\/.*/i,new e.CacheFirst({}),"GET")`;
+
+  it('fails when the app-shell fallback also answers API or upload URLs', () => {
+    write('sw.js', sw(''));
+    expect(() => assertServiceWorkerNavigation(root)).toThrow(/navigateFallbackDenylist/);
+    write('sw.js', sw(String.raw`,{denylist:[/^\/api\//]}`));
+    expect(() => assertServiceWorkerNavigation(root)).toThrow(/navigateFallbackDenylist/);
+    // Denying the app itself is no fix either.
+    write('sw.js', sw(String.raw`,{denylist:[/^\//]}`));
+    expect(() => assertServiceWorkerNavigation(root)).toThrow(/navigateFallbackDenylist/);
+  });
+
+  it('accepts a fallback that leaves /api/ and /uploads/ to the network, or none at all', () => {
+    write('sw.js', sw(String.raw`,{denylist:[/^\/api\//,/^\/uploads\//]}`));
+    expect(() => assertServiceWorkerNavigation(root)).not.toThrow();
+    write('sw.js', '/* no navigation route */');
+    expect(() => assertServiceWorkerNavigation(root)).not.toThrow();
+    fs.rmSync(path.join(root, 'sw.js'));
+    expect(() => assertServiceWorkerNavigation(root)).not.toThrow();
+  });
+
+  // CI builds before the unit tests, so this checks the real configuration there.
+  it.skipIf(!fs.existsSync(path.resolve('dist', 'sw.js')))('holds for the real build', () => {
+    expect(() => assertServiceWorkerNavigation(path.resolve('dist'))).not.toThrow();
   });
 });

@@ -104,8 +104,9 @@ Repodaki migration'ların **hepsi** `90b8eae`'den sonra geldi; canlı kodda hiç
 | 16  | `20260925150000_siparis_guncelle.sql` (v1 düzenleme, Codex R3 F1/F2)      | PR #27    | `tomnap_siparis_guncelle()`                | var          | **hayır**                  | okunamadı |
 | 17  | `20260925160000_not_sozlesmesi.sql` (not sözleşmesi, Codex R3 F8)         | PR #29    | `tomnap_v2_siparis_olustur()` gövdesi      | var          | evet (`OR REPLACE`)        | okunamadı |
 | 18  | `20260926100000_odeme_islem_anahtari.sql` (işlem anahtarı, Codex R3 F15)  | PR #30    | `tomnap_v2_odeme_kaydet()` gövdesi         | var          | **hayır**                  | okunamadı |
+| 19  | `20260927100000_v2_asama_koprusu.sql` (v2 aşama köprüsü, GEÇİCİ, O-38)    | PR #38    | `tomnap_v2_asama_ilerlet()`                | var          | **hayır**                  | yok       |
 
-Toplam 18 migration. 7–18'in her biri CI'da `up → down → down → up` ile sınanıyor.
+Toplam 19 migration. 7–19'un her biri CI'da `up → down → down → up` ile sınanıyor.
 
 - **16 Deploy 1 ile gider:** Sipariş düzenleme rotası (`PATCH /api/siparisler/:id`) 16'nın fonksiyonunu çağırıyor. Bu yüzden 16, 1–6 ile birlikte ve yeni koddan **önce** uygulanır. 7–15'e bağlı değil.
 
@@ -113,11 +114,12 @@ Toplam 18 migration. 7–18'in her biri CI'da `up → down → down → up` ile 
 
 - **7–15, 17 ve 18 ne zaman:** faz-a-plan'a göre Deploy 1'den **sonra**, `FF_V2_FLOW` kapalıyken, ayrı yayınlarla. 7 ve 8, Deploy 1'deki kodun `ABD_SATINALMA` davetini açar; yoksa bu davet 409 ile reddedilir, diğer roller etkilenmez. 9–15 yalnız v2 akışı içindir.
 - **17 v2 ile gider:** 7–15 ile birlikte, 11'den sonra. 11'in fonksiyonunu değiştirir: v2 sipariş notu artık fiziksel bir `ozel_not` kolonuna değil, v1 gibi `baku_tahsilat_notu`'daki `[TƏLİMAT: …]` etiketine yazılır (hiçbir migration `ozel_not` kolonu oluşturmuyor; kolonsuz şemada v2 siparişi hiç oluşturulamıyordu). 11 herhangi bir nedenle yeniden uygulanırsa 17 de ardından yeniden uygulanır.
-- **18 v2 ile gider:** 12, 13 ve 15'ten sonra, en son. `odemeler`'e yeni bir kolon (`islem_anahtari`, var olan satırlarda boş) ve kiracı başına benzersiz bir indeks ekler; ödeme kaydı ve yeni beş argümanlı kurye tahsilatı aynı anahtarla gelen tekrarı yeni kayıt yazmadan ilk ödemeyle yanıtlar. v2 ödeme ve kurye ekranları her zaman anahtar gönderir: 18 olmadan kurye tahsilatı çalışmaz. 15 yeniden uygulanırsa 18 de ardından yeniden uygulanır.
+- **19 v2 ile gider, Deploy 3'te:** 1–18'den sonra; yalnız yeni bir fonksiyon, hiçbir tabloya dokunmaz. v2 siparişini bir sonraki lojistik aşamaya taşır (K20 birim ekseni gelene kadar GEÇİCİ köprü, OPEN_QUESTIONS 38). 19 olmadan v2 ekranındaki "Sonraki aşama" düğmesi 503 alır; kurye nakdi ve kasa teslimi için v2 siparişi Bakü dağıtımına geçemez.
+- **18 v2 ile gider:** 12, 13 ve 15'ten sonra. `odemeler`'e yeni bir kolon (`islem_anahtari`, var olan satırlarda boş) ve kiracı başına benzersiz bir indeks ekler; ödeme kaydı ve yeni beş argümanlı kurye tahsilatı aynı anahtarla gelen tekrarı yeni kayıt yazmadan ilk ödemeyle yanıtlar. v2 ödeme ve kurye ekranları her zaman anahtar gönderir: 18 olmadan kurye tahsilatı çalışmaz. 15 yeniden uygulanırsa 18 de ardından yeniden uygulanır.
 - **7–15 arası bağımlılık:** 11, 10'un fonksiyonunu değiştirir; 12, 10'un v2 siparişlerine bağlanır; 13, 12'ye ve 3'teki `kuryeler`'e; 14'ün Q5'i 13'ün bakiye fonksiyonunu çağırır; 15, 12 ve 13'ün üç yazma fonksiyonunu değiştirir (SUPER_ADMIN ödeme kaydı, ters kayıt ve kasa teslimi yazamaz). Sırayı bozmayın.
 - **2, 3, 4, 6, 7, 8, 9, 10, 12, 13 ve 14 kısmen uygulanmışsa yeniden çalıştırılamaz:** `CREATE FUNCTION` / `CREATE TABLE` komutları `OR REPLACE` ya da `IF NOT EXISTS` içermiyor. Önce imza kontrolünü yapın; imzası var olan migration'ı yeniden çalıştırmayın.
 - **1–4'ün down dosyası yok.** Veritabanında geri dönüş ancak yedekten yapılabilir; uygulamadan önce yedek alın.
-- **Beklenmedik migration:** `schema_migrations` tablosunda bu on sekiz sürümden başka bir kayıt görürseniz durun ve raporlayın. Bu, repoda olmayan bir değişikliğin uzakta uygulandığı anlamına gelir.
+- **Beklenmedik migration:** `schema_migrations` tablosunda bu on dokuz sürümden başka bir kayıt görürseniz durun ve raporlayın. Bu, repoda olmayan bir değişikliğin uzakta uygulandığı anlamına gelir.
 
 ### Salt okunur kontrol (Supabase SQL Editor ya da `psql`)
 
@@ -155,7 +157,8 @@ from (values
   (15, '20260925140000_para_yazma_yetkisi.sql', 'govde', 'tomnap_v2_odeme_kaydet:para-yazma-yetkisi'),
   (16, '20260925150000_siparis_guncelle.sql', 'fonksiyon', 'tomnap_siparis_guncelle'),
   (17, '20260925160000_not_sozlesmesi.sql', 'govde', 'tomnap_v2_siparis_olustur:Codex R3 F8'),
-  (18, '20260926100000_odeme_islem_anahtari.sql', 'govde', 'tomnap_v2_odeme_kaydet:Codex R3 F15')
+  (18, '20260926100000_odeme_islem_anahtari.sql', 'govde', 'tomnap_v2_odeme_kaydet:Codex R3 F15'),
+  (19, '20260927100000_v2_asama_koprusu.sql', 'fonksiyon', 'tomnap_v2_asama_ilerlet')
 ) as m(sira, dosya, tur, imza)
 order by m.sira;
 
@@ -325,24 +328,30 @@ Ayrı bir staging yok. Preview'a verilen veritabanı değişkenleri **aynı Supa
    - Eksik olanları 7–15, 17 ve 18 sırasıyla (dosya adı sırası) uygulayın.
    - Kontrolü yeniden çalıştırın; 18 migration satırının hepsi `true` olmalı.
 2. **Değişkenleri yalnız tek bir dalın Preview'ına verin (26 Eylül'de düzeltildi):** Vercel'deki değişkenlerin hepsi yalnız Production'da; Preview'da hiç değişken yok, yani bir Preview veritabanına bağlanamaz. Tüm Preview'a vermek her PR önizlemesine veritabanı anahtarı verir. Bu yüzden Vercel → Settings → Environment Variables → **Preview → belirli dal: `v2-deneme`**:
-   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `UPLOAD_STORAGE_BACKEND`, `CARGO_ENCRYPTION_KEYS`, `CARGO_ENCRYPTION_ACTIVE_KEY_ID`, `GEMINI_API_KEY`: Production'dakiyle aynı değer. Kilitli (sensitive) değerler Vercel'de okunamaz; kaynağından (Supabase → API ayarları vb.) girilir.
+   - **Önce dal:** Vercel, GitHub'da olmayan bir dal adını kabul etmez ("Branch not found"). `v2-deneme` önce `main`'den oluşturulur; mevcut bir commit'e açılan dal derleme başlatmaz (27 Eylül'de görüldü), yani değişkenler girilmeden derleme olmaz.
+   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `UPLOAD_STORAGE_BACKEND`, `GEMINI_API_KEY`: Production'dakiyle aynı değer. Kilitli (sensitive) değerler Vercel'de okunamaz; kaynağından (Supabase → API ayarları vb.) girilir.
+   - `CARGO_ENCRYPTION_*` **girilmez, yeni anahtar da üretilmez:** Preview aynı veritabanına yazar; başka anahtarla şifrelenen kargo bilgisini Production çözemez. Anahtar yalnız kargo entegrasyonu rotalarında kullanılır (`src/server/services/crypto.ts`); anahtarsız Preview'da kargo ayarı yazılmadan reddedilir. `FF_AWB_REVIEW` de girilmez.
+   - Her değişkende hedef yalnız **Preview + Git branch `v2-deneme`**; "All Preview" seçilirse her PR önizlemesi veritabanı anahtarını alır. `VITE_FF_V2_FLOW` sensitive olamaz (pakete giren bir bayrak); normal değişken olarak girilir. Kontrol: `vercel env ls preview` yalnız adları ve hedefleri gösterir; 7 satırın hepsi `Preview (v2-deneme)` olmalı.
    - `APP_URL`: dalın sabit Preview adresi (`https://<proje>-git-v2-deneme-<ekip>.vercel.app`). Sunucu, izin verilen origin'den gelmeyen her yazma isteğini (giriş dahil) 403 ile reddeder (`src/server/middleware/auth.ts`); Production'daki `APP_URL` Preview adresini kapsamaz.
    - `FF_V2_FLOW=true`, `VITE_FF_V2_FLOW=true`.
    - Production'da iki bayrak boş kalır.
-3. **Preview deployment'ı:** `main`, `v2-deneme` dalına push edilir; o dalın Preview deployment'ı (dal adresi) kullanılır. `--prod` yok. `VITE_` bayrağı derleme zamanında okunduğu için değişkenler girildikten sonraki bir derleme gerekir. Vercel'in önizleme koruması (Deployment Protection) açıksa adres Vercel girişi ister; API denemeleri tarayıcıdan yapılır.
+3. **Preview deployment'ı:** Değişkenler girildikten sonra `v2-deneme`'ye yeni bir commit (boş olabilir) push edilir; o dalın Preview deployment'ı (dal adresi) kullanılır. `--prod` yok. Panelde Production deployment'ını "Redeploy" etmeyin: o deployment bir dala bağlı değil, dal değişkenleri ona uygulanmaz. `VITE_` bayrağı derleme zamanında okunur. Derleme günlüğünde "v2 kabuğu ayrı parçada" görünmeli. Vercel'in önizleme koruması (Deployment Protection) açıksa adres Vercel girişi ister; açık kalması önerilir (Preview canlı veritabanına yazıyor).
 4. **Production kapalı mı:**
    ```bash
    curl -s -o /dev/null -w '%{http_code}\n' https://<canli>/api/v2/durum
    ```
    `404` dönmeli.
 5. **Preview'da deneme** (demo hesaplarla; `/v2` adresi elle açılır, menüde bağlantı yok):
-   - **Kabuk:** PATRON ile `/v2`: sekmeler "Sifarişlər", "Kassa", "Qaçaqlar", "Kurlar", "Ayarlar". SATIS_SORUMLUSU: "Sifarişlər" ve "Kassa". KANADA_SATINALMA: "Sifarişlər" ve "Kurlar".
+   - **Kabuk:** PATRON ile `/v2`: sekmeler "Sifarişlər", "Kassa", "Qaçaqlar", "Kurlar", "Ayarlar". SATIS_SORUMLUSU: "Sifarişlər" ve "Kassa". KANADA_SATINALMA: "Sifarişlər" ve "Kurlar". BAKU_FINANS: "Sifarişlər", "Kassa", "Qaçaqlar", "Kurlar"; Kassa'da ödeme formu görünür, kurye nakdini o teslim alır. BAKU_KURYE `/v2`'de kendi teslimat ekranına düşer.
+   - **API adresleri:** Uygulamanın service worker'ı adres çubuğuna yazılan her adresi uygulama sayfasıyla yanıtlar (API dahil). API denemeleri tarayıcı konsolundan yapılır: `fetch('/api/v2/durum').then(r => r.status)`.
    - **Sipariş:** Mesajdan ve bir ekran görüntüsünden öneri alın. Satırları düzeltip kaydedin. SUPER_ADMIN sahip seçmeden kaydedemez. Mevcut sipariş tablosunda sipariş "v2" rozetiyle görünür.
    - **Kassa:** Siparişe butik ödemesi yazın, sonra gerekçeyle ters kayıt yapın. Mevcut listede `alinan_tutar` ve ödeme durumu aynı anda değişmeli.
    - **Kurye nakdi:** Kurye kaydına bağlı bir kuryeye v2 sipariş atayın. Sipariş kargo takibinde `BAKU_DAGITIM_ARKADAS` durumuna geçmiş olmalı. Kurye ekranındaki "Üzərimdə olan nağd pul" bölümünden nakit yazın. "Kassa"da kurye bakiyesini görüp teslim alın; bakiye 0 olmalı.
+     - **27 Eylül: bu sürümde yapılamıyor.** v2 siparişi bu aşamaya taşıyan bir ekran yok: eski ekranın aşama değişikliği v2'de bilerek reddedilir (409), canlı kargo takibi de AWB'siz v2 siparişine dokunmaz. Atanmış sipariş kuryenin listesinde görünmez. v2 aşama geçişi ayrı bir karar (Uygulama kaydı — Deploy 2).
    - **Qaçaqlar:** Q4'te teslim edilmiş ama ödenmemiş siparişler, Q5'te kuryede 24 saatten uzun bekleyen nakit görünür.
    - **Ret:** SATIS_SORUMLUSU `GET /api/v2/kasa/kurye-bakiyeleri` → 403; kurye başka bir kuryenin siparişine nakit yazamaz.
    - **SUPER_ADMIN yalnız okur:** Defteri, kurye bakiyelerini ve kaçakları görür. Ödeme formu ve "Təhvil al" düğmesi görünmez; `POST /api/v2/odemeler` ve `POST /api/v2/kasa/teslimler` → 403.
+     - **27 Eylül: ekrandan denenemedi.** `/v2` adresle açılınca sayfa yeniden yüklenir, v1'deki butik seçimi sıfırlanır ve v2'de butik seçici yok; SUPER_ADMIN "Bütün Butiklər" modunda kalır ve her v2 isteği "Bir butik seçilmelidir" (400) alır.
    - **Kayıtlar:** Vercel → Logs, Preview: 5xx olmamalı.
 6. **Bayrağı kapatarak geri çekme:** Preview'da `FF_V2_FLOW` boşaltılıp yeniden deploy edilince `/api/v2` 404 döner ve `/v2` "aktiv deyil" gösterir. `VITE_FF_V2_FLOW` yeniden derlemeyle kalkar. Yazılmış v2 verisi yerinde kalır; mevcut ekranlar v2 siparişini rozetle göstermeye devam eder.
 7. **Production'a açma (karar 25 Eylül 2026):** v2 yayında önce **yalnız Preview**'da açılır. Production'da açma kararını proje sahibi sonra verir; o zamana kadar iki değişken Production'da boş kalır. Açılacağı zaman aynı iki değişken Production'a girilir ve `main` yeniden deploy edilir.
@@ -395,6 +404,7 @@ psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/<sürüm>_<ad>.
 
 | #   | Down dosyası                                     | Ne zaman                                                                               | Reddettiği durum / kaybolan veri                                   |
 | --- | ------------------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 19  | `20260927100000_v2_asama_koprusu.down.sql`       | v2 geri alınırken                                                                      | yok; ilerletilmiş aşamalar ve geçmiş kayıtları kalır               |
 | 18  | `20260926100000_odeme_islem_anahtari.down.sql`   | v2 geri alınırken                                                                      | yok; ödemeler kalır, yalnız işlem anahtarları silinir              |
 | 17  | `20260925160000_not_sozlesmesi.down.sql`         | v2 geri alınırken                                                                      | yok; v2 notu yeniden fiziksel `ozel_not`'a yazılır (kolon gerekir) |
 | 16  | `20260925150000_siparis_guncelle.down.sql`       | **yalnız kod 16'dan önceki bir sürüme döndüyse**; yeni kodun düzenlemesi 16'yı çağırır | yok; yalnız bir fonksiyon                                          |
@@ -411,7 +421,7 @@ psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/<sürüm>_<ad>.
 | 5   | `20260923023659_awb_match_confirmation.down.sql` | 6'dan sonra                                                                            | yok; yalnız bir fonksiyon                                          |
 
 - **Neden tek sıra:** 8'in down dosyası `tomnap_approve_awb_matches`'i 6'nın sürümüne geri yazar. 6 önce geri alınırsa bu fonksiyon, tablosu olmadan yeniden oluşur. Eski belgedeki "önce 6 → 5, sonra 15 → 7" sırası tam da bunu yapıyordu.
-- **Kısmi geri alma:** Yalnız bir kısım geri alınacaksa da aynı sıranın başından başlanır ve istenen satırda durulur. Örneğin yalnız v2 için 18'den 7'ye inilir; kod yeni kalıyorsa 16 atlanır.
+- **Kısmi geri alma:** Yalnız bir kısım geri alınacaksa da aynı sıranın başından başlanır ve istenen satırda durulur. Örneğin yalnız v2 için 19'dan 7'ye inilir; kod yeni kalıyorsa 16 atlanır.
 - **CI:** Bu tabloyu `tests/sql/tum-zincir-gidis-donus.mjs` okur. Her PR'da bütün down dosyalarını bu sırayla tek transaction'da uygular, geride nesne kalmadığını denetler, migration'ları yeniden uygular, şemanın başlangıçtakiyle aynı olduğunu ve durum sorgusunun tümüyle `true` döndüğünü doğrular.
 - **Reddetme bilerek:** Defterler ve v2 siparişleri sessizce silinmesin diye down dosyası çalışmaz. Önce veriyi dışa aktarıp çözün.
 - **Veri geri alınmaz:** Down dosyaları yalnız kendi migration'larının oluşturduğu nesneleri siler. Onaylanarak siparişlere yazılmış AWB değerleri siparişlerde kalır.
@@ -504,3 +514,59 @@ Deploy 1 ve v2 veritabanı hazırlığı. Veritabanı ve Vercel panelindeki işl
 - Vercel'deki Supabase entegrasyonu değişkenleri (`POSTGRES_*`) parola sıfırlandığı için eski. Kod bunları okumuyor.
 - Free planda otomatik yedek yok. Deploy 2 öncesinde aynı yolla yeni bir döküm alınır.
 - Vercel CLI 48.10.2 eski (güncel 60.x); yayın için sorun çıkarmadı.
+
+## Uygulama kaydı — Deploy 2 (26–27 Eylül 2026)
+
+Codex R4 düzeltmeleri (#34, #35, #36) ve v2'nin Preview denemesi. Veritabanı ve Vercel panelindeki işlemleri proje sahibi yaptı; sıra, komutlar ve doğrulama bu oturumda hazırlandı. Yeni migration yok; veriye yazan SQL çalıştırılmadı.
+
+**Önce:** Canlı `4abd002` (`tomnap-n8n79hcpm`).
+
+**Yedek:** `yedek-al.sh` artık her çalıştırmada tarih-saatli yeni bir klasöre yazar. Session pooler üzerinden roller, şema ve veri; SHA256 doğrulandı. `siparisler` 24, `kullanicilar` 6, defterler boş. `odemeler` kendine başvurduğu (ters kayıt) için veri dökümü geri yüklenirken `--disable-triggers` gerekir.
+
+**Durum sorgusu:** Tek satırlık özet, panoya `LANG=en_US.UTF-8 pbcopy` ile ve bayt karşılaştırmasıyla. Sonuç: migration 18/18, gerekli kolonlar 32/32 (`guncellenme_tarihi` dahil), `ozel_not` yok (beklenen), kodlama kalkanının iki satırı `true`.
+
+**Aşama 1 — Production:**
+
+1. `main` `a8e6c88`'in temiz worktree'sinden `vercel deploy --prod`: deployment `tomnap-or0ji7srt`, `tomnap.com` ve `www.tomnap.com` ona bağlı. Derleme günlüğü: v2 kabuğu ve AWB paneli pakette yok. Sunulan pakette baskı CSP'si, iframe sandbox'ı ve ödeme uyarısı var.
+2. Smoke test:
+
+| Adım                           | Sonuç                                                                                                                      |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| 1–3, 5–7 (curl)                | ✅ başlıklar, health GET/HEAD, manifest, oturumsuz 401, `X-Forwarded-Uri` yok sayıldı, `/api/v2/durum` 404                 |
+| 4. Giriş (proje sahibi)        | ✅ PATRON; sipariş, müşteri, firma, kurye ve inbox listeleri 200                                                           |
+| 8. Kayıtlar                    | ✅ 5xx ve error yok; `kargo/senkronize-et` 409 bilerek (canlı kargo hesabı yokken simülasyon siparişe yazılmaz)            |
+| Bakü tahsilat yazdırma (F20)   | ✅ Brave (Chromium 154): yazdırma penceresi açıldı, 13 satır ve toplam doğru, Azerbaycan harfleri düzgün. Safari denenmedi |
+| AI ödemeli mesaj, PATRON (#36) | ✅ Görsel masada otomatik kayıt: alınan 50, kalan 70, uyarı yok                                                            |
+
+**Aşama 2 — v2 Preview:**
+
+- `v2-deneme` dalı `main`'den açıldı; yedi değişken yalnız Preview + `v2-deneme` hedefiyle girildi (ilk denemede altısı yanlışlıkla bütün Preview'lara açıldı, derleme olmadan daraltıldı). Boş bir commit ile derlendi: `tomnap-d1sz4efwm`, adres `tomnap-git-v2-deneme-azinteco.vercel.app`, Deployment Protection açık.
+- Denemede canlı demo verisine yazılanlar: bir v2 siparişi ("DENEME Müştəri", 10 AZN), 1 AZN butik ödemesi ve ters kaydı (defterde iki satır), bir not düzenlemesi, bir kurye ataması.
+
+| Adım                                   | Sonuç                                                                                                     |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Erişim, `APP_URL`                      | ✅ Vercel girişi, sonra PATRON girişi 200; `/api/v2/durum` 200 (Production 404)                           |
+| Kabuk, rol sekmeleri                   | ✅ PATRON, SATIS_SORUMLUSU, KANADA_SATINALMA, BAKU_FINANS beklenen sekmeler; kurye kendi ekranına düşüyor |
+| v2 siparişi                            | ✅ 201; eski tabloda "v2" rozetiyle, not `[TƏLİMAT]` etiketinde                                           |
+| AI satır önerisi                       | ✅ 200; belirsiz fiyatı tahmin etmeyip "fiyatı yok" uyarısı verdi (tasarım)                               |
+| Ödeme ve ters kayıt                    | ✅ 201/201; v2 ve eski tabloda ödenen 1 → 0, KISMI_ODEME → BEKLIYOR                                       |
+| v1'den v2 siparişinin notunu düzenleme | ✅ 200                                                                                                    |
+| Satış: `kurye-bakiyeleri`              | ✅ 403 (konsoldan)                                                                                        |
+| Kurye nakdi, kasa teslimi, Q4          | ⛔ yapılamıyor: v2 siparişi Bakü dağıtımı aşamasına geçemiyor                                             |
+| SUPER_ADMIN salt okuma                 | ⛔ ekrandan denenemedi: v2'de butik seçici yok                                                            |
+| Kayıtlar                               | ✅ 5xx ve error yok                                                                                       |
+
+**Bulunan hatalar (Deploy 2'den gelmiyor):**
+
+1. v2 siparişinin lojistik aşamasını ilerleten bir yol yok; kurye nakdi, kasa teslimi ve Q4 uçtan uca çalışamaz. Karar gerekiyor.
+2. SUPER_ADMIN için v2'de butik seçici yok.
+3. Service worker adres çubuğundan açılan `/api/` ve `/uploads/` adreslerini uygulama sayfasıyla yanıtlıyor (Production'da da; yeni sekmede açılan bir dosya bağlantısı dosya yerine uygulamayı gösterir).
+4. Gelen kutusu yetkisi olmayan roller (satın alma, finans) açılışta 403 alıp "Gələn qutunun tam sayı yüklənmədi" uyarısı görüyor.
+5. v2 listesinde sahip seçemeyen rollerde "Sahib" sütunu kullanıcı kodunu gösteriyor.
+6. Görsel masada otomatik kayıttan sonra taslak ve "Bu Taslağı Onayla" açık kalıyor; basılınca aynı sipariş ikinci kez yazılıyor (Aşama 1'de oldu: "Aytən xanım" iki kez).
+
+**Açık kalanlar:**
+
+- `v2-deneme` değişkenleri yerinde; Production'da bayrak yok, `/api/v2/durum` 404. v2'yi Production'da açma kararı proje sahibinin.
+- Çift "Aytən xanım" siparişi ve DENEME kayıtları demo verisinde duruyor; silinmedi.
+- Vercel CLI 48.10.2 eski.

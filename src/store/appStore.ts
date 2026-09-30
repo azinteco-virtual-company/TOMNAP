@@ -1,7 +1,7 @@
 import { loadCompleteList, newestFirst } from '../lib/completeList';
 import { create } from 'zustand';
 import { Siparis, KullaniciRolu, FirmaTenant } from '../types';
-import { gecerliRolMu } from '../shared/roller';
+import { gecerliRolMu, rolGrubunda } from '../shared/roller';
 import {
   apiFetch,
   ApiError,
@@ -275,6 +275,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   inboxSayisiGuncelle: async (tenantId) => {
     if (get().sessionStatus !== 'authenticated' || get().aktifRol === 'BAKU_KURYE') return;
+    // GET /api/inbox is SALES; other roles would only get a 403 shown as a warning
+    // (Deploy 2 finding 4).
+    if (!rolGrubunda(get().aktifRol, 'SALES')) {
+      set({ inboxSayisi: 0, inboxYuklemeHatasi: null });
+      return;
+    }
     const id = tenantId ?? get().seciliFirmaId;
     if (id !== get().seciliFirmaId) return;
     const version = getApiContextVersion();

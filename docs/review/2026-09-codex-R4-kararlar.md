@@ -27,11 +27,11 @@ dosya kod içermez.
 
 ## Ertelenenler
 
-| Bulgu          | Karar               | Gerekçe                                                                                                                        |
-| -------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| F3, F4, F5, F7 | Durak 4 paketi      | R3 kararı değişmedi: AWB incelemesi, `FF_AWB_REVIEW` her ortamda kapalı. R4 yeni kanıt getirmedi                               |
-| F6-v1          | Durak 4 paketi      | v1 müşteri adayı seçimi. v2'de seçim ekranı var                                                                                |
-| T1–T4          | Arayüz turu / Faz D | R4, T1'i YÜKSEK olarak işaretledi (mobil kartta yanlış "Tam Ödənildi"). Erteleme kararı proje sahibinindir; bu turda değişmedi |
+| Bulgu          | Karar          | Gerekçe                                                                                                                                                              |
+| -------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F3, F4, F5, F7 | Durak 4 paketi | R3 kararı değişmedi: AWB incelemesi, `FF_AWB_REVIEW` her ortamda kapalı. R4 yeni kanıt getirmedi                                                                     |
+| F6-v1          | Durak 4 paketi | v1 müşteri adayı seçimi. v2'de seçim ekranı var                                                                                                                      |
+| T4             | Faz D          | Eski kâr raporu; v2 kâr hesabı sunucuya geçince. T1–T3 Deploy 2 sonrası düzeltildi (#41): kart ve tablo tek ödeme modeli, Kanban filtreli liste, telefonda tek liste |
 
 ## Doğrulanamayanlar
 

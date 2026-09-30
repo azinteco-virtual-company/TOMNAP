@@ -8,6 +8,7 @@ export const fixture = {
   ownerA: 'owner-a@example.invalid',
   ownerB: 'owner-b@example.invalid',
   courier: 'courier-a@example.invalid',
+  platformAdmin: 'platform-admin@example.invalid',
   courierUserId: 'e2e-courier-user-a',
   courierName: 'E2E Courier Profile',
   orderA: '11111111-1111-4111-8111-111111111111',

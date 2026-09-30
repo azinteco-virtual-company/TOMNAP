@@ -9,6 +9,8 @@ import {
   v2SiparisOlustur,
 } from '../../services/v2/siparisStore';
 import { siparisSahipAdaylari, v2SiparisAyristir } from '../../services/v2/siparisAyristirma';
+import { v2AsamaIlerlet } from '../../services/v2/asamaStore';
+import { v2GovdesiniAyikla } from '../../services/v2/ortak';
 
 /**
  * v2 siparişleri (A8). Oluşturma: SALES (patron, SUPER_ADMIN, satış); okuma: STAFF.
@@ -67,6 +69,23 @@ router.get('/siparisler/:id', async (req: Request, res: Response) => {
   try {
     const siparis = await v2SiparisGetir(req.tenantId, req.params.id);
     if (!siparis) return res.status(404).json({ basarili: false, hata: 'Sipariş bulunamadı.' });
+    res.json({ basarili: true, siparis });
+  } catch (error) {
+    hata(res, error);
+  }
+});
+
+// GEÇİCİ aşama köprüsü (OPEN_QUESTIONS 38): one step forward, with the stage the person
+// saw. SHIPPING without SUPER_ADMIN reaches this route; the Baku step is COURIER_ASSIGN.
+router.post('/siparisler/:id/asama', async (req: Request, res: Response) => {
+  try {
+    const { beklenen_asama } = v2GovdesiniAyikla(req.body, ['beklenen_asama'] as const);
+    const siparis = await v2AsamaIlerlet(
+      req.tenantId,
+      req.auth?.userId ?? '',
+      req.params.id,
+      beklenen_asama
+    );
     res.json({ basarili: true, siparis });
   } catch (error) {
     hata(res, error);
