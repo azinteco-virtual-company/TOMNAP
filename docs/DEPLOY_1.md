@@ -84,29 +84,30 @@ Aşağıdaki "uzakta?" sütunu, uygulamadan önce aşağıdaki salt okunur sorgu
 
 Repodaki migration'ların **hepsi** `90b8eae`'den sonra geldi; canlı kodda hiçbiri yok. Uygulama sırası dosya adındaki zaman damgasıdır:
 
-| #   | Dosya (`supabase/migrations/`)                                            | Getiren   | İmza nesnesi                               | Down dosyası | Tekrar çalıştırılabilir mi | Uzakta?   |
-| --- | ------------------------------------------------------------------------- | --------- | ------------------------------------------ | ------------ | -------------------------- | --------- |
-| 1   | `20260917151255_server_sessions_and_private_tables.sql`                   | `fbb208d` | `public.oturumlar`                         | **yok**      | evet (`IF NOT EXISTS`)     | okunamadı |
-| 2   | `20260917160612_transactional_onboarding_inbox_and_order_maintenance.sql` | `49ec3cb` | `public.onboarding_email_jobs`             | **yok**      | **hayır**                  | okunamadı |
-| 3   | `20260917170053_secure_cargo_couriers_and_legacy_uploads.sql`             | `a929b24` | `public.cargo_settings`                    | **yok**      | **hayır**                  | okunamadı |
-| 4   | `20260917174218_consistent_lists_and_private_storage.sql`                 | `d7f920f` | `public.list_revisions`                    | **yok**      | **hayır**                  | okunamadı |
-| 5   | `20260923023659_awb_match_confirmation.sql`                               | `f04ab76` | `tomnap_confirm_awb_matches()`             | var          | evet (`OR REPLACE`)        | okunamadı |
-| 6   | `20260923164650_awb_match_approvals.sql`                                  | `59575d7` | `public.awb_match_approvals`               | var          | **hayır**                  | okunamadı |
-| 7   | `20260924120000_rol_katalogu.sql` (A4)                                    | PR #11    | `tomnap_gecerli_rol()`                     | var          | **hayır**                  | okunamadı |
-| 8   | `20260924130000_abd_satinalma.sql` (A5)                                   | PR #12    | `tomnap_rol_kota_varsayilani()`            | var          | **hayır**                  | okunamadı |
-| 9   | `20260924140000_kurlar_ve_v2_ayarlari.sql` (A7)                           | PR #14    | `public.kurlar`                            | var          | **hayır**                  | okunamadı |
-| 10  | `20260924150000_siparis_satirlari.sql` (A8)                               | PR #16    | `public.siparis_satirlari`                 | var          | **hayır**                  | okunamadı |
-| 11  | `20260925100000_siparis_sahibi_kurali.sql` (O-24)                         | PR #19    | `tomnap_v2_siparis_olustur()` gövdesi      | var          | evet (`OR REPLACE`)        | okunamadı |
-| 12  | `20260925110000_odemeler.sql` (A10)                                       | PR #20    | `public.odemeler`                          | var          | **hayır**                  | okunamadı |
-| 13  | `20260925120000_kasa_teslimleri.sql` (A11)                                | PR #21    | `public.kasa_teslimleri`                   | var          | **hayır**                  | okunamadı |
-| 14  | `20260925130000_kacaklar.sql` (A12)                                       | PR #22    | `tomnap_v2_kacak_q4()`                     | var          | **hayır**                  | okunamadı |
-| 15  | `20260925140000_para_yazma_yetkisi.sql` (SUPER_ADMIN para yazmaz)         | PR #25    | 3 fonksiyon gövdesi (`para-yazma-yetkisi`) | var          | evet (`OR REPLACE`)        | okunamadı |
-| 16  | `20260925150000_siparis_guncelle.sql` (v1 düzenleme, Codex R3 F1/F2)      | PR #27    | `tomnap_siparis_guncelle()`                | var          | **hayır**                  | okunamadı |
-| 17  | `20260925160000_not_sozlesmesi.sql` (not sözleşmesi, Codex R3 F8)         | PR #29    | `tomnap_v2_siparis_olustur()` gövdesi      | var          | evet (`OR REPLACE`)        | okunamadı |
-| 18  | `20260926100000_odeme_islem_anahtari.sql` (işlem anahtarı, Codex R3 F15)  | PR #30    | `tomnap_v2_odeme_kaydet()` gövdesi         | var          | **hayır**                  | okunamadı |
-| 19  | `20260927100000_v2_asama_koprusu.sql` (v2 aşama köprüsü, GEÇİCİ, O-38)    | PR #38    | `tomnap_v2_asama_ilerlet()`                | var          | **hayır**                  | yok       |
+| #   | Dosya (`supabase/migrations/`)                                             | Getiren   | İmza nesnesi                               | Down dosyası | Tekrar çalıştırılabilir mi | Uzakta?   |
+| --- | -------------------------------------------------------------------------- | --------- | ------------------------------------------ | ------------ | -------------------------- | --------- |
+| 1   | `20260917151255_server_sessions_and_private_tables.sql`                    | `fbb208d` | `public.oturumlar`                         | **yok**      | evet (`IF NOT EXISTS`)     | okunamadı |
+| 2   | `20260917160612_transactional_onboarding_inbox_and_order_maintenance.sql`  | `49ec3cb` | `public.onboarding_email_jobs`             | **yok**      | **hayır**                  | okunamadı |
+| 3   | `20260917170053_secure_cargo_couriers_and_legacy_uploads.sql`              | `a929b24` | `public.cargo_settings`                    | **yok**      | **hayır**                  | okunamadı |
+| 4   | `20260917174218_consistent_lists_and_private_storage.sql`                  | `d7f920f` | `public.list_revisions`                    | **yok**      | **hayır**                  | okunamadı |
+| 5   | `20260923023659_awb_match_confirmation.sql`                                | `f04ab76` | `tomnap_confirm_awb_matches()`             | var          | evet (`OR REPLACE`)        | okunamadı |
+| 6   | `20260923164650_awb_match_approvals.sql`                                   | `59575d7` | `public.awb_match_approvals`               | var          | **hayır**                  | okunamadı |
+| 7   | `20260924120000_rol_katalogu.sql` (A4)                                     | PR #11    | `tomnap_gecerli_rol()`                     | var          | **hayır**                  | okunamadı |
+| 8   | `20260924130000_abd_satinalma.sql` (A5)                                    | PR #12    | `tomnap_rol_kota_varsayilani()`            | var          | **hayır**                  | okunamadı |
+| 9   | `20260924140000_kurlar_ve_v2_ayarlari.sql` (A7)                            | PR #14    | `public.kurlar`                            | var          | **hayır**                  | okunamadı |
+| 10  | `20260924150000_siparis_satirlari.sql` (A8)                                | PR #16    | `public.siparis_satirlari`                 | var          | **hayır**                  | okunamadı |
+| 11  | `20260925100000_siparis_sahibi_kurali.sql` (O-24)                          | PR #19    | `tomnap_v2_siparis_olustur()` gövdesi      | var          | evet (`OR REPLACE`)        | okunamadı |
+| 12  | `20260925110000_odemeler.sql` (A10)                                        | PR #20    | `public.odemeler`                          | var          | **hayır**                  | okunamadı |
+| 13  | `20260925120000_kasa_teslimleri.sql` (A11)                                 | PR #21    | `public.kasa_teslimleri`                   | var          | **hayır**                  | okunamadı |
+| 14  | `20260925130000_kacaklar.sql` (A12)                                        | PR #22    | `tomnap_v2_kacak_q4()`                     | var          | **hayır**                  | okunamadı |
+| 15  | `20260925140000_para_yazma_yetkisi.sql` (SUPER_ADMIN para yazmaz)          | PR #25    | 3 fonksiyon gövdesi (`para-yazma-yetkisi`) | var          | evet (`OR REPLACE`)        | okunamadı |
+| 16  | `20260925150000_siparis_guncelle.sql` (v1 düzenleme, Codex R3 F1/F2)       | PR #27    | `tomnap_siparis_guncelle()`                | var          | **hayır**                  | okunamadı |
+| 17  | `20260925160000_not_sozlesmesi.sql` (not sözleşmesi, Codex R3 F8)          | PR #29    | `tomnap_v2_siparis_olustur()` gövdesi      | var          | evet (`OR REPLACE`)        | okunamadı |
+| 18  | `20260926100000_odeme_islem_anahtari.sql` (işlem anahtarı, Codex R3 F15)   | PR #30    | `tomnap_v2_odeme_kaydet()` gövdesi         | var          | **hayır**                  | okunamadı |
+| 19  | `20260927100000_v2_asama_koprusu.sql` (v2 aşama köprüsü, GEÇİCİ, O-38)     | PR #38    | `tomnap_v2_asama_ilerlet()`                | var          | **hayır**                  | var       |
+| 20  | `20261001100000_butik_varsayilan_dili.sql` (butiğin varsayılan dili, i18n) | i18n PR   | `tenant_v2_ayarlari.varsayilan_dil` kolonu | var          | **hayır**                  | yok       |
 
-Toplam 19 migration. 7–19'un her biri CI'da `up → down → down → up` ile sınanıyor.
+Toplam 20 migration. 7–20'nin her biri CI'da `up → down → down → up` ile sınanıyor.
 
 - **16 Deploy 1 ile gider:** Sipariş düzenleme rotası (`PATCH /api/siparisler/:id`) 16'nın fonksiyonunu çağırıyor. Bu yüzden 16, 1–6 ile birlikte ve yeni koddan **önce** uygulanır. 7–15'e bağlı değil.
 
@@ -115,11 +116,12 @@ Toplam 19 migration. 7–19'un her biri CI'da `up → down → down → up` ile 
 - **7–15, 17 ve 18 ne zaman:** faz-a-plan'a göre Deploy 1'den **sonra**, `FF_V2_FLOW` kapalıyken, ayrı yayınlarla. 7 ve 8, Deploy 1'deki kodun `ABD_SATINALMA` davetini açar; yoksa bu davet 409 ile reddedilir, diğer roller etkilenmez. 9–15 yalnız v2 akışı içindir.
 - **17 v2 ile gider:** 7–15 ile birlikte, 11'den sonra. 11'in fonksiyonunu değiştirir: v2 sipariş notu artık fiziksel bir `ozel_not` kolonuna değil, v1 gibi `baku_tahsilat_notu`'daki `[TƏLİMAT: …]` etiketine yazılır (hiçbir migration `ozel_not` kolonu oluşturmuyor; kolonsuz şemada v2 siparişi hiç oluşturulamıyordu). 11 herhangi bir nedenle yeniden uygulanırsa 17 de ardından yeniden uygulanır.
 - **19 v2 ile gider, Deploy 3'te:** 1–18'den sonra; yalnız yeni bir fonksiyon, hiçbir tabloya dokunmaz. v2 siparişini bir sonraki lojistik aşamaya taşır (K20 birim ekseni gelene kadar GEÇİCİ köprü, OPEN_QUESTIONS 38). 19 olmadan v2 ekranındaki "Sonraki aşama" düğmesi 503 alır; kurye nakdi ve kasa teslimi için v2 siparişi Bakü dağıtımına geçemez.
+- **20 Deploy 4 ile gider (dil):** 9'dan sonra; yalnız `tenant_v2_ayarlari`'na bir kolon ekler (`varsayilan_dil`, `NOT NULL DEFAULT 'az'`, biçim CHECK'i). Var olan satırlar `'az'` alır. Yeni kod oturumda butiğin dilini bu kolondan okur; kolon yoksa okuma `'az'`'a düşer ve giriş çalışır, ama v2 ayarları (`/api/v2/ayarlar`) 503 alır. Bu yüzden 20, kod deploy'undan **önce** uygulanır. 9 yeniden uygulanırsa 20 de ardından yeniden uygulanır. Eski sürüm kolonu kullanmaz; geri dönüşte 20 geri alınmaz.
 - **18 v2 ile gider:** 12, 13 ve 15'ten sonra. `odemeler`'e yeni bir kolon (`islem_anahtari`, var olan satırlarda boş) ve kiracı başına benzersiz bir indeks ekler; ödeme kaydı ve yeni beş argümanlı kurye tahsilatı aynı anahtarla gelen tekrarı yeni kayıt yazmadan ilk ödemeyle yanıtlar. v2 ödeme ve kurye ekranları her zaman anahtar gönderir: 18 olmadan kurye tahsilatı çalışmaz. 15 yeniden uygulanırsa 18 de ardından yeniden uygulanır.
 - **7–15 arası bağımlılık:** 11, 10'un fonksiyonunu değiştirir; 12, 10'un v2 siparişlerine bağlanır; 13, 12'ye ve 3'teki `kuryeler`'e; 14'ün Q5'i 13'ün bakiye fonksiyonunu çağırır; 15, 12 ve 13'ün üç yazma fonksiyonunu değiştirir (SUPER_ADMIN ödeme kaydı, ters kayıt ve kasa teslimi yazamaz). Sırayı bozmayın.
 - **2, 3, 4, 6, 7, 8, 9, 10, 12, 13 ve 14 kısmen uygulanmışsa yeniden çalıştırılamaz:** `CREATE FUNCTION` / `CREATE TABLE` komutları `OR REPLACE` ya da `IF NOT EXISTS` içermiyor. Önce imza kontrolünü yapın; imzası var olan migration'ı yeniden çalıştırmayın.
 - **1–4'ün down dosyası yok.** Veritabanında geri dönüş ancak yedekten yapılabilir; uygulamadan önce yedek alın.
-- **Beklenmedik migration:** `schema_migrations` tablosunda bu on dokuz sürümden başka bir kayıt görürseniz durun ve raporlayın. Bu, repoda olmayan bir değişikliğin uzakta uygulandığı anlamına gelir.
+- **Beklenmedik migration:** `schema_migrations` tablosunda bu yirmi sürümden başka bir kayıt görürseniz durun ve raporlayın. Bu, repoda olmayan bir değişikliğin uzakta uygulandığı anlamına gelir.
 
 ### Salt okunur kontrol (Supabase SQL Editor ya da `psql`)
 
@@ -138,6 +140,11 @@ select m.sira, m.dosya, m.imza,
       join pg_catalog.pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.proname = split_part(m.imza, ':', 1)
         and p.prosrc like '%' || split_part(m.imza, ':', 2) || '%')
+    -- 'kolon': yalnız kolon ekleyen migration; imza "tablo:kolon".
+    when 'kolon' then exists (
+      select 1 from pg_catalog.pg_attribute a
+      where a.attrelid = to_regclass(split_part(m.imza, ':', 1))
+        and a.attname = split_part(m.imza, ':', 2) and a.attnum > 0 and not a.attisdropped)
   end as nesne_var
 from (values
   (1, '20260917151255_server_sessions_and_private_tables.sql', 'tablo', 'public.oturumlar'),
@@ -158,7 +165,8 @@ from (values
   (16, '20260925150000_siparis_guncelle.sql', 'fonksiyon', 'tomnap_siparis_guncelle'),
   (17, '20260925160000_not_sozlesmesi.sql', 'govde', 'tomnap_v2_siparis_olustur:Codex R3 F8'),
   (18, '20260926100000_odeme_islem_anahtari.sql', 'govde', 'tomnap_v2_odeme_kaydet:Codex R3 F15'),
-  (19, '20260927100000_v2_asama_koprusu.sql', 'fonksiyon', 'tomnap_v2_asama_ilerlet')
+  (19, '20260927100000_v2_asama_koprusu.sql', 'fonksiyon', 'tomnap_v2_asama_ilerlet'),
+  (20, '20261001100000_butik_varsayilan_dili.sql', 'kolon', 'public.tenant_v2_ayarlari:varsayilan_dil')
 ) as m(sira, dosya, tur, imza)
 order by m.sira;
 
@@ -219,7 +227,7 @@ select to_regclass('supabase_migrations.schema_migrations') is not null as gecmi
 psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -c "begin transaction read only" -f migration-durumu.sql -c "rollback"
 ```
 
-Sorgu 25 Eylül'de, CI şemasının kurulu olduğu yerel bir veritabanında denendi: 15 satırın hepsi `true` döndü; 11'in ya da 15'in down dosyası bir transaction içinde uygulanınca yalnız o satır `false` oldu. 26 Eylül'de 17 satırla yeniden denendi: hepsi `true`; 17'nin down dosyası uygulanınca yalnız 17 `false` oldu. 18 satırla da denendi: hepsi `true`; 18'in down dosyası uygulanınca yalnız 18 `false` oldu. Ön koşul sorgusu aynı veritabanında 33 kolonun hepsi için `true` döndü. Canlıda (26 Eylül) `guncellenme_tarihi` var, `ozel_not` yok. CI bu sorguyu `ozel_not` kolonu olmayan ikinci bir veritabanında da çalıştırır; orada yalnız `ozel_not` satırı `false` olabilir.
+Sorgu 25 Eylül'de, CI şemasının kurulu olduğu yerel bir veritabanında denendi: 15 satırın hepsi `true` döndü; 11'in ya da 15'in down dosyası bir transaction içinde uygulanınca yalnız o satır `false` oldu. 26 Eylül'de 17 satırla yeniden denendi: hepsi `true`; 17'nin down dosyası uygulanınca yalnız 17 `false` oldu. 18 satırla da denendi: hepsi `true`; 18'in down dosyası uygulanınca yalnız 18 `false` oldu. 1 Ekim'de 20 satırla: hepsi `true`; 20'nin down dosyası bir transaction içinde uygulanınca 20 `false` oldu (yeni `kolon` türü). Ön koşul sorgusu aynı veritabanında 33 kolonun hepsi için `true` döndü. Canlıda (26 Eylül) `guncellenme_tarihi` var, `ozel_not` yok. CI bu sorguyu `ozel_not` kolonu olmayan ikinci bir veritabanında da çalıştırır; orada yalnız `ozel_not` satırı `false` olabilir.
 
 Kodlama kalkanının iki satırı CI'da her PR'da `true` döner. Yerelde 17'nin gövdesindeki `'Bakü'` Mac Roman'a çevrilip (`'Bak√º'`) yeniden oluşturulunca ikisi de `false` oldu.
 
@@ -403,6 +411,7 @@ psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f supabase/rollbacks/<sürüm>_<ad>.
 
 | #   | Down dosyası                                     | Ne zaman                                                                               | Reddettiği durum / kaybolan veri                                   |
 | --- | ------------------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 20  | `20261001100000_butik_varsayilan_dili.down.sql`  | dil geri alınırken; eski sürüm kolonu kullanmaz, kod dönüşünde gerekmez                | butiklerin seçtiği diller silinir (uygulama `'az'`'a döner)        |
 | 19  | `20260927100000_v2_asama_koprusu.down.sql`       | v2 geri alınırken                                                                      | yok; ilerletilmiş aşamalar ve geçmiş kayıtları kalır               |
 | 18  | `20260926100000_odeme_islem_anahtari.down.sql`   | v2 geri alınırken                                                                      | yok; ödemeler kalır, yalnız işlem anahtarları silinir              |
 | 17  | `20260925160000_not_sozlesmesi.down.sql`         | v2 geri alınırken                                                                      | yok; v2 notu yeniden fiziksel `ozel_not`'a yazılır (kolon gerekir) |

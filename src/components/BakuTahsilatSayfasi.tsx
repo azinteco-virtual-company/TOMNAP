@@ -22,8 +22,18 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { loadSpreadsheet, loadPdf, reportDocumentError } from '../utils/documentLibraries';
-import { cleanPdfText, safePrintHtml } from '../utils/pdfHelpers';
-import { html } from '../utils/guvenliHtml';
+import { safePrintHtml } from '../utils/pdfHelpers';
+import { useAppStore } from '../store/appStore';
+import { useBelgeCevirisi, useBelgeDili } from '../i18n/belge';
+import { bugununTarihi } from '../belgeler/manifesto';
+import {
+  tahsilatExcelVerisi,
+  tahsilatPdfDosyaAdi,
+  tahsilatPdfOlustur,
+  tahsilatRaporuMetni,
+  tahsilatYazdirmaSablonu,
+  type TahsilatBaglami,
+} from '../belgeler/tahsilat';
 
 interface BakuTahsilatSayfasiProps {
   siparisler: Siparis[];
@@ -45,6 +55,10 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
   const [yazdiriliyor, setYazdiriliyor] = useState(false);
   const [pdfHazirlaniyor, setPdfHazirlaniyor] = useState(false);
   const [excelHazirlaniyor, setExcelHazirlaniyor] = useState(false);
+  const bt = useBelgeCevirisi();
+  const belgeDili = useBelgeDili();
+  const { firmalar, seciliFirmaId } = useAppStore();
+  const butik = firmalar.find((f) => f.id === seciliFirmaId)?.ad || 'TOMNAP';
 
   // Şehirler listesi
   const sehirler = useMemo(() => {
@@ -126,29 +140,11 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
     });
   };
 
-  // WhatsApp Raporu Metni
-  const bakuRaporuMetin = (): string => {
-    const bugunStr = new Date().toLocaleDateString('az-AZ');
-    let baslik = `📋 *BAKI TƏHSİLAT VƏ QALIQ BORC HESABATI*\n`;
-    baslik += `📅 Tarix: ${bugunStr}\n`;
-    baslik += `💰 Toplam Toplanacaq Qalıq: *${toplamToplanacakBorc.toFixed(2)} AZN* (${listelenenSiparisler.length} bağlama)\n`;
-    baslik += `--------------------------------------\n\n`;
-
-    const satirlar = listelenenSiparisler
-      .map((s, idx) => {
-        const ozelNotMetni = s.ozel_not ? `   📌 Xüsusi Qeyd: ${s.ozel_not}\n` : '';
-        const bakiNotMetni = s.baku_tahsilat_notu
-          ? `   💬 Bakı Notu: ${s.baku_tahsilat_notu}\n`
-          : '';
-        return `${idx + 1}. *${s.musteri_adi}* (${s.telefon_numarasi || 'Nömrə yox'})\n   📍 Ünvan: ${s.teslimat_sehri || 'Bakı'} - ${s.teslimat_adresi || 'Bakı daxili'}\n   🛍️ Məhsul: ${s.urun_aciklamasi} (${s.adet || 1} əd)\n   🔴 *ALINACAQ QALIQ: ${s.kalan_tutar.toFixed(2)} ${s.para_birimi || 'AZN'}*\n${ozelNotMetni}${bakiNotMetni}`;
-      })
-      .join('\n');
-
-    return baslik + satirlar;
-  };
+  // Belgeler (docs/i18n.md): butikin belge dilində, arayüz dilindən asılı deyil.
+  const baglam = (): TahsilatBaglami => ({ bt, butik, bugun: bugununTarihi() });
 
   const handleMetniKopyala = () => {
-    navigator.clipboard.writeText(bakuRaporuMetin());
+    navigator.clipboard.writeText(tahsilatRaporuMetni(listelenenSiparisler, baglam()));
     setKopyalandi(true);
     setTimeout(() => setKopyalandi(false), 2500);
   };
@@ -159,74 +155,13 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
     setExcelHazirlaniyor(true);
     try {
       const XLSX = await loadSpreadsheet();
-      const baslik = [
-        'Sıra',
-        'Müştəri Adı',
-        'Əlaqə Telefonu',
-        'Şəhər',
-        'Çatdırılma Ünvanı',
-        'Məhsul',
-        'Toplam Məbləğ (AZN)',
-        'Ödənilən (AZN)',
-        'Qalıq Borc (AZN)',
-        'Lojistik Vəziyyəti',
-        'Bakı Təhsilat Notu',
-        'Xüsusi Qeyd',
-      ];
-
-      const satirlar = listelenenSiparisler.map((s, index) => [
-        index + 1,
-        s.musteri_adi || '',
-        s.telefon_numarasi || '',
-        s.teslimat_sehri || 'Bakı',
-        s.teslimat_adresi || '',
-        s.urun_aciklamasi || '',
-        s.toplam_tutar || 0,
-        s.alinan_tutar || 0,
-        s.kalan_tutar || 0,
-        s.lojistik_durumu.replace(/_/g, ' '),
-        s.baku_tahsilat_notu || '',
-        s.ozel_not || '',
-      ]);
-
-      satirlar.push([
-        '',
-        'YEKUN TOPLAM:',
-        '',
-        '',
-        '',
-        `${listelenenSiparisler.length} Müştəri`,
-        listelenenSiparisler.reduce((a, b) => a + (b.toplam_tutar || 0), 0),
-        listelenenSiparisler.reduce((a, b) => a + (b.alinan_tutar || 0), 0),
-        toplamToplanacakBorc,
-        '',
-        '',
-        '',
-      ]);
-
-      const ws = XLSX.utils.aoa_to_sheet([baslik, ...satirlar]);
-      ws['!cols'] = [
-        { wch: 6 },
-        { wch: 22 },
-        { wch: 16 },
-        { wch: 14 },
-        { wch: 28 },
-        { wch: 30 },
-        { wch: 16 },
-        { wch: 14 },
-        { wch: 18 },
-        { wch: 20 },
-        { wch: 26 },
-        { wch: 26 },
-      ];
-
-      // Başlık satırını dondur (Freeze Top Row)
+      const veri = tahsilatExcelVerisi(listelenenSiparisler, baglam());
+      const ws = XLSX.utils.aoa_to_sheet([veri.baslik, ...veri.satirlar]);
+      ws['!cols'] = [6, 22, 16, 14, 28, 30, 16, 14, 18, 20, 26, 26].map((wch) => ({ wch }));
       ws['!freeze'] = { xSplit: 0, ySplit: 1 };
-
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Baki Tahsilat Hesabati');
-      const dosyaAdi = `Baki_Tahsilat_Hesabati_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      XLSX.writeFile(wb, dosyaAdi);
+      XLSX.utils.book_append_sheet(wb, ws, veri.sayfa);
+      XLSX.writeFile(wb, veri.dosya);
     } catch (e) {
       console.error('Excel endirmə xətası:', e);
       reportDocumentError(e);
@@ -235,114 +170,14 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
     }
   };
 
-  // PDF İndirme
+  // PDF İndirme (Unicode font: Azərbaycan hərfləri olduğu kimi qalır)
   const pdfIndir = async () => {
     if (pdfHazirlaniyor) return;
     setPdfHazirlaniyor(true);
     try {
-      const { jsPDF, autoTable } = await loadPdf();
-      const doc = new jsPDF({
-        orientation: 'landscape',
-        unit: 'pt',
-        format: 'a4',
-      });
-
-      const bugun = new Date().toLocaleDateString('az-AZ');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.setTextColor(15, 23, 42);
-      doc.text(cleanPdfText('KNB Lojistik - Baki Tehsillat ve Qaliq Borc Hesabati'), 26, 32);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(100, 116, 139);
-      doc.text(
-        cleanPdfText(
-          `Tarix: ${bugun} | Borclu Baglama: ${listelenenSiparisler.length} eded | Toplam Qaliq: ${toplamToplanacakBorc.toFixed(2)} AZN`
-        ),
-        26,
-        48
-      );
-
-      const head = [
-        [
-          '#',
-          cleanPdfText('Musteri Adi & Tel'),
-          cleanPdfText('Seher / Unvan'),
-          cleanPdfText('Mehsul Tesviri'),
-          'Toplam Deyer',
-          'Odenilib',
-          cleanPdfText('Qaliq Borc'),
-          cleanPdfText('Baki Notu & Qeyd'),
-        ],
-      ];
-
-      const body = listelenenSiparisler.map((s, idx) => [
-        String(idx + 1),
-        cleanPdfText(`${s.musteri_adi || 'Adsiz'}\nTel: ${s.telefon_numarasi || '-'}`),
-        cleanPdfText(`${s.teslimat_sehri || 'Baki'}\n${s.teslimat_adresi || 'Merkez'}`),
-        cleanPdfText(s.urun_aciklamasi || '-'),
-        `${(s.toplam_tutar || 0).toFixed(2)} AZN`,
-        `${(s.alinan_tutar || 0).toFixed(2)} AZN`,
-        s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN (BORC)` : 'ODENILIB',
-        cleanPdfText([s.baku_tahsilat_notu, s.ozel_not].filter(Boolean).join('\n') || '-'),
-      ]);
-
-      autoTable(doc, {
-        head,
-        body,
-        startY: 65,
-        theme: 'grid',
-        styles: {
-          font: 'helvetica',
-          fontSize: 7.5,
-          cellPadding: 3,
-          textColor: [30, 41, 59],
-          overflow: 'linebreak',
-        },
-        headStyles: {
-          fillColor: [180, 83, 9],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          fontSize: 8,
-          cellPadding: 4,
-        },
-        alternateRowStyles: {
-          fillColor: [254, 252, 232],
-        },
-        columnStyles: {
-          0: { cellWidth: 22, halign: 'center' },
-          1: { cellWidth: 110 },
-          2: { cellWidth: 110 },
-          3: { cellWidth: 160 },
-          4: { cellWidth: 70, halign: 'right' },
-          5: { cellWidth: 70, halign: 'right' },
-          6: { cellWidth: 85, halign: 'right', fontStyle: 'bold' },
-          7: { cellWidth: 160, overflow: 'linebreak' },
-        },
-        foot: [
-          [
-            '',
-            'YEKUN TOPLAM',
-            '',
-            `${listelenenSiparisler.length} Baglama`,
-            `${listelenenSiparisler.reduce((a, b) => a + (b.toplam_tutar || 0), 0).toFixed(2)} AZN`,
-            '',
-            `${toplamToplanacakBorc.toFixed(2)} AZN`,
-            cleanPdfText('Baki Kassa ve Tehvilat Senedi'),
-          ],
-        ],
-        footStyles: {
-          fillColor: [241, 245, 249],
-          textColor: [15, 23, 42],
-          fontStyle: 'bold',
-          fontSize: 7.5,
-          cellPadding: 4,
-        },
-        margin: { left: 26, right: 26, top: 25, bottom: 25 },
-      });
-
-      doc.save(`Baki_Tahsilat_Hesabati_${new Date().toISOString().slice(0, 10)}.pdf`);
+      const araclar = await loadPdf();
+      const doc = await tahsilatPdfOlustur(araclar, listelenenSiparisler, belgeDili, baglam());
+      doc.save(tahsilatPdfDosyaAdi(bt));
     } catch (e) {
       console.error('PDF xətası:', e);
       reportDocumentError(e);
@@ -355,142 +190,10 @@ export const BakuTahsilatSayfasi: React.FC<BakuTahsilatSayfasiProps> = ({
   const handleYazdir = () => {
     setYazdiriliyor(true);
     try {
-      const bugun = new Date().toLocaleDateString('az-AZ');
-      const rowsHtml = listelenenSiparisler.map(
-        (s, idx) => html`
-          <tr>
-            <td style="text-align:center; padding: 6px;">${idx + 1}</td>
-            <td style="padding: 6px;">
-              <strong>${s.musteri_adi || 'Adsız'}</strong><br />
-              <span style="color:#64748b; font-size:10px;">${s.telefon_numarasi || '-'}</span>
-            </td>
-            <td style="padding: 6px;">
-              <strong>${s.teslimat_sehri || 'Bakı'}</strong><br />
-              <span style="color:#64748b; font-size:10px;"
-                >${s.teslimat_adresi || 'Bakı daxili'}</span
-              >
-            </td>
-            <td style="padding: 6px;">${s.urun_aciklamasi || '-'}</td>
-            <td style="text-align:right; font-weight:bold; padding: 6px;">
-              ${(s.toplam_tutar || 0).toFixed(2)} AZN
-            </td>
-            <td style="text-align:right; padding: 6px; color:#15803d;">
-              ${(s.alinan_tutar || 0).toFixed(2)} AZN
-            </td>
-            <td
-              style="text-align:right; font-weight:bold; padding: 6px; color:#b45309; background:#fef3c7;"
-            >
-              ${(s.kalan_tutar || 0).toFixed(2)} AZN
-            </td>
-            <td style="padding: 6px; font-size:10px;">
-              ${s.baku_tahsilat_notu ? html`<div>💬 ${s.baku_tahsilat_notu}</div>` : ''}
-              ${s.ozel_not ? html`<div style="color:#64748b;">📌 ${s.ozel_not}</div>` : ''}
-            </td>
-          </tr>
-        `
+      safePrintHtml(
+        tahsilatYazdirmaSablonu(listelenenSiparisler, belgeDili, baglam()),
+        'Baki_Tahsilat_Hesabati'
       );
-
-      const content = html`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Bakı Təhsilat Hesabatı - KNB Lojistik</title>
-            <style>
-              @page {
-                size: landscape;
-                margin: 12mm;
-              }
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                color: #0f172a;
-                margin: 0;
-                padding: 10px;
-                font-size: 11px;
-              }
-              .header {
-                display: flex;
-                justify-content: space-between;
-                border-bottom: 2px solid #b45309;
-                padding-bottom: 8px;
-                margin-bottom: 12px;
-              }
-              .title {
-                font-size: 16px;
-                font-weight: 800;
-                text-transform: uppercase;
-                color: #b45309;
-              }
-              table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 8px;
-              }
-              th {
-                background-color: #78350f;
-                color: #ffffff;
-                text-align: left;
-                padding: 6px;
-                font-size: 10px;
-                text-transform: uppercase;
-              }
-              td {
-                border-bottom: 1px solid #e2e8f0;
-                vertical-align: top;
-              }
-              tr:nth-child(even) td {
-                background-color: #fffbeb;
-              }
-              .footer {
-                margin-top: 15px;
-                padding-top: 8px;
-                border-top: 1px solid #cbd5e1;
-                display: flex;
-                justify-content: space-between;
-                font-size: 12px;
-                font-weight: bold;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <div>
-                <div class="title">Bakı Təhsilat & Qalıq Borc Hesabatı</div>
-                <div>KNB Lojistik — Təhvilat və Kassa Cədvəli</div>
-              </div>
-              <div style="text-align: right;">
-                <div><strong>Tarix:</strong> ${bugun}</div>
-                <div>Toplam Bağlama: <strong>${listelenenSiparisler.length}</strong></div>
-              </div>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th style="width:25px; text-align:center;">#</th>
-                  <th style="width:130px;">Müştəri & Tel</th>
-                  <th style="width:130px;">Şəhər / Ünvan</th>
-                  <th>Məhsul</th>
-                  <th style="width:85px; text-align:right;">Məbləğ</th>
-                  <th style="width:85px; text-align:right;">Ödənilib</th>
-                  <th style="width:95px; text-align:right;">Qalıq Borc</th>
-                  <th style="width:180px;">Təhvilat Qeydi</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rowsHtml}
-              </tbody>
-            </table>
-            <div class="footer">
-              <div>
-                Bu cədvəl Bakıdakı nümayəndənin kassa və təhvil-təslim qeydləri üçün nəzərdə
-                tutulub.
-              </div>
-              <div>Toplanacaq Cəmi Borc: ${toplamToplanacakBorc.toFixed(2)} AZN</div>
-            </div>
-          </body>
-        </html>
-      `;
-
-      safePrintHtml(content, 'Baki_Tahsilat_Hesabati');
     } catch (e) {
       console.error('Yazdırma xətası:', e);
       alert(

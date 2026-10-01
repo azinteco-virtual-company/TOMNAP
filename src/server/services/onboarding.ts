@@ -6,7 +6,9 @@ import { ekipRoluMu, rolKotasi } from '../../shared/roller';
 export class OnboardingError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
+    /** Stable code for the client's translation (docs/i18n.md). */
+    public kod?: string
   ) {
     super(message);
   }
@@ -16,13 +18,31 @@ export async function onboardingRpc(name: string, args: Record<string, unknown>)
   const { data, error } = await supabase!.rpc(name, args);
   if (error) {
     if (error.code === '23505')
-      throw new OnboardingError(409, 'Bu e-poçt və ya telefon artıq qeydiyyatdadır.');
+      throw new OnboardingError(
+        409,
+        'Bu e-poçt və ya telefon artıq qeydiyyatdadır.',
+        'KAYIT_KIMLIK_KULLANILIYOR'
+      );
     if (error.code === 'PT409')
-      throw new OnboardingError(409, 'Link artıq etibarlı deyil və ya komanda limiti dolub.');
-    if (error.code === 'PT403') throw new OnboardingError(403, 'Firma aktiv deyil.');
-    throw new OnboardingError(503, 'Qeydiyyat saxlanılmadı. Daha sonra yenidən cəhd edin.');
+      throw new OnboardingError(
+        409,
+        'Link artıq etibarlı deyil və ya komanda limiti dolub.',
+        'DAVET_GECERSIZ_VEYA_LIMIT'
+      );
+    if (error.code === 'PT403')
+      throw new OnboardingError(403, 'Firma aktiv deyil.', 'FIRMA_AKTIF_DEGIL');
+    throw new OnboardingError(
+      503,
+      'Qeydiyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
+      'KAYIT_GECICI_HATA'
+    );
   }
-  if (!data) throw new OnboardingError(409, 'Əməliyyat tamamlanmadı. Linki yenidən yoxlayın.');
+  if (!data)
+    throw new OnboardingError(
+      409,
+      'Əməliyyat tamamlanmadı. Linki yenidən yoxlayın.',
+      'ISLEM_TAMAMLANMADI_LINK'
+    );
   return data as any;
 }
 
@@ -37,7 +57,11 @@ function ensureUnique(users: KullaniciKaydi[], user: KullaniciKaydi) {
           (phone && (existing.telefon || '').replace(/\D/g, '') === phone))
     )
   )
-    throw new OnboardingError(409, 'Bu e-poçt və ya telefon artıq qeydiyyatdadır.');
+    throw new OnboardingError(
+      409,
+      'Bu e-poçt və ya telefon artıq qeydiyyatdadır.',
+      'KAYIT_KIMLIK_KULLANILIYOR'
+    );
 }
 
 function available(invite: DavetKaydi, token: string) {
@@ -50,13 +74,14 @@ function available(invite: DavetKaydi, token: string) {
 }
 
 function capacity(firma: FirmaTenantItem, users: KullaniciKaydi[], role: string) {
-  if (firma.onayDurumu !== 'AKTIF') throw new OnboardingError(403, 'Firma aktiv deyil.');
+  if (firma.onayDurumu !== 'AKTIF')
+    throw new OnboardingError(403, 'Firma aktiv deyil.', 'FIRMA_AKTIF_DEGIL');
   const limit = ekipRoluMu(role) ? rolKotasi(firma.rolLimitleri, role) : Number.NaN;
   const count = users.filter(
     (user) => user.tenant_id === firma.id && user.rol === role && user.durum !== 'PASIF'
   ).length;
   if (!Number.isInteger(limit) || limit <= count)
-    throw new OnboardingError(409, 'Komanda rolu üzrə limit dolub.');
+    throw new OnboardingError(409, 'Komanda rolu üzrə limit dolub.', 'ROL_LIMITI_DOLU');
   return { count, remaining: limit - count };
 }
 
@@ -94,7 +119,7 @@ export async function registerBoutique(
   const next = getIdentitySnapshot();
   ensureUnique(next.users, user);
   if (next.companies.some((item) => item.id === firma.id))
-    throw new OnboardingError(409, 'Bu firma artıq mövcuddur.');
+    throw new OnboardingError(409, 'Bu firma artıq mövcuddur.', 'FIRMA_ZATEN_VAR');
   next.companies.push(firma);
   next.users.push(user);
   next.emailJobs.push(emailJob);
@@ -121,11 +146,15 @@ export async function activateUser(
     Date.parse(user.token_gecerlilik || '') <= Date.now() ||
     !Number.isFinite(Date.parse(user.token_gecerlilik || ''))
   ) {
-    throw new OnboardingError(409, 'Bu aktivasiya linki artıq etibarlı deyil.');
+    throw new OnboardingError(
+      409,
+      'Bu aktivasiya linki artıq etibarlı deyil.',
+      'AKTIVASIYA_LINKI_GECERSIZ'
+    );
   }
   const firma = next.companies.find((item) => item.id === user.tenant_id);
   if (!firma || !['BEKLEMEDE', 'AKTIF'].includes(firma.onayDurumu || ''))
-    throw new OnboardingError(403, 'Firma aktiv deyil.');
+    throw new OnboardingError(403, 'Firma aktiv deyil.', 'FIRMA_AKTIF_DEGIL');
   Object.assign(user, changes, { durum: 'AKTIF', aktivasyon_token: null, token_gecerlilik: null });
   ensureUnique(next.users, user);
   if (firma.onayDurumu === 'BEKLEMEDE') firma.onayDurumu = 'AKTIF';
@@ -138,11 +167,15 @@ export async function acceptInvite(token: string, user: KullaniciKaydi) {
   const next = getIdentitySnapshot();
   const invite = next.invites.find((item) => item.token === token);
   if (!invite || !available(invite, token))
-    throw new OnboardingError(409, 'Bu dəvət artıq etibarlı deyil.');
+    throw new OnboardingError(409, 'Bu dəvət artıq etibarlı deyil.', 'DAVET_ARTIK_GECERSIZ');
   const firma = next.companies.find((item) => item.id === invite.tenantId);
-  if (!firma) throw new OnboardingError(403, 'Firma aktiv deyil.');
+  if (!firma) throw new OnboardingError(403, 'Firma aktiv deyil.', 'FIRMA_AKTIF_DEGIL');
   if (invite.email && invite.email.trim().toLowerCase() !== user.email.trim().toLowerCase()) {
-    throw new OnboardingError(403, 'E-poçt ünvanı dəvətdəki ünvanla uyğun gəlmir.');
+    throw new OnboardingError(
+      403,
+      'E-poçt ünvanı dəvətdəki ünvanla uyğun gəlmir.',
+      'DAVET_EPOSTA_UYUSMUYOR'
+    );
   }
   const { count } = capacity(firma, next.users, invite.rol);
   const accepted = {
@@ -184,7 +217,7 @@ export async function createInvite(
     });
   const next = getIdentitySnapshot();
   const firma = next.companies.find((item) => item.id === invite.tenantId);
-  if (!firma) throw new OnboardingError(403, 'Firma aktiv deyil.');
+  if (!firma) throw new OnboardingError(403, 'Firma aktiv deyil.', 'FIRMA_AKTIF_DEGIL');
   const { remaining } = capacity(firma, next.users, invite.rol);
   next.invites.push(invite);
   if (emailJob) next.emailJobs.push(emailJob);

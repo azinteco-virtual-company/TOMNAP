@@ -1,0 +1,173 @@
+{
+  "whatsapp": {
+    "eksikBilgi": "Hello {{musteri}}, your order ({{urun}}) has been registered. To complete the delivery we still need: {{eksikler}}. Please send them to us.",
+    "varsayilanEksikler": "your address and phone number",
+    "teslimat": "Hello {{musteri}}, your order \"{{urun}}\" from Canada is now in Baku! Our contact can hand it over to you. Balance due: {{kalan}}. Write to us to arrange it."
+  },
+  "ortak": {
+    "adsiz": "No name",
+    "varsayilanSehir": "Baku",
+    "varsayilanUnvan": "Within Baku",
+    "bolgeMerkezi": "Regional hub",
+    "nomreYoxdur": "No number",
+    "bagla_one": "{{count}} parcel",
+    "bagla_other": "{{count}} parcels",
+    "eded_one": "{{count}} pc",
+    "eded_other": "{{count}} pcs"
+  },
+  "durum": {
+    "KANADA_SATINALIM_BEKLIYOR": "Canada purchase",
+    "KANADA_DEPO": "Canada warehouse",
+    "ULUSLARARASI_KARGO": "In flight / cargo",
+    "BAKU_DAGITIM_ARKADAS": "Baku delivery",
+    "TESLIM_EDILDI": "Delivered"
+  },
+  "manifesto": {
+    "baslik": "{{butik}} — Canada ➔ Baku cargo manifest",
+    "sayfaBasligi": "Cargo manifest — {{butik}}",
+    "marsrut": "Route: Toronto / Vancouver ➔ Heydar Aliyev International Airport (GYD)",
+    "tarix": "Date:",
+    "toplamPaket": "Total parcels: {{bagla}} ({{adet}} items)",
+    "sutun": {
+      "musteriTel": "Customer and phone",
+      "sehirUnvan": "City / address",
+      "mehsul": "Item and details",
+      "say": "Qty",
+      "mebleg": "Amount",
+      "qaliq": "Balance due",
+      "statusKod": "Status / code",
+      "qeyd": "Notes and instructions"
+    },
+    "alinacaq": "TO COLLECT",
+    "odenilib": "PAID",
+    "beyanname": "Declaration: the parcels in this manifest were handed over at the Toronto warehouse in line with security and customs rules.",
+    "toplam": "Total: {{mebleg}}",
+    "bakidaAlinacaq": "To collect in Baku: {{mebleg}}"
+  },
+  "etiket": {
+    "sayfaBasligi": "Cargo parcel labels — {{butik}}",
+    "yon": "CANADA ➔ BAKU / AZERBAIJAN",
+    "alici": "Recipient (customs):",
+    "fin": "FIN code / ID:",
+    "qeydEdilmeyib": "NOT GIVEN",
+    "tel": "Tel:",
+    "sehirUnvan": "City and address:",
+    "merkeziTehvil": "Central pick-up",
+    "kurye": "Baku delivery / field courier:",
+    "tehvilde": "On delivery in Baku:",
+    "borc": "{{mebleg}} (TO COLLECT)",
+    "tamOdenilib": "FULLY PAID",
+    "mehsul": "Item:",
+    "not": "Note:"
+  },
+  "excel": {
+    "sutun": {
+      "sira": "No.",
+      "musteriAdi": "Customer name",
+      "telefon": "Contact number",
+      "sehir": "City",
+      "unvan": "Delivery address",
+      "mehsul": "Item description",
+      "olcuReng": "Size / colour",
+      "say": "Qty",
+      "mebleg": "Amount (AZN)",
+      "odenilen": "Paid (AZN)",
+      "qaliq": "Balance due (AZN)",
+      "fin": "Customs FIN code",
+      "kurye": "Baku delivery courier",
+      "status": "Logistics status",
+      "kanadaKodu": "Canada tracking code",
+      "kargoKodu": "International cargo code",
+      "xususiQeyd": "Special note",
+      "bakiNotu": "Baku delivery note"
+    },
+    "yekun": "GRAND TOTAL:",
+    "sayfa": "Cargo manifest",
+    "dosya": "Cargo_Manifest"
+  },
+  "kurye": {
+    "tarix": "📅 Date: {{tarih}}",
+    "toplamBagla": "📦 Total parcels: {{bagla}} ({{adet}} items)",
+    "toplamDeger": "💰 Total value: {{mebleg}}",
+    "bakidaBorc": "🔴 To collect in Baku: {{mebleg}}",
+    "musteri": "{{sira}}. *{{musteri}}* ({{tel}})",
+    "sehir": "   📍 City: {{sehir}} - {{unvan}}",
+    "mehsul_one": "   🛍️ Item: {{urun}} ({{count}} pc)",
+    "mehsul_other": "   🛍️ Item: {{urun}} ({{count}} pcs)",
+    "ozellik": "   🏷️ Details: {{ozellik}}",
+    "borc": "   ⚠️ *TO COLLECT: {{mebleg}}*",
+    "odenib": "   ✅ *PAID (0 AZN)*",
+    "fin": "   🪪 FIN: {{fin}}",
+    "kurye": "   🛵 Courier: {{kurye}}",
+    "kargo": "   📦 Cargo code: {{kod}}",
+    "not": "   💬 Baku note: {{not}}"
+  },
+  "pdf": {
+    "ozet1": "Date: {{tarih}} | Total parcels: {{bagla}} | Total items: {{adet}}",
+    "ozet2": "Total value: {{deger}} | Balance to collect in Baku: {{kalan}}",
+    "sutun": {
+      "musteri": "Customer and contact",
+      "sehirUnvan": "City / address",
+      "mehsul": "Item and details",
+      "say": "Qty",
+      "deyer": "Value",
+      "qaliq": "Balance due",
+      "statusKod": "Status / cargo code",
+      "qeyd": "Special note"
+    },
+    "kod": "Code: {{kod}}",
+    "bakiNotu": "[Baku: {{not}}]",
+    "tel": "Tel: {{tel}}",
+    "borc": "{{mebleg}} (DUE)",
+    "resmiSened": "Official shipping document",
+    "altBilgi": "{{butik}} — cargo manifest — page {{sayfa}} / {{toplam}}",
+    "dosya": "Packing_List"
+  },
+  "tahsilat": {
+    "baslik": "Baku collection and balance report",
+    "altBaslik": "{{butik}} — delivery and cash desk table",
+    "sayfaBasligi": "Baku collection report — {{butik}}",
+    "toplamBagla_one": "Total parcels: {{count}}",
+    "toplamBagla_other": "Total parcels: {{count}}",
+    "sutun": {
+      "mehsul": "Item",
+      "odenilib": "Paid",
+      "qeyd": "Delivery note"
+    },
+    "aciklama": "This table is for the Baku representative's cash and hand-over records.",
+    "toplanacaq": "Total to collect: {{mebleg}}",
+    "pdfOzet_one": "Date: {{tarih}} | Parcels with a balance: {{count}} | Total balance: {{mebleg}}",
+    "pdfOzet_other": "Date: {{tarih}} | Parcels with a balance: {{count}} | Total balance: {{mebleg}}",
+    "sened": "Baku cash desk and delivery document",
+    "musteriSayi_one": "{{count}} customer",
+    "musteriSayi_other": "{{count}} customers",
+    "sayfa": "Baku collection report",
+    "dosya": "Baku_Collection_Report",
+    "excel": {
+      "sira": "No.",
+      "musteriAdi": "Customer name",
+      "telefon": "Contact phone",
+      "sehir": "City",
+      "unvan": "Delivery address",
+      "mehsul": "Item",
+      "toplam": "Total (AZN)",
+      "odenilen": "Paid (AZN)",
+      "qaliq": "Balance due (AZN)",
+      "status": "Logistics status",
+      "bakiNotu": "Baku collection note",
+      "xususiQeyd": "Special note"
+    },
+    "metin": {
+      "tarix": "📅 Date: {{tarih}}",
+      "toplam_one": "💰 To collect: *{{mebleg}}* ({{count}} parcel)",
+      "toplam_other": "💰 To collect: *{{mebleg}}* ({{count}} parcels)",
+      "musteri": "{{sira}}. *{{musteri}}* ({{tel}})",
+      "unvan": "   📍 Address: {{sehir}} - {{unvan}}",
+      "mehsul_one": "   🛍️ Item: {{urun}} ({{count}} pc)",
+      "mehsul_other": "   🛍️ Item: {{urun}} ({{count}} pcs)",
+      "qaliq": "   🔴 *TO COLLECT: {{mebleg}}*",
+      "ozelNot": "   📌 Special note: {{not}}",
+      "bakiNotu": "   💬 Baku note: {{not}}"
+    }
+  }
+}

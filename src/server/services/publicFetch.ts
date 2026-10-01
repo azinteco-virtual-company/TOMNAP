@@ -9,7 +9,9 @@ export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export class PublicResourceError extends Error {
   constructor(
     message: string,
-    public readonly status = 403
+    public readonly status = 403,
+    /** Stable code for the client's translation (docs/i18n.md); the message stays the fallback. */
+    public readonly kod?: string
   ) {
     super(message);
     this.name = 'PublicResourceError';

@@ -206,6 +206,17 @@ test('two owners cannot cross tenant data or image boundaries and logout revokes
   expect((await api(page, imagePath(fixture.tenantB))).status).toBe(401);
 });
 
+/** The text of a jsPDF document written with an embedded Unicode font (ToUnicode maps). */
+function pdfMetni(pdf: string): string {
+  const harita = new Map<string, string>();
+  for (const blok of pdf.matchAll(/beginbfchar([\s\S]*?)endbfchar/g))
+    for (const m of blok[1].matchAll(/<([0-9a-f]{4})><([0-9a-f]{4,})>/gi))
+      harita.set(m[1].toLowerCase(), String.fromCodePoint(parseInt(m[2], 16)));
+  return [...pdf.matchAll(/<([0-9a-f]+)> Tj/gi)]
+    .map((m) => (m[1].match(/.{4}/g) ?? []).map((g) => harita.get(g.toLowerCase()) ?? '').join(''))
+    .join('\n');
+}
+
 test('normal login defers document packages and explicit exports download a workbook and manifesto PDF', async ({
   page,
 }) => {
@@ -236,20 +247,24 @@ test('normal login defers document packages and explicit exports download a work
   expect(documentRequests.some((name) => name.includes('optional-doc-spreadsheet'))).toBe(true);
 
   await page.goto('/kargo-manifest');
-  await page.getByRole('button', { name: /^Bütün Sifarişlər/ }).click();
-  const pdfButton = page.getByTitle('PDF', { exact: true });
+  await page.getByRole('button', { name: /^Bütün sifarişlər/ }).click();
+  const pdfButton = page.getByRole('button', { name: 'PDF yüklə', exact: true });
   await expect(pdfButton).toBeEnabled();
   const pdfReady = page.waitForEvent('download');
   await pdfButton.click();
   const pdf = await pdfReady;
   expect(await pdf.failure()).toBeNull();
-  expect(pdf.suggestedFilename()).toMatch(/^KNB_Ceki_Listesi_.*\.pdf$/);
+  // The document language (the boutique's, az here) names the file (docs/i18n.md).
+  expect(pdf.suggestedFilename()).toMatch(/^Ceki_Siyahisi_.*\.pdf$/);
   const pdfBytes = await fs.readFile((await pdf.path())!);
   expect(pdfBytes.length).toBeGreaterThan(1000);
   expect(pdfBytes.subarray(0, 5).toString()).toBe('%PDF-');
   expect(pdfBytes.toString('latin1')).toContain('/Type /Page');
-  expect(pdfBytes.toString('latin1')).toContain(fixture.customerA);
-  expect(pdfBytes.toString('latin1')).not.toContain(fixture.customerB);
+  // A Unicode font writes glyph codes: read the text back through the PDF's own map.
+  const text = pdfMetni(pdfBytes.toString('latin1'));
+  expect(text).toContain(fixture.customerA);
+  expect(text).not.toContain(fixture.customerB);
+  expect(text).toContain('Synthetic Boutique A — Kanada -> Bakı kargo manifesti');
   expect(pdfBytes.subarray(-32).toString()).toContain('%%EOF');
   expect(documentRequests.some((name) => name.includes('optional-doc-pdf'))).toBe(true);
 });

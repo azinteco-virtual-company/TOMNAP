@@ -108,6 +108,7 @@ router.post('/firmalar/kayit', async (req, res) => {
       return res.status(400).json({
         basarili: false,
         hata: 'Butik adı, sahibinin adı, əlaqə telefonu və e-poçt ünvanı mütləqdir.',
+        kod: 'KAYIT_ALAN_EKSIK',
       });
     }
 
@@ -124,15 +125,18 @@ router.post('/firmalar/kayit', async (req, res) => {
       sehir.length > 100 ||
       menseiUlke.length > 10
     ) {
-      return res
-        .status(400)
-        .json({ basarili: false, hata: 'Qeydiyyat məlumatlarının formatını yoxlayın.' });
+      return res.status(400).json({
+        basarili: false,
+        hata: 'Qeydiyyat məlumatlarının formatını yoxlayın.',
+        kod: 'KAYIT_BICIM_GECERSIZ',
+      });
     }
 
     if (IS_PRODUCTION && !RESEND_API_KEY) {
       return res.status(503).json({
         basarili: false,
         hata: 'Aktivasiya məktubu xidməti hazır deyil. Daha sonra yenidən cəhd edin.',
+        kod: 'KAYIT_EPOSTA_HAZIR_DEGIL',
       });
     }
 
@@ -217,15 +221,14 @@ router.post('/firmalar/kayit', async (req, res) => {
       emailDurumu: emailGonderildi ? 'GONDERILDI' : 'BEKLIYOR',
     });
   } catch (err: any) {
-    res
-      .status(err instanceof OnboardingError ? err.status : 503)
-      .json({
-        basarili: false,
-        hata:
-          err instanceof OnboardingError
-            ? err.message
-            : 'Əməliyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
-      });
+    res.status(err instanceof OnboardingError ? err.status : 503).json({
+      basarili: false,
+      hata:
+        err instanceof OnboardingError
+          ? err.message
+          : 'Əməliyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
+      kod: err instanceof OnboardingError ? err.kod : 'ISLEM_GECICI_HATA',
+    });
   }
 });
 
@@ -356,15 +359,13 @@ router.post('/firmalar/davet-olustur', async (req, res) => {
       kalanKota: created.remaining,
     });
   } catch (err: any) {
-    res
-      .status(err instanceof OnboardingError ? err.status : 503)
-      .json({
-        basarili: false,
-        hata:
-          err instanceof OnboardingError
-            ? err.message
-            : 'Əməliyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
-      });
+    res.status(err instanceof OnboardingError ? err.status : 503).json({
+      basarili: false,
+      hata:
+        err instanceof OnboardingError
+          ? err.message
+          : 'Əməliyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
+    });
   }
 });
 
@@ -440,15 +441,13 @@ router.post('/firmalar', async (req, res) => {
       firma: yeniFirma,
     });
   } catch (err: any) {
-    res
-      .status(err instanceof OnboardingError ? err.status : 503)
-      .json({
-        basarili: false,
-        hata:
-          err instanceof OnboardingError
-            ? err.message
-            : 'Əməliyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
-      });
+    res.status(err instanceof OnboardingError ? err.status : 503).json({
+      basarili: false,
+      hata:
+        err instanceof OnboardingError
+          ? err.message
+          : 'Əməliyyat saxlanılmadı. Daha sonra yenidən cəhd edin.',
+    });
   }
 });
 

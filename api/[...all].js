@@ -4638,9 +4638,10 @@ import http from "node:http";
 import https from "node:https";
 var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 var PublicResourceError = class extends Error {
-  constructor(message, status2 = 403) {
+  constructor(message, status2 = 403, kod) {
     super(message);
     this.status = status2;
+    this.kod = kod;
     this.name = "PublicResourceError";
   }
 };
@@ -8677,22 +8678,41 @@ TOMNAP D\u0259st\u0259k Komandas\u0131
 
 // src/server/services/onboarding.ts
 var OnboardingError = class extends Error {
-  constructor(status2, message) {
+  constructor(status2, message, kod) {
     super(message);
     this.status = status2;
+    this.kod = kod;
   }
 };
 async function onboardingRpc(name, args) {
   const { data, error: error2 } = await supabase.rpc(name, args);
   if (error2) {
     if (error2.code === "23505")
-      throw new OnboardingError(409, "Bu e-po\xE7t v\u0259 ya telefon art\u0131q qeydiyyatdad\u0131r.");
+      throw new OnboardingError(
+        409,
+        "Bu e-po\xE7t v\u0259 ya telefon art\u0131q qeydiyyatdad\u0131r.",
+        "KAYIT_KIMLIK_KULLANILIYOR"
+      );
     if (error2.code === "PT409")
-      throw new OnboardingError(409, "Link art\u0131q etibarl\u0131 deyil v\u0259 ya komanda limiti dolub.");
-    if (error2.code === "PT403") throw new OnboardingError(403, "Firma aktiv deyil.");
-    throw new OnboardingError(503, "Qeydiyyat saxlan\u0131lmad\u0131. Daha sonra yenid\u0259n c\u0259hd edin.");
+      throw new OnboardingError(
+        409,
+        "Link art\u0131q etibarl\u0131 deyil v\u0259 ya komanda limiti dolub.",
+        "DAVET_GECERSIZ_VEYA_LIMIT"
+      );
+    if (error2.code === "PT403")
+      throw new OnboardingError(403, "Firma aktiv deyil.", "FIRMA_AKTIF_DEGIL");
+    throw new OnboardingError(
+      503,
+      "Qeydiyyat saxlan\u0131lmad\u0131. Daha sonra yenid\u0259n c\u0259hd edin.",
+      "KAYIT_GECICI_HATA"
+    );
   }
-  if (!data) throw new OnboardingError(409, "\u018Fm\u0259liyyat tamamlanmad\u0131. Linki yenid\u0259n yoxlay\u0131n.");
+  if (!data)
+    throw new OnboardingError(
+      409,
+      "\u018Fm\u0259liyyat tamamlanmad\u0131. Linki yenid\u0259n yoxlay\u0131n.",
+      "ISLEM_TAMAMLANMADI_LINK"
+    );
   return data;
 }
 function ensureUnique(users, user) {
@@ -8701,19 +8721,24 @@ function ensureUnique(users, user) {
   if (users.some(
     (existing) => existing.id !== user.id && (existing.email.trim().toLowerCase() === email || phone && (existing.telefon || "").replace(/\D/g, "") === phone)
   ))
-    throw new OnboardingError(409, "Bu e-po\xE7t v\u0259 ya telefon art\u0131q qeydiyyatdad\u0131r.");
+    throw new OnboardingError(
+      409,
+      "Bu e-po\xE7t v\u0259 ya telefon art\u0131q qeydiyyatdad\u0131r.",
+      "KAYIT_KIMLIK_KULLANILIYOR"
+    );
 }
 function available(invite, token) {
   return invite.token === token && !invite.kullanildiMi && Date.parse(invite.gecerlilikTarihi) > Date.now() && ekipRoluMu(invite.rol);
 }
 function capacity(firma, users, role) {
-  if (firma.onayDurumu !== "AKTIF") throw new OnboardingError(403, "Firma aktiv deyil.");
+  if (firma.onayDurumu !== "AKTIF")
+    throw new OnboardingError(403, "Firma aktiv deyil.", "FIRMA_AKTIF_DEGIL");
   const limit = ekipRoluMu(role) ? rolKotasi(firma.rolLimitleri, role) : Number.NaN;
   const count = users.filter(
     (user) => user.tenant_id === firma.id && user.rol === role && user.durum !== "PASIF"
   ).length;
   if (!Number.isInteger(limit) || limit <= count)
-    throw new OnboardingError(409, "Komanda rolu \xFCzr\u0259 limit dolub.");
+    throw new OnboardingError(409, "Komanda rolu \xFCzr\u0259 limit dolub.", "ROL_LIMITI_DOLU");
   return { count, remaining: limit - count };
 }
 function companyRow(firma) {
@@ -8745,7 +8770,7 @@ async function registerBoutique(firma, user, emailJob) {
   const next = getIdentitySnapshot();
   ensureUnique(next.users, user);
   if (next.companies.some((item) => item.id === firma.id))
-    throw new OnboardingError(409, "Bu firma art\u0131q m\xF6vcuddur.");
+    throw new OnboardingError(409, "Bu firma art\u0131q m\xF6vcuddur.", "FIRMA_ZATEN_VAR");
   next.companies.push(firma);
   next.users.push(user);
   next.emailJobs.push(emailJob);
@@ -8763,11 +8788,15 @@ async function activateUser(token, changes) {
   const next = getIdentitySnapshot();
   const user = next.users.find((item) => item.aktivasyon_token === token);
   if (!user || user.durum !== "BEKLEMEDE_SIFRE" || Date.parse(user.token_gecerlilik || "") <= Date.now() || !Number.isFinite(Date.parse(user.token_gecerlilik || ""))) {
-    throw new OnboardingError(409, "Bu aktivasiya linki art\u0131q etibarl\u0131 deyil.");
+    throw new OnboardingError(
+      409,
+      "Bu aktivasiya linki art\u0131q etibarl\u0131 deyil.",
+      "AKTIVASIYA_LINKI_GECERSIZ"
+    );
   }
   const firma = next.companies.find((item) => item.id === user.tenant_id);
   if (!firma || !["BEKLEMEDE", "AKTIF"].includes(firma.onayDurumu || ""))
-    throw new OnboardingError(403, "Firma aktiv deyil.");
+    throw new OnboardingError(403, "Firma aktiv deyil.", "FIRMA_AKTIF_DEGIL");
   Object.assign(user, changes, { durum: "AKTIF", aktivasyon_token: null, token_gecerlilik: null });
   ensureUnique(next.users, user);
   if (firma.onayDurumu === "BEKLEMEDE") firma.onayDurumu = "AKTIF";
@@ -8779,11 +8808,15 @@ async function acceptInvite(token, user) {
   const next = getIdentitySnapshot();
   const invite = next.invites.find((item) => item.token === token);
   if (!invite || !available(invite, token))
-    throw new OnboardingError(409, "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil.");
+    throw new OnboardingError(409, "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil.", "DAVET_ARTIK_GECERSIZ");
   const firma = next.companies.find((item) => item.id === invite.tenantId);
-  if (!firma) throw new OnboardingError(403, "Firma aktiv deyil.");
+  if (!firma) throw new OnboardingError(403, "Firma aktiv deyil.", "FIRMA_AKTIF_DEGIL");
   if (invite.email && invite.email.trim().toLowerCase() !== user.email.trim().toLowerCase()) {
-    throw new OnboardingError(403, "E-po\xE7t \xFCnvan\u0131 d\u0259v\u0259td\u0259ki \xFCnvanla uy\u011Fun g\u0259lmir.");
+    throw new OnboardingError(
+      403,
+      "E-po\xE7t \xFCnvan\u0131 d\u0259v\u0259td\u0259ki \xFCnvanla uy\u011Fun g\u0259lmir.",
+      "DAVET_EPOSTA_UYUSMUYOR"
+    );
   }
   const { count } = capacity(firma, next.users, invite.rol);
   const accepted = {
@@ -8820,7 +8853,7 @@ async function createInvite(invite, creatorRole, emailJob) {
     });
   const next = getIdentitySnapshot();
   const firma = next.companies.find((item) => item.id === invite.tenantId);
-  if (!firma) throw new OnboardingError(403, "Firma aktiv deyil.");
+  if (!firma) throw new OnboardingError(403, "Firma aktiv deyil.", "FIRMA_AKTIF_DEGIL");
   const { remaining } = capacity(firma, next.users, invite.rol);
   next.invites.push(invite);
   if (emailJob) next.emailJobs.push(emailJob);
@@ -8976,18 +9009,24 @@ router6.post("/firmalar/kayit", async (req, res) => {
     if (!ad || !sahipAdi || !sahipTelefon || !sahipEmail) {
       return res.status(400).json({
         basarili: false,
-        hata: "Butik ad\u0131, sahibinin ad\u0131, \u0259laq\u0259 telefonu v\u0259 e-po\xE7t \xFCnvan\u0131 m\xFCtl\u0259qdir."
+        hata: "Butik ad\u0131, sahibinin ad\u0131, \u0259laq\u0259 telefonu v\u0259 e-po\xE7t \xFCnvan\u0131 m\xFCtl\u0259qdir.",
+        kod: "KAYIT_ALAN_EKSIK"
       });
     }
     if ([body2.ad, body2.sahipAdi, body2.sahipTelefon, body2.sahipEmail].some(
       (value) => typeof value !== "string"
     ) || ad.length > 200 || sahipAdi.length > 150 || sahipEmail.length > 150 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sahipEmail) || !/^[+\d\s().-]+$/.test(sahipTelefon) || !/^\d{7,15}$/.test(sahipTelefon.replace(/\D/g, "")) || sehir.length > 100 || menseiUlke.length > 10) {
-      return res.status(400).json({ basarili: false, hata: "Qeydiyyat m\u0259lumatlar\u0131n\u0131n format\u0131n\u0131 yoxlay\u0131n." });
+      return res.status(400).json({
+        basarili: false,
+        hata: "Qeydiyyat m\u0259lumatlar\u0131n\u0131n format\u0131n\u0131 yoxlay\u0131n.",
+        kod: "KAYIT_BICIM_GECERSIZ"
+      });
     }
     if (IS_PRODUCTION && !RESEND_API_KEY) {
       return res.status(503).json({
         basarili: false,
-        hata: "Aktivasiya m\u0259ktubu xidm\u0259ti haz\u0131r deyil. Daha sonra yenid\u0259n c\u0259hd edin."
+        hata: "Aktivasiya m\u0259ktubu xidm\u0259ti haz\u0131r deyil. Daha sonra yenid\u0259n c\u0259hd edin.",
+        kod: "KAYIT_EPOSTA_HAZIR_DEGIL"
       });
     }
     getApplicationUrl();
@@ -9048,7 +9087,8 @@ router6.post("/firmalar/kayit", async (req, res) => {
   } catch (err) {
     res.status(err instanceof OnboardingError ? err.status : 503).json({
       basarili: false,
-      hata: err instanceof OnboardingError ? err.message : "\u018Fm\u0259liyyat saxlan\u0131lmad\u0131. Daha sonra yenid\u0259n c\u0259hd edin."
+      hata: err instanceof OnboardingError ? err.message : "\u018Fm\u0259liyyat saxlan\u0131lmad\u0131. Daha sonra yenid\u0259n c\u0259hd edin.",
+      kod: err instanceof OnboardingError ? err.kod : "ISLEM_GECICI_HATA"
     });
   }
 });
@@ -11198,6 +11238,161 @@ var kargoEntegrasyon_default = router9;
 // src/server/routes/auth.ts
 import { Router as Router10 } from "express";
 import { randomUUID as randomUUID9 } from "node:crypto";
+
+// src/shared/v2AyarSinirlari.ts
+var AYAR_SINIRLARI = {
+  aylikBeyanSinirUsd: { alt: 0, ust: 1e5, ondalik: 2, altDahil: false },
+  varsayilanKgFiyatiAzn: { alt: 0, ust: 1e4, ondalik: 2, altDahil: true },
+  /** Oran (0,05 = %5); formda yüzde olarak girilir. */
+  primOraniVarsayilan: { alt: 0, ust: 1, ondalik: 4, altDahil: true }
+};
+function sinirIcinde(deger, sinir) {
+  return Number.isFinite(deger) && (sinir.altDahil ? deger >= sinir.alt : deger > sinir.alt) && deger <= sinir.ust;
+}
+
+// src/i18n/diller.json
+var diller_default = {
+  desteklenen: ["az", "en"]
+};
+
+// src/shared/diller.ts
+var DESTEKLENEN_DILLER = Object.freeze([...diller_default.desteklenen]);
+var BUTIK_VARSAYILAN_DILI = "az";
+function dilDestekleniyor(kod, desteklenen = DESTEKLENEN_DILLER) {
+  return typeof kod === "string" && desteklenen.includes(kod);
+}
+
+// src/server/services/v2/ayarlar.ts
+var VARSAYILAN_V2_AYARLARI = {
+  aylikBeyanSinirUsd: 300,
+  varsayilanKgFiyatiAzn: null,
+  primOraniVarsayilan: 0.05,
+  varsayilanDil: BUTIK_VARSAYILAN_DILI
+};
+var COLUMNS = "tenant_id,aylik_beyan_sinir_usd,varsayilan_kg_fiyati_azn,prim_orani_varsayilan,varsayilan_dil,guncelleyen_kullanici_id,guncellenme_zamani";
+var ALANLAR2 = [
+  "aylik_beyan_sinir_usd",
+  "varsayilan_kg_fiyati_azn",
+  "prim_orani_varsayilan",
+  "varsayilan_dil"
+];
+var bellek = /* @__PURE__ */ new Map();
+function sayi(value, sinir) {
+  const kat = 10 ** sinir.ondalik;
+  if (typeof value !== "number" || !sinirIcinde(value, sinir) || Math.round(value * kat) / kat !== value)
+    throw new PublicResourceError("Ge\xE7ersiz ayar de\u011Feri.", 400, "AYAR_GECERSIZ_DEGER");
+  return value;
+}
+function ayarGuncellemesiniDogrula(body2) {
+  const alanlar = v2GovdesiniAyikla(body2, ALANLAR2);
+  const sonuc = {};
+  if ("aylik_beyan_sinir_usd" in alanlar)
+    sonuc.aylikBeyanSinirUsd = sayi(
+      alanlar.aylik_beyan_sinir_usd,
+      AYAR_SINIRLARI.aylikBeyanSinirUsd
+    );
+  if ("varsayilan_kg_fiyati_azn" in alanlar)
+    sonuc.varsayilanKgFiyatiAzn = alanlar.varsayilan_kg_fiyati_azn === null ? null : sayi(alanlar.varsayilan_kg_fiyati_azn, AYAR_SINIRLARI.varsayilanKgFiyatiAzn);
+  if ("prim_orani_varsayilan" in alanlar)
+    sonuc.primOraniVarsayilan = sayi(
+      alanlar.prim_orani_varsayilan,
+      AYAR_SINIRLARI.primOraniVarsayilan
+    );
+  if ("varsayilan_dil" in alanlar) {
+    if (!dilDestekleniyor(alanlar.varsayilan_dil))
+      throw new PublicResourceError("Bu dil desteklenmiyor.", 400, "AYAR_DIL_DESTEKLENMIYOR");
+    sonuc.varsayilanDil = alanlar.varsayilan_dil;
+  }
+  if (Object.keys(sonuc).length === 0)
+    throw new PublicResourceError("G\xFCncellenecek bir ayar g\xF6nderilmelidir.", 400, "AYAR_ALAN_YOK");
+  return sonuc;
+}
+function satirdan(row, tenantId) {
+  if (!row || typeof row !== "object" || Array.isArray(row))
+    throw new PublicResourceError("Ayarlar okunamad\u0131.", 503, "AYAR_OKUNAMADI");
+  const r = row;
+  const beyan = Number(r.aylik_beyan_sinir_usd);
+  const prim = Number(r.prim_orani_varsayilan);
+  const kg = r.varsayilan_kg_fiyati_azn === null ? null : Number(r.varsayilan_kg_fiyati_azn);
+  if (r.tenant_id !== tenantId || !Number.isFinite(beyan) || !Number.isFinite(prim) || kg !== null && !Number.isFinite(kg))
+    throw new PublicResourceError("Ayarlar okunamad\u0131.", 503, "AYAR_OKUNAMADI");
+  return {
+    aylikBeyanSinirUsd: beyan,
+    varsayilanKgFiyatiAzn: kg,
+    primOraniVarsayilan: prim,
+    // A language no longer in the list reads as the default; the stored value stays.
+    varsayilanDil: dilDestekleniyor(r.varsayilan_dil) ? r.varsayilan_dil : BUTIK_VARSAYILAN_DILI,
+    kayitli: true,
+    guncelleyenKullaniciId: typeof r.guncelleyen_kullanici_id === "string" ? r.guncelleyen_kullanici_id : null,
+    guncellenmeZamani: typeof r.guncellenme_zamani === "string" ? r.guncellenme_zamani : null
+  };
+}
+var varsayilanlar = () => ({
+  ...VARSAYILAN_V2_AYARLARI,
+  kayitli: false,
+  guncelleyenKullaniciId: null,
+  guncellenmeZamani: null
+});
+async function ayarlariOku(tenant2) {
+  const tenantId = v2Tenant(tenant2);
+  const client2 = supabase;
+  if (!client2) return { ...bellek.get(tenantId) ?? varsayilanlar() };
+  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").select(COLUMNS).eq("tenant_id", tenantId).maybeSingle();
+  if (error2) throw new PublicResourceError("Ayarlar okunamad\u0131.", 503, "AYAR_OKUNAMADI");
+  return data ? satirdan(data, tenantId) : varsayilanlar();
+}
+async function ayarlariGuncelle(tenant2, userId, degisiklik) {
+  const tenantId = v2Tenant(tenant2);
+  if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
+  const zaman = (/* @__PURE__ */ new Date()).toISOString();
+  const client2 = supabase;
+  if (!client2) {
+    const guncel = {
+      ...bellek.get(tenantId) ?? varsayilanlar(),
+      ...degisiklik,
+      kayitli: true,
+      guncelleyenKullaniciId: userId,
+      guncellenmeZamani: zaman
+    };
+    bellek.set(tenantId, guncel);
+    return { ...guncel };
+  }
+  const satir = {
+    tenant_id: tenantId,
+    guncelleyen_kullanici_id: userId,
+    guncellenme_zamani: zaman
+  };
+  if (degisiklik.aylikBeyanSinirUsd !== void 0)
+    satir.aylik_beyan_sinir_usd = degisiklik.aylikBeyanSinirUsd;
+  if (degisiklik.varsayilanKgFiyatiAzn !== void 0)
+    satir.varsayilan_kg_fiyati_azn = degisiklik.varsayilanKgFiyatiAzn;
+  if (degisiklik.primOraniVarsayilan !== void 0)
+    satir.prim_orani_varsayilan = degisiklik.primOraniVarsayilan;
+  if (degisiklik.varsayilanDil !== void 0) satir.varsayilan_dil = degisiklik.varsayilanDil;
+  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").upsert(satir, { onConflict: "tenant_id" }).select(COLUMNS).single();
+  if (error2 || !data)
+    throw new PublicResourceError("Ayarlar kaydedilemedi.", 503, "AYAR_KAYDEDILEMEDI");
+  return satirdan(data, tenantId);
+}
+async function butikDiliniOku(tenant2) {
+  let tenantId;
+  try {
+    tenantId = v2Tenant(tenant2);
+  } catch {
+    return BUTIK_VARSAYILAN_DILI;
+  }
+  const client2 = supabase;
+  if (!client2) return bellek.get(tenantId)?.varsayilanDil ?? BUTIK_VARSAYILAN_DILI;
+  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").select("varsayilan_dil").eq("tenant_id", tenantId).maybeSingle();
+  if (error2) {
+    console.warn("Butik dili okunamad\u0131; varsay\u0131lan kullan\u0131l\u0131yor.", error2.code ?? "");
+    return BUTIK_VARSAYILAN_DILI;
+  }
+  const dil = data?.varsayilan_dil;
+  return dilDestekleniyor(dil) ? dil : BUTIK_VARSAYILAN_DILI;
+}
+
+// src/server/routes/auth.ts
 var router10 = Router10();
 function isUnexpired(value) {
   return typeof value === "string" && Date.parse(value) > Date.now();
@@ -11241,13 +11436,15 @@ async function findFirma(tenantId) {
 router10.get(["/auth/token-kontrol/:token", "/firmalar/davet/:token"], async (req, res) => {
   try {
     const token = req.params.token.trim();
-    if (!token) return res.status(400).json({ basarili: false, hata: "Token t\u0259qdim edilm\u0259yib." });
+    if (!token)
+      return res.status(400).json({ basarili: false, hata: "Token t\u0259qdim edilm\u0259yib.", kod: "TOKEN_YOK" });
     const user = await findActivationUser(token);
     if (user) {
       if (!isPendingActivation(user, token)) {
         return res.status(400).json({
           basarili: false,
-          hata: "Bu aktivasiya linki etibars\u0131zd\u0131r v\u0259 ya vaxt\u0131 bitmi\u015Fdir."
+          hata: "Bu aktivasiya linki etibars\u0131zd\u0131r v\u0259 ya vaxt\u0131 bitmi\u015Fdir.",
+          kod: "AKTIVASIYA_LINKI_GECERSIZ"
         });
       }
       const firma = await findFirma(user.tenant_id);
@@ -11266,7 +11463,8 @@ router10.get(["/auth/token-kontrol/:token", "/firmalar/davet/:token"], async (re
       if (!isAvailableInvite(invite, token)) {
         return res.status(400).json({
           basarili: false,
-          hata: "Bu d\u0259v\u0259t linki etibars\u0131zd\u0131r, istifad\u0259 edilib v\u0259 ya vaxt\u0131 bitmi\u015Fdir."
+          hata: "Bu d\u0259v\u0259t linki etibars\u0131zd\u0131r, istifad\u0259 edilib v\u0259 ya vaxt\u0131 bitmi\u015Fdir.",
+          kod: "DAVET_LINKI_GECERSIZ"
         });
       }
       const firma = await findFirma(invite.tenantId);
@@ -11284,12 +11482,14 @@ router10.get(["/auth/token-kontrol/:token", "/firmalar/davet/:token"], async (re
     }
     return res.status(404).json({
       basarili: false,
-      hata: "Aktivasiya v\u0259 ya d\u0259v\u0259t linki etibars\u0131zd\u0131r v\u0259 ya tap\u0131lmad\u0131."
+      hata: "Aktivasiya v\u0259 ya d\u0259v\u0259t linki etibars\u0131zd\u0131r v\u0259 ya tap\u0131lmad\u0131.",
+      kod: "LINK_BULUNAMADI"
     });
   } catch {
     return res.status(503).json({
       basarili: false,
-      hata: "Token haz\u0131rda yoxlan\u0131la bilmir. Daha sonra yenid\u0259n c\u0259hd edin."
+      hata: "Token haz\u0131rda yoxlan\u0131la bilmir. Daha sonra yenid\u0259n c\u0259hd edin.",
+      kod: "TOKEN_GECICI_HATA"
     });
   }
 });
@@ -11297,13 +11497,21 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
   try {
     const { token, sifre, adSoyad, telefon, email } = req.body || {};
     if (typeof token !== "string" || !token.trim()) {
-      return res.status(400).json({ basarili: false, hata: "T\u0259hl\xFCk\u0259sizlik tokeni m\xFCtl\u0259qdir." });
+      return res.status(400).json({ basarili: false, hata: "T\u0259hl\xFCk\u0259sizlik tokeni m\xFCtl\u0259qdir.", kod: "TOKEN_YOK" });
     }
     if (typeof sifre !== "string" || sifre.length < 6 || sifre.length > 1024) {
-      return res.status(400).json({ basarili: false, hata: "\u015Eifr\u0259 \u0259n az\u0131 6 simvoldan ibar\u0259t olmal\u0131d\u0131r." });
+      return res.status(400).json({
+        basarili: false,
+        hata: "\u015Eifr\u0259 \u0259n az\u0131 6 simvoldan ibar\u0259t olmal\u0131d\u0131r.",
+        kod: "SIFRE_KISA"
+      });
     }
     if (adSoyad !== void 0 && (typeof adSoyad !== "string" || adSoyad.trim().length > 150) || telefon !== void 0 && (typeof telefon !== "string" || telefon.trim() && !normalizePhone2(telefon.trim()))) {
-      return res.status(400).json({ basarili: false, hata: "Ad v\u0259 telefon m\u0259lumatlar\u0131n\u0131 yoxlay\u0131n." });
+      return res.status(400).json({
+        basarili: false,
+        hata: "Ad v\u0259 telefon m\u0259lumatlar\u0131n\u0131 yoxlay\u0131n.",
+        kod: "AD_TELEFON_GECERSIZ"
+      });
     }
     const cleanToken = token.trim();
     const user = await findActivationUser(cleanToken);
@@ -11311,7 +11519,8 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
       if (!isPendingActivation(user, cleanToken)) {
         return res.status(400).json({
           basarili: false,
-          hata: "Bu aktivasiya linki etibars\u0131zd\u0131r v\u0259 ya vaxt\u0131 bitmi\u015Fdir."
+          hata: "Bu aktivasiya linki etibars\u0131zd\u0131r v\u0259 ya vaxt\u0131 bitmi\u015Fdir.",
+          kod: "AKTIVASIYA_LINKI_GECERSIZ"
         });
       }
       const { user: activatedUser, firma: firma2 } = await activateUser(cleanToken, {
@@ -11337,19 +11546,29 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
     if (!invite)
       return res.status(404).json({
         basarili: false,
-        hata: "Bu token\u0259 uy\u011Fun g\xF6zl\u0259y\u0259n qeydiyyat v\u0259 ya d\u0259v\u0259t tap\u0131lmad\u0131."
+        hata: "Bu token\u0259 uy\u011Fun g\xF6zl\u0259y\u0259n qeydiyyat v\u0259 ya d\u0259v\u0259t tap\u0131lmad\u0131.",
+        kod: "BEKLEYEN_KAYIT_YOK"
       });
     if (!isAvailableInvite(invite, cleanToken)) {
       return res.status(400).json({
         basarili: false,
-        hata: "Bu d\u0259v\u0259t etibars\u0131zd\u0131r, istifad\u0259 edilib v\u0259 ya vaxt\u0131 bitmi\u015Fdir."
+        hata: "Bu d\u0259v\u0259t etibars\u0131zd\u0131r, istifad\u0259 edilib v\u0259 ya vaxt\u0131 bitmi\u015Fdir.",
+        kod: "DAVET_GECERSIZ"
       });
     }
     if (email !== void 0 && typeof email !== "string" || telefon !== void 0 && typeof telefon !== "string") {
-      return res.status(400).json({ basarili: false, hata: "E-po\xE7t v\u0259 telefon m\u0259tn format\u0131nda olmal\u0131d\u0131r." });
+      return res.status(400).json({
+        basarili: false,
+        hata: "E-po\xE7t v\u0259 telefon m\u0259tn format\u0131nda olmal\u0131d\u0131r.",
+        kod: "EPOSTA_TELEFON_BICIMI"
+      });
     }
     if (invite.email && typeof email === "string" && email.trim() && email.trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
-      return res.status(403).json({ basarili: false, hata: "E-po\xE7t \xFCnvan\u0131 d\u0259v\u0259td\u0259ki \xFCnvanla uy\u011Fun g\u0259lmir." });
+      return res.status(403).json({
+        basarili: false,
+        hata: "E-po\xE7t \xFCnvan\u0131 d\u0259v\u0259td\u0259ki \xFCnvanla uy\u011Fun g\u0259lmir.",
+        kod: "DAVET_EPOSTA_UYUSMUYOR"
+      });
     }
     const userEmail = (typeof invite.email === "string" ? invite.email.trim().toLowerCase() : "") || (typeof email === "string" ? email.trim().toLowerCase() : "");
     const userPhone = typeof telefon === "string" ? telefon.trim() : "";
@@ -11359,13 +11578,19 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
     if (userEmail && !validEmail || userPhone && !validPhone || !validEmail && !validPhone) {
       return res.status(400).json({
         basarili: false,
-        hata: "Sonradan giri\u015F \xFC\xE7\xFCn etibarl\u0131 e-po\xE7t \xFCnvan\u0131 v\u0259 ya telefon n\xF6mr\u0259si daxil edin."
+        hata: "Sonradan giri\u015F \xFC\xE7\xFCn etibarl\u0131 e-po\xE7t \xFCnvan\u0131 v\u0259 ya telefon n\xF6mr\u0259si daxil edin.",
+        kod: "GIRIS_KIMLIGI_GECERSIZ"
       });
     }
     const firma = await findFirma(invite.tenantId);
-    if (!firma) return res.status(404).json({ basarili: false, hata: "\u018Flaq\u0259li butik tap\u0131lmad\u0131." });
+    if (!firma)
+      return res.status(404).json({ basarili: false, hata: "\u018Flaq\u0259li butik tap\u0131lmad\u0131.", kod: "BUTIK_BULUNAMADI" });
     if (!isAvailableInvite(invite, cleanToken)) {
-      return res.status(400).json({ basarili: false, hata: "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil." });
+      return res.status(400).json({
+        basarili: false,
+        hata: "Bu d\u0259v\u0259t art\u0131q etibarl\u0131 deyil.",
+        kod: "DAVET_ARTIK_GECERSIZ"
+      });
     }
     const newUser = {
       id: "usr_" + randomUUID9(),
@@ -11399,10 +11624,11 @@ router10.post(["/auth/sifre-belirle", "/firmalar/davet/katil"], async (req, res)
     });
   } catch (error2) {
     if (error2 instanceof OnboardingError)
-      return res.status(error2.status).json({ basarili: false, hata: error2.message });
+      return res.status(error2.status).json({ basarili: false, hata: error2.message, ...error2.kod ? { kod: error2.kod } : {} });
     return res.status(503).json({
       basarili: false,
-      hata: "\u015Eifr\u0259 haz\u0131rda t\u0259yin edil\u0259 bilmir. Daha sonra yenid\u0259n c\u0259hd edin."
+      hata: "\u015Eifr\u0259 haz\u0131rda t\u0259yin edil\u0259 bilmir. Daha sonra yenid\u0259n c\u0259hd edin.",
+      kod: "SIFRE_GECICI_HATA"
     });
   }
 });
@@ -11443,23 +11669,40 @@ router10.post(["/auth/giris", "/firmalar/giris"], async (req, res) => {
     const { identifikator, email, kullaniciAdi, telefon, kod, sifre } = req.body || {};
     const identifier = identifikator || email || kullaniciAdi || telefon || kod;
     if (typeof identifier !== "string" || !identifier.trim() || identifier.length > 254) {
-      return res.status(400).json({ basarili: false, hata: "E-po\xE7t \xFCnvan\u0131n\u0131z\u0131 v\u0259 ya telefon n\xF6mr\u0259nizi daxil edin." });
+      return res.status(400).json({
+        basarili: false,
+        hata: "E-po\xE7t \xFCnvan\u0131n\u0131z\u0131 v\u0259 ya telefon n\xF6mr\u0259nizi daxil edin.",
+        kod: "GIRIS_KIMLIK_EKSIK"
+      });
     }
     if (typeof sifre !== "string" || !sifre || sifre.length > 1024) {
-      return res.status(400).json({ basarili: false, hata: "Z\u0259hm\u0259t olmasa \u015Fifr\u0259nizi daxil edin." });
+      return res.status(400).json({
+        basarili: false,
+        hata: "Z\u0259hm\u0259t olmasa \u015Fifr\u0259nizi daxil edin.",
+        kod: "GIRIS_SIFRE_EKSIK"
+      });
     }
     const user = await findLoginUser(identifier.trim());
     if (!user) {
-      return res.status(404).json({ basarili: false, hata: "Bu m\u0259lumatlara uy\u011Fun aktiv istifad\u0259\xE7i tap\u0131lmad\u0131." });
+      return res.status(404).json({
+        basarili: false,
+        hata: "Bu m\u0259lumatlara uy\u011Fun aktiv istifad\u0259\xE7i tap\u0131lmad\u0131.",
+        kod: "GIRIS_KULLANICI_YOK"
+      });
     }
     if (user.durum !== "AKTIF") {
       return res.status(403).json({
         basarili: false,
-        hata: user.durum === "BEKLEMEDE_SIFRE" ? "Hesab\u0131n\u0131z h\u0259l\u0259 aktivl\u0259\u015Fdirilm\u0259yib. E-po\xE7t \xFCnvan\u0131n\u0131za g\xF6nd\u0259ril\u0259n linkd\u0259n \u015Fifr\u0259nizi t\u0259yin edin." : "Hesab\u0131n\u0131z aktiv deyil."
+        hata: user.durum === "BEKLEMEDE_SIFRE" ? "Hesab\u0131n\u0131z h\u0259l\u0259 aktivl\u0259\u015Fdirilm\u0259yib. E-po\xE7t \xFCnvan\u0131n\u0131za g\xF6nd\u0259ril\u0259n linkd\u0259n \u015Fifr\u0259nizi t\u0259yin edin." : "Hesab\u0131n\u0131z aktiv deyil.",
+        kod: user.durum === "BEKLEMEDE_SIFRE" ? "GIRIS_HESAP_AKTIF_DEGIL_SIFRE" : "GIRIS_HESAP_PASIF"
       });
     }
     if (!user.sifre_hash || !sifreDogrula(sifre, user.sifre_hash)) {
-      return res.status(401).json({ basarili: false, hata: "Daxil edilmi\u015F \u015Fifr\u0259 yanl\u0131\u015Fd\u0131r." });
+      return res.status(401).json({
+        basarili: false,
+        hata: "Daxil edilmi\u015F \u015Fifr\u0259 yanl\u0131\u015Fd\u0131r.",
+        kod: "GIRIS_SIFRE_YANLIS"
+      });
     }
     const firma = user.rol === "SUPER_ADMIN" ? void 0 : await findFirma(user.tenant_id);
     const session = await createSession(user, res);
@@ -11479,12 +11722,14 @@ router10.post(["/auth/giris", "/firmalar/giris"], async (req, res) => {
       },
       firma,
       ...session,
+      butikDili: await butikDiliniOku(tenantId),
       mesaj: `Xo\u015F g\u0259ldiniz, ${user.ad_soyad}!`
     });
   } catch {
     return res.status(503).json({
       basarili: false,
-      hata: "Giri\u015F haz\u0131rda yoxlan\u0131la bilmir. Daha sonra yenid\u0259n c\u0259hd edin."
+      hata: "Giri\u015F haz\u0131rda yoxlan\u0131la bilmir. Daha sonra yenid\u0259n c\u0259hd edin.",
+      kod: "GIRIS_GECICI_HATA"
     });
   }
 });
@@ -11492,15 +11737,21 @@ router10.get("/auth/oturum", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   try {
     const session = req.auth || await readSession(req);
-    if (!session) return res.status(401).json({ basarili: false, hata: "Giri\u015F t\u0259l\u0259b olunur." });
+    if (!session)
+      return res.status(401).json({ basarili: false, hata: "Giri\u015F t\u0259l\u0259b olunur.", kod: "OTURUM_GEREKLI" });
     return res.json({
       basarili: true,
       kullanici: session.kullanici,
       csrfToken: session.csrfToken,
-      expiresAt: session.expiresAt
+      expiresAt: session.expiresAt,
+      butikDili: await butikDiliniOku(session.kullanici.tenantId)
     });
   } catch {
-    return res.status(503).json({ basarili: false, hata: "Oturum haz\u0131rda yoxlan\u0131la bilmir." });
+    return res.status(503).json({
+      basarili: false,
+      hata: "Oturum haz\u0131rda yoxlan\u0131la bilmir.",
+      kod: "OTURUM_GECICI_HATA"
+    });
   }
 });
 router10.post("/auth/cikis", async (req, res) => {
@@ -11508,7 +11759,11 @@ router10.post("/auth/cikis", async (req, res) => {
     await revokeSession(req, res);
     return res.json({ basarili: true });
   } catch {
-    return res.status(503).json({ basarili: false, hata: "Oturum l\u0259\u011Fv edil\u0259 bilm\u0259di. Yenid\u0259n c\u0259hd edin." });
+    return res.status(503).json({
+      basarili: false,
+      hata: "Oturum l\u0259\u011Fv edil\u0259 bilm\u0259di. Yenid\u0259n c\u0259hd edin.",
+      kod: "CIKIS_GECICI_HATA"
+    });
   }
 });
 var auth_default = router10;
@@ -11520,22 +11775,31 @@ import { Router as Router15 } from "express";
 import { randomUUID as randomUUID10 } from "node:crypto";
 
 // src/shared/bakuTarihi.ts
-var BAKU_GUNU = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Baku",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit"
-});
-function bakuTarihi(an = /* @__PURE__ */ new Date()) {
-  return BAKU_GUNU.format(an);
+var VARSAYILAN_SAAT_DILIMI = "Asia/Baku";
+var bicimler = /* @__PURE__ */ new Map();
+function gunBicimi(saatDilimi) {
+  let bicim = bicimler.get(saatDilimi);
+  if (!bicim) {
+    bicim = new Intl.DateTimeFormat("en-CA", {
+      timeZone: saatDilimi,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    });
+    bicimler.set(saatDilimi, bicim);
+  }
+  return bicim;
+}
+function bakuTarihi(an = /* @__PURE__ */ new Date(), saatDilimi = VARSAYILAN_SAAT_DILIMI) {
+  return gunBicimi(saatDilimi).format(an);
 }
 
 // src/server/services/v2/kurlar.ts
 var KUR_PARA_BIRIMLERI = ["CAD", "USD"];
 var KUR_LISTE_SINIRI = 200;
-var COLUMNS = "id,tenant_id,para_birimi,tarih,azn_karsiligi,kaynak,giren_kullanici_id,olusturma_zamani";
-var ALANLAR2 = ["para_birimi", "tarih", "azn_karsiligi", "kaynak"];
-var bellek = [];
+var COLUMNS2 = "id,tenant_id,para_birimi,tarih,azn_karsiligi,kaynak,giren_kullanici_id,olusturma_zamani";
+var ALANLAR3 = ["para_birimi", "tarih", "azn_karsiligi", "kaynak"];
+var bellek2 = [];
 function paraBirimiMi(value) {
   return KUR_PARA_BIRIMLERI.includes(value);
 }
@@ -11548,7 +11812,7 @@ function gecerliTarih(value, bugun) {
   return value;
 }
 function kurGirdisiniDogrula(body2, bugun = /* @__PURE__ */ new Date()) {
-  const alanlar = v2GovdesiniAyikla(body2, ALANLAR2);
+  const alanlar = v2GovdesiniAyikla(body2, ALANLAR3);
   if (!paraBirimiMi(alanlar.para_birimi))
     throw new PublicResourceError("Para birimi CAD ya da USD olmal\u0131.", 400);
   const oran = alanlar.azn_karsiligi;
@@ -11573,7 +11837,7 @@ function kurGirdisiniDogrula(body2, bugun = /* @__PURE__ */ new Date()) {
 function isRecord2(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
-function satirdan(row) {
+function satirdan2(row) {
   if (!isRecord2(row) || typeof row.id !== "string" || typeof row.tenant_id !== "string" || !paraBirimiMi(row.para_birimi) || typeof row.tarih !== "string" || typeof row.giren_kullanici_id !== "string" || typeof row.olusturma_zamani !== "string")
     throw new PublicResourceError("Kurlar okunamad\u0131.", 503);
   const oran = Number(row.azn_karsiligi);
@@ -11601,7 +11865,7 @@ async function kurEkle(tenant2, userId, girdi) {
       girenKullaniciId: userId,
       olusturmaZamani: (/* @__PURE__ */ new Date()).toISOString()
     };
-    bellek.push(kayit7);
+    bellek2.push(kayit7);
     return { ...kayit7 };
   }
   const { data, error: error2 } = await client2.from("kurlar").insert({
@@ -11611,9 +11875,9 @@ async function kurEkle(tenant2, userId, girdi) {
     azn_karsiligi: girdi.aznKarsiligi,
     kaynak: girdi.kaynak,
     giren_kullanici_id: userId
-  }).select(COLUMNS).single();
+  }).select(COLUMNS2).single();
   if (error2 || !data) throw new PublicResourceError("Kur kaydedilemedi.", 503);
-  const kayit6 = satirdan(data);
+  const kayit6 = satirdan2(data);
   if (kayit6.tenantId !== tenantId) throw new PublicResourceError("Kur kaydedilemedi.", 503);
   return kayit6;
 }
@@ -11622,7 +11886,7 @@ async function kurlariListele(tenant2) {
   const tenantId = v2Tenant(tenant2);
   const client2 = supabase;
   if (!client2) {
-    const kurlar2 = bellek.filter((kayit6) => kayit6.tenantId === tenantId).sort(yenidenEskiye).map((kayit6) => ({ ...kayit6 }));
+    const kurlar2 = bellek2.filter((kayit6) => kayit6.tenantId === tenantId).sort(yenidenEskiye).map((kayit6) => ({ ...kayit6 }));
     const guncel2 = Object.fromEntries(
       KUR_PARA_BIRIMLERI.map((para) => [
         para,
@@ -11632,12 +11896,12 @@ async function kurlariListele(tenant2) {
     return { guncel: guncel2, kurlar: kurlar2.slice(0, KUR_LISTE_SINIRI) };
   }
   const oku = async (para, limit = KUR_LISTE_SINIRI) => {
-    let query = client2.from("kurlar").select(COLUMNS).eq("tenant_id", tenantId);
+    let query = client2.from("kurlar").select(COLUMNS2).eq("tenant_id", tenantId);
     if (para) query = query.eq("para_birimi", para);
     const { data, error: error2 } = await query.order("olusturma_zamani", { ascending: false }).order("id", { ascending: false }).limit(limit);
     if (error2 || !Array.isArray(data)) throw new PublicResourceError("Kurlar okunamad\u0131.", 503);
     const rows = data;
-    const kurlar2 = rows.map(satirdan);
+    const kurlar2 = rows.map(satirdan2);
     if (kurlar2.some((kayit6) => kayit6.tenantId !== tenantId))
       throw new PublicResourceError("Kurlar okunamad\u0131.", 503);
     return kurlar2;
@@ -11650,119 +11914,6 @@ async function kurlariListele(tenant2) {
     KUR_PARA_BIRIMLERI.map((para, index) => [para, sonlar[index][0] ?? null])
   );
   return { guncel, kurlar };
-}
-
-// src/shared/v2AyarSinirlari.ts
-var AYAR_SINIRLARI = {
-  aylikBeyanSinirUsd: { alt: 0, ust: 1e5, ondalik: 2, altDahil: false },
-  varsayilanKgFiyatiAzn: { alt: 0, ust: 1e4, ondalik: 2, altDahil: true },
-  /** Oran (0,05 = %5); formda yüzde olarak girilir. */
-  primOraniVarsayilan: { alt: 0, ust: 1, ondalik: 4, altDahil: true }
-};
-function sinirIcinde(deger, sinir) {
-  return Number.isFinite(deger) && (sinir.altDahil ? deger >= sinir.alt : deger > sinir.alt) && deger <= sinir.ust;
-}
-
-// src/server/services/v2/ayarlar.ts
-var VARSAYILAN_V2_AYARLARI = {
-  aylikBeyanSinirUsd: 300,
-  varsayilanKgFiyatiAzn: null,
-  primOraniVarsayilan: 0.05
-};
-var COLUMNS2 = "tenant_id,aylik_beyan_sinir_usd,varsayilan_kg_fiyati_azn,prim_orani_varsayilan,guncelleyen_kullanici_id,guncellenme_zamani";
-var ALANLAR3 = [
-  "aylik_beyan_sinir_usd",
-  "varsayilan_kg_fiyati_azn",
-  "prim_orani_varsayilan"
-];
-var bellek2 = /* @__PURE__ */ new Map();
-function sayi(value, sinir) {
-  const kat = 10 ** sinir.ondalik;
-  if (typeof value !== "number" || !sinirIcinde(value, sinir) || Math.round(value * kat) / kat !== value)
-    throw new PublicResourceError("Ge\xE7ersiz ayar de\u011Feri.", 400);
-  return value;
-}
-function ayarGuncellemesiniDogrula(body2) {
-  const alanlar = v2GovdesiniAyikla(body2, ALANLAR3);
-  const sonuc = {};
-  if ("aylik_beyan_sinir_usd" in alanlar)
-    sonuc.aylikBeyanSinirUsd = sayi(
-      alanlar.aylik_beyan_sinir_usd,
-      AYAR_SINIRLARI.aylikBeyanSinirUsd
-    );
-  if ("varsayilan_kg_fiyati_azn" in alanlar)
-    sonuc.varsayilanKgFiyatiAzn = alanlar.varsayilan_kg_fiyati_azn === null ? null : sayi(alanlar.varsayilan_kg_fiyati_azn, AYAR_SINIRLARI.varsayilanKgFiyatiAzn);
-  if ("prim_orani_varsayilan" in alanlar)
-    sonuc.primOraniVarsayilan = sayi(
-      alanlar.prim_orani_varsayilan,
-      AYAR_SINIRLARI.primOraniVarsayilan
-    );
-  if (Object.keys(sonuc).length === 0)
-    throw new PublicResourceError("G\xFCncellenecek bir ayar g\xF6nderilmelidir.", 400);
-  return sonuc;
-}
-function satirdan2(row, tenantId) {
-  if (!row || typeof row !== "object" || Array.isArray(row))
-    throw new PublicResourceError("Ayarlar okunamad\u0131.", 503);
-  const r = row;
-  const beyan = Number(r.aylik_beyan_sinir_usd);
-  const prim = Number(r.prim_orani_varsayilan);
-  const kg = r.varsayilan_kg_fiyati_azn === null ? null : Number(r.varsayilan_kg_fiyati_azn);
-  if (r.tenant_id !== tenantId || !Number.isFinite(beyan) || !Number.isFinite(prim) || kg !== null && !Number.isFinite(kg))
-    throw new PublicResourceError("Ayarlar okunamad\u0131.", 503);
-  return {
-    aylikBeyanSinirUsd: beyan,
-    varsayilanKgFiyatiAzn: kg,
-    primOraniVarsayilan: prim,
-    kayitli: true,
-    guncelleyenKullaniciId: typeof r.guncelleyen_kullanici_id === "string" ? r.guncelleyen_kullanici_id : null,
-    guncellenmeZamani: typeof r.guncellenme_zamani === "string" ? r.guncellenme_zamani : null
-  };
-}
-var varsayilanlar = () => ({
-  ...VARSAYILAN_V2_AYARLARI,
-  kayitli: false,
-  guncelleyenKullaniciId: null,
-  guncellenmeZamani: null
-});
-async function ayarlariOku(tenant2) {
-  const tenantId = v2Tenant(tenant2);
-  const client2 = supabase;
-  if (!client2) return { ...bellek2.get(tenantId) ?? varsayilanlar() };
-  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").select(COLUMNS2).eq("tenant_id", tenantId).maybeSingle();
-  if (error2) throw new PublicResourceError("Ayarlar okunamad\u0131.", 503);
-  return data ? satirdan2(data, tenantId) : varsayilanlar();
-}
-async function ayarlariGuncelle(tenant2, userId, degisiklik) {
-  const tenantId = v2Tenant(tenant2);
-  if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
-  const zaman = (/* @__PURE__ */ new Date()).toISOString();
-  const client2 = supabase;
-  if (!client2) {
-    const guncel = {
-      ...bellek2.get(tenantId) ?? varsayilanlar(),
-      ...degisiklik,
-      kayitli: true,
-      guncelleyenKullaniciId: userId,
-      guncellenmeZamani: zaman
-    };
-    bellek2.set(tenantId, guncel);
-    return { ...guncel };
-  }
-  const satir = {
-    tenant_id: tenantId,
-    guncelleyen_kullanici_id: userId,
-    guncellenme_zamani: zaman
-  };
-  if (degisiklik.aylikBeyanSinirUsd !== void 0)
-    satir.aylik_beyan_sinir_usd = degisiklik.aylikBeyanSinirUsd;
-  if (degisiklik.varsayilanKgFiyatiAzn !== void 0)
-    satir.varsayilan_kg_fiyati_azn = degisiklik.varsayilanKgFiyatiAzn;
-  if (degisiklik.primOraniVarsayilan !== void 0)
-    satir.prim_orani_varsayilan = degisiklik.primOraniVarsayilan;
-  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").upsert(satir, { onConflict: "tenant_id" }).select(COLUMNS2).single();
-  if (error2 || !data) throw new PublicResourceError("Ayarlar kaydedilemedi.", 503);
-  return satirdan2(data, tenantId);
 }
 
 // src/server/routes/v2/siparisler.ts
@@ -13007,9 +13158,9 @@ var router15 = Router15();
 function hata5(res, error2) {
   if (error2 instanceof PublicResourceError) {
     const code = [400, 401, 403, 404, 409, 413, 503].includes(error2.status) ? error2.status : 500;
-    return res.status(code).json({ basarili: false, hata: error2.message });
+    return res.status(code).json({ basarili: false, hata: error2.message, ...error2.kod ? { kod: error2.kod } : {} });
   }
-  return res.status(500).json({ basarili: false, hata: "\u0130\u015Flem tamamlanamad\u0131." });
+  return res.status(500).json({ basarili: false, hata: "\u0130\u015Flem tamamlanamad\u0131.", kod: "ISLEM_TAMAMLANAMADI" });
 }
 var kullanici3 = (req) => req.auth?.userId ?? "";
 router15.use((req, res, next) => {
@@ -13050,7 +13201,17 @@ router15.get("/ayarlar", async (req, res) => {
 router15.patch("/ayarlar", async (req, res) => {
   try {
     if (!primGorur(req) && Object.hasOwn(Object(req.body), "prim_orani_varsayilan"))
-      throw new PublicResourceError("Prim oran\u0131n\u0131 yaln\u0131z patron de\u011Fi\u015Ftirebilir.", 403);
+      throw new PublicResourceError(
+        "Prim oran\u0131n\u0131 yaln\u0131z patron de\u011Fi\u015Ftirebilir.",
+        403,
+        "AYAR_PRIM_YALNIZ_PATRON"
+      );
+    if (!primGorur(req) && Object.hasOwn(Object(req.body), "varsayilan_dil"))
+      throw new PublicResourceError(
+        "Butik dilini yaln\u0131z patron de\u011Fi\u015Ftirebilir.",
+        403,
+        "AYAR_DIL_YALNIZ_PATRON"
+      );
     const degisiklik = ayarGuncellemesiniDogrula(req.body);
     res.json({
       basarili: true,

@@ -48,6 +48,7 @@ const METIN_ALANLARI = [
 
 export type DetayFormuSonucu =
   | { degisiklikler: Partial<Siparis>; hata?: undefined }
+  /** `hata` is a translation key in the `siparis` namespace (docs/i18n.md). */
   | { hata: string; degisiklikler?: undefined };
 
 /** Formun siparişe göre değişen alanları; geçersiz alış fiyatında hata. */
@@ -63,8 +64,7 @@ export function detayFormuDegisiklikleri(siparis: Siparis, form: DetayFormu): De
       if (siparis.kanada_alis_fiyati_cad != null) degisiklikler.kanada_alis_fiyati_cad = null;
     } else {
       const sayi = Number(fiyat);
-      if (!Number.isFinite(sayi) || sayi < 0)
-        return { hata: 'Alış fiyatı (CAD) geçerli bir sayı olmalı.' };
+      if (!Number.isFinite(sayi) || sayi < 0) return { hata: 'detay.alisFiyatiGecersiz' };
       if (sayi !== siparis.kanada_alis_fiyati_cad) degisiklikler.kanada_alis_fiyati_cad = sayi;
     }
   }

@@ -1,0 +1,79 @@
+{
+  "detay": {
+    "kimlikRozeti": "ID",
+    "baslik": "Order details: {{musteri}}",
+    "olusturulma": "Created: {{tarih}} • Channel: {{kanal}}",
+    "hamMesaj": "The customer's original message",
+    "aiGirisi": "AI intake",
+    "finans": "Payment status",
+    "toplam": "Total:",
+    "tahsilEdilen": "Collected (Baku):",
+    "kalanBorc": "Balance due:",
+    "lojistik": "Logistics status",
+    "sehir": "Delivery city:",
+    "sehirVarsayilan": "Baku",
+    "adres": "Address:",
+    "belirtilmeyib": "Not given",
+    "elaqe": "Contact:",
+    "telefonYoxdur": "No phone",
+    "kanada": {
+      "baslik": "🇨🇦 Canada purchase receipt / invoice and store",
+      "etiket": "Canada operations",
+      "magaza": "Store / mall",
+      "magazaOrnek": "e.g. Toronto Eaton Centre (Zara / Sephora)",
+      "alisTutari": "Purchase price in Canada (CAD $)",
+      "fatura": "Receipt / invoice photo or document",
+      "faturaYukle": "Upload receipt / invoice photo",
+      "faturaGorseli": "Invoice",
+      "faturaYuklendi": "Receipt uploaded",
+      "kaldir": "Remove",
+      "faturaYoxdur": "No receipt uploaded"
+    },
+    "baki": {
+      "baslik": "Baku courier and customs (FIN) details",
+      "etiket": "Delivery in Baku",
+      "fin": "Customer FIN code / Smart Customs (customs recipient)",
+      "finOrnek": "e.g. 7ABC123 (7-character FIN)",
+      "finNotu": "* Declared as the official recipient on the air waybill."
+    },
+    "notlar": {
+      "baslik": "Tracking codes and payment notes",
+      "kanadaKodu": "🇨🇦 Canada store / cargo code",
+      "kanadaKoduYarat": "Generate a new Canada tracking code",
+      "avtoYarat": "Generate",
+      "kargoKodu": "✈️ International air cargo code",
+      "kargoKoduYarat": "Generate a new international air cargo code",
+      "talimat": "Customer's delivery and driver / operations instructions",
+      "talimatEtiket": "Cargo / hand delivery",
+      "talimatOrnek": "e.g. Let us know when it arrives in Baku; our driver will collect it (no cargo, hand delivery)",
+      "talimatNotu": "* This note appears on the cargo manifest and the Baku delivery report; the driver, the courier and our Baku contact follow it.",
+      "tahsilat": "Baku payment note",
+      "tahsilatOrnek": "e.g. 20 AZN paid by hand in Baku, the rest later..."
+    },
+    "kaydedildi": "Order notes and tracking codes were updated.",
+    "whatsapp": {
+      "baslik": "Ready WhatsApp message for the customer",
+      "eksikBilgi": "The AI found that this order is missing: {{eksikler}}",
+      "teslimat": "Message to the customer for the Baku delivery step:",
+      "ac": "Open WhatsApp message"
+    },
+    "saxlanildi": "Saved",
+    "yaddaSaxla": "Save",
+    "degisiklikYok": "No changes.",
+    "kaydedilmedi": "Not saved. See the notification for the reason.",
+    "faturaCokBuyuk": "The invoice image can be at most 3 MB.",
+    "alisFiyatiGecersiz": "The purchase price (CAD) must be a valid number."
+  },
+  "finans": {
+    "BEKLIYOR": "Unpaid",
+    "KISMI_ODEME": "Partly paid",
+    "ODENDI": "Paid"
+  },
+  "lojistik": {
+    "KANADA_SATINALIM_BEKLIYOR": "Awaiting purchase in Canada",
+    "KANADA_DEPO": "In the Canada warehouse",
+    "ULUSLARARASI_KARGO": "In international cargo",
+    "BAKU_DAGITIM_ARKADAS": "Out for delivery in Baku",
+    "TESLIM_EDILDI": "Delivered"
+  }
+}

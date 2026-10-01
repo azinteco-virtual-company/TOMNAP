@@ -1,50 +1,18 @@
 /**
- * PDF Yardımcı Fonksiyonları
- * jsPDF standart fontlarında (Helvetica/Times) bozuk çıkan Unicode (Azerbaycan & Türkçe)
- * karakterleri ve sembolleri temiz, okunaklı Latin karakterlerine dönüştürür.
- * Böylece 'ə' harfi 'Y'ye, 'ş' harfi '_'ye, 'ı' harfi '1'e, '➔' sembolü '"'e dönüşmez.
+ * PDF metni (docs/i18n.md). PDF'ler artık Unicode bir fontla (Noto Sans, src/i18n/pdfFontu.ts)
+ * yazılır: harfler (ə, ş, ğ, ı, Kiril ...) OLDUĞU GİBİ kalır. Eskiden ə→e, ş→s gibi
+ * dönüştürülürdü; o dönüştürme kalktı. Burada yalnız fontta olmayan semboller sadeleşir:
+ * oklar yazıyla, onay işaretleri ve emojiler çıkarılır.
  */
-
 export function cleanPdfText(text: string | number | null | undefined): string {
   if (text === null || text === undefined) return '';
-  const str = String(text);
-
-  return (
-    str
-      // Azerbaycan ve Türkçe Küçük Harfler
-      .replace(/ə/g, 'e')
-      .replace(/ı/g, 'i')
-      .replace(/ğ/g, 'g')
-      .replace(/ş/g, 's')
-      .replace(/ç/g, 'c')
-      .replace(/ö/g, 'o')
-      .replace(/ü/g, 'u')
-      // Azerbaycan ve Türkçe Büyük Harfler
-      .replace(/Ə/g, 'E')
-      .replace(/İ/g, 'I')
-      .replace(/I/g, 'I')
-      .replace(/Ğ/g, 'G')
-      .replace(/Ş/g, 'S')
-      .replace(/Ç/g, 'C')
-      .replace(/Ö/g, 'O')
-      .replace(/Ü/g, 'U')
-      // Semboller ve Oklar
-      .replace(/➔/g, '->')
-      .replace(/→/g, '->')
-      .replace(/←/g, '<-')
-      .replace(/•/g, '-')
-      .replace(/✈️/g, '[Kargo]')
-      .replace(/✓/g, '[OK]')
-      .replace(/✔/g, '[OK]')
-      .replace(/📌/g, '')
-      .replace(/💬/g, '')
-      .replace(/📦/g, '')
-      .replace(/💰/g, '')
-      // Tipografik tırnak ve tireler
-      .replace(/[\u2018\u2019]/g, "'")
-      .replace(/[\u201C\u201D]/g, '"')
-      .replace(/[\u2013\u2014]/g, '-')
-  );
+  return String(text)
+    .replace(/[➔→]/g, '->')
+    .replace(/←/g, '<-')
+    .replace(/[✓✔]\uFE0F?/g, '')
+    .replace(/\p{Extended_Pictographic}\uFE0F?/gu, '')
+    .replace(/ {2,}/g, ' ')
+    .replace(/^ +| +$/gm, '');
 }
 
 import type { GuvenliHtml } from './guvenliHtml';

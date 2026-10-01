@@ -24,6 +24,8 @@ interface SessionPayload {
   kullanici: SessionUser;
   csrfToken: string;
   expiresAt: string;
+  /** The boutique's default language (docs/i18n.md); absent from older servers. */
+  butikDili?: unknown;
 }
 interface AppState {
   session: SessionUser | null;
@@ -31,6 +33,9 @@ interface AppState {
     'loading' | 'authenticated' | 'anonymous' | 'error' | 'logout-pending' | 'logout-error';
   sessionError: string | null;
   expiresAt: string | null;
+  /** The session boutique's default language; documents print in it. */
+  butikDili: string | null;
+  setButikDili: (dil: string) => void;
   restoreSession: () => Promise<void>;
   login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -104,6 +109,7 @@ function acceptSession(data: SessionPayload) {
     sessionStatus: 'authenticated',
     sessionError: null,
     expiresAt: data.expiresAt,
+    butikDili: typeof data.butikDili === 'string' ? data.butikDili : null,
     aktifRol: data.kullanici.rol,
     seciliFirmaId: data.kullanici.tenantId,
   });
@@ -115,6 +121,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessionStatus: 'loading',
   sessionError: null,
   expiresAt: null,
+  butikDili: null,
   seciliFirmaId: '',
   aktifRol: null,
   dbKaynak: 'supabase',
@@ -128,10 +135,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       sessionStatus: 'anonymous',
       sessionError: null,
       expiresAt: null,
+      butikDili: null,
       seciliFirmaId: '',
       aktifRol: null,
     });
   },
+  setButikDili: (dil) => set({ butikDili: dil }),
   restoreSession: () => {
     if (restoration) return restoration;
     set({ sessionStatus: 'loading', sessionError: null });

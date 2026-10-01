@@ -339,7 +339,9 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - **Sahip:** Belirtilmezse oluşturan kişi olur. PATRON ya da SUPER_ADMIN, tenant'ın
       aktif bir PATRON ya da SATIS_SORUMLUSU'sunu sahip seçebilir. **Karar:** SUPER_ADMIN
       ekip üyesi değil, prim alamaz; sipariş açarsa sahibi seçmek zorunda ve hiçbir zaman
-      sahip olamaz (migration `20260925100000_siparis_sahibi_kurali`, sunucu ve form). Satış sorumlusu yalnız kendi siparişinin
+      sahip olamaz (migration `20260925100000_siparis_sahibi_kurali`, sunucu ve form). **Karar
+      yeniden teyit edildi (1 Ekim 2026, Deploy 3 sonrası):** SUPER_ADMIN v2'de sipariş
+      formunu görmeye devam eder; para, aşama ve kasa yazmaz. Satış sorumlusu yalnız kendi siparişinin
       sahibi olabilir. RPC sahibin satırını `FOR SHARE` ile kilitliyor: eşzamanlı
       pasifleştirme ya siparişi bekler ya da siparişi durdurur.
     - **v1 ile birlikte yaşama:**
@@ -579,3 +581,31 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
       sorulur. Metin v2 ekranlarının dili olan Azerbaycan dilinde.
     - **Geçici:** Faz C'de birim ekseni gelince köprü birimi olan siparişi reddedecek, sonra
       kaldırılacak (fonksiyon yorumu ve `COMMENT ON FUNCTION` "TEMPORARY" der).
+
+39. **Giriş öncesinde elle seçilen dil (i18n; varsayım, 1 Ekim 2026).**
+    - **Karar metni:** Giriş öncesi "cihaz dili > en", giriş sonrası "elle seçim > butik dili >
+      cihaz dili > en". Giriş sayfasında da dil seçici var ve tercih cihazda saklanır.
+    - **Varsayım:** Bu cihazda elle seçilmiş dil giriş öncesinde de ilk sıradadır (elle seçim >
+      cihaz dili > en). Yoksa giriş sayfasında seçilen dil sayfa yenilenince kaybolurdu.
+      Tek fonksiyon: `src/shared/dilSecimi.ts`; testi bu sırayı sınar.
+    - **Soru:** Doğru mu? Yanlışsa tek satırlık değişiklik: giriş öncesinde elle seçimi atla.
+
+40. **Para, sayı ve tarih biçimi her dilde aynı (i18n; varsayım, 1 Ekim 2026).**
+    - **Karar metni:** Biçimler tek yardımcıdan (Intl; AZN/CAD/USD), `bakuTarihi` saat dilimini
+      parametre alır, davranış değişmez; v2 ekranlarında görünüm aynı kalır.
+    - **Varsayım:** Görünüm değişmesin diye her dilde aynı biçim: "5.00 AZN" (nokta ondalık, kod
+      sonda), "30.09.2026 12:56". Azerbaycan dilinin kendi biçimi (virgül ondalık, "5,00 ₼")
+      ayrı bir karar; o gün yalnız `src/i18n/bicim.ts` değişir.
+
+41. **i18n geçiş dönemi (bilinen durum, 1 Ekim 2026).**
+    - Taşınan ekranlar: giriş, kayıt, davet kabulü, şifre belirleme, v1 sipariş detayı, kargo
+      manifestosu, v2 ayarları; belgeler (manifesto, etiket, tahsilat listesi, Excel, PDF,
+      WhatsApp metinleri). Liste: `tests/client/i18nKurallari.test.ts` → `TASINAN_DOSYALAR`.
+    - v1'in geri kalanı dokunuldukça taşınır; toplu taşıma yok. Eski sözlük
+      (`src/context/DilKonteksti.tsx`) köprüdür: dili artık tek kuraldan alır.
+    - **Bilinen durum:** İngilizce cihazda taşınmamış v1 ekranları eski dillerinde (çoğu
+      Azerbaycan, kısmen Türkçe) görünür. Eski sözlüğün `ru` çevirileri yerinde ama `ru`
+      desteklenen listede değil; seçicide çıkmaz.
+    - Elle dil seçmemiş kullanıcı giriş sonrasında artık butiğin dilini (varsayılan `az`) görür;
+      eskiden eski sözlüğün varsayılanı İngilizceydi.
+

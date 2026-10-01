@@ -55,6 +55,8 @@ GUARDRAIL — bu projedeki her görev için geçerli:
   ile girer (squash yok). Merge öncesi dal main'in gerisindeyse main'i dala merge et ve
   api/ paketini yeniden derle. Merge yayın değildir (vercel.json'da main deploy kapalı);
   yayını yalnız ben yaparım. git çalışmıyorsa dur ve bana söyle.
+- Yeni ya da dokunulan ekranda kullanıcıya görünen metin yalnız çeviri anahtarıyla yazılır; az ve en
+  dosyaları birlikte güncellenir (docs/i18n.md).
 - Yeni kod TypeScript strict kurallarına uygun yazılsın (any ve ts-ignore yok).
 - Yeni istemci bileşenleri 400 satırı geçmesin; geçiyorsa böl. Yeni v2 ekranları
   React.lazy ile yüklensin; ilk yük paketine girmesin.

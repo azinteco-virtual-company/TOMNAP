@@ -81,14 +81,14 @@ test('print templates show order text as plain text and run none of it (Codex R4
     };
 
     await page.goto('/kargo-manifest');
-    await page.getByRole('button', { name: /^Bütün Sifarişlər/ }).click();
+    await page.getByRole('button', { name: /^Bütün sifarişlər/ }).click();
     const manifest = await printFrame('Kargo_Manifestosu', () =>
-      page.getByRole('button', { name: /^(Manifesto Çap Et|Print Manifest)$/ }).click()
+      page.getByRole('button', { name: /^(Manifesti çap et|Print manifest)$/ }).click()
     );
     await expectPlainText(manifest, Object.values(payloads));
     const labels = await printFrame('Kargo_Etiketleri', () =>
       page
-        .getByRole('button', { name: /^(Paket Stikerləri \(Barkod\)|Package Labels \(Barcode\))$/ })
+        .getByRole('button', { name: /^(Paket etiketləri \(barkod\)|Package labels \(barcode\))$/ })
         .click()
     );
     await expectPlainText(labels, [payloads.musteri_adi, payloads.urun_aciklamasi]);

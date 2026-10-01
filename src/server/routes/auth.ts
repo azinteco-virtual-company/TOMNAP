@@ -6,6 +6,7 @@ import { sifreHashle, sifreDogrula } from '../services/crypto';
 import { supabase } from '../services/supabase';
 import { DavetKaydi, KullaniciKaydi } from '../types';
 import { createSession, readSession, revokeSession } from '../services/sessions';
+import { butikDiliniOku } from '../services/v2/ayarlar';
 import { ekipRoluMu } from '../../shared/roller';
 
 const router = Router();
@@ -82,13 +83,17 @@ async function findFirma(tenantId: string) {
 router.get(['/auth/token-kontrol/:token', '/firmalar/davet/:token'], async (req, res) => {
   try {
     const token = req.params.token.trim();
-    if (!token) return res.status(400).json({ basarili: false, hata: 'Token təqdim edilməyib.' });
+    if (!token)
+      return res
+        .status(400)
+        .json({ basarili: false, hata: 'Token təqdim edilməyib.', kod: 'TOKEN_YOK' });
     const user = await findActivationUser(token);
     if (user) {
       if (!isPendingActivation(user, token)) {
         return res.status(400).json({
           basarili: false,
           hata: 'Bu aktivasiya linki etibarsızdır və ya vaxtı bitmişdir.',
+          kod: 'AKTIVASIYA_LINKI_GECERSIZ',
         });
       }
       const firma = await findFirma(user.tenant_id);
@@ -108,6 +113,7 @@ router.get(['/auth/token-kontrol/:token', '/firmalar/davet/:token'], async (req,
         return res.status(400).json({
           basarili: false,
           hata: 'Bu dəvət linki etibarsızdır, istifadə edilib və ya vaxtı bitmişdir.',
+          kod: 'DAVET_LINKI_GECERSIZ',
         });
       }
       const firma = await findFirma(invite.tenantId);
@@ -126,11 +132,13 @@ router.get(['/auth/token-kontrol/:token', '/firmalar/davet/:token'], async (req,
     return res.status(404).json({
       basarili: false,
       hata: 'Aktivasiya və ya dəvət linki etibarsızdır və ya tapılmadı.',
+      kod: 'LINK_BULUNAMADI',
     });
   } catch {
     return res.status(503).json({
       basarili: false,
       hata: 'Token hazırda yoxlanıla bilmir. Daha sonra yenidən cəhd edin.',
+      kod: 'TOKEN_GECICI_HATA',
     });
   }
 });
@@ -139,21 +147,27 @@ router.post(['/auth/sifre-belirle', '/firmalar/davet/katil'], async (req, res) =
   try {
     const { token, sifre, adSoyad, telefon, email } = req.body || {};
     if (typeof token !== 'string' || !token.trim()) {
-      return res.status(400).json({ basarili: false, hata: 'Təhlükəsizlik tokeni mütləqdir.' });
-    }
-    if (typeof sifre !== 'string' || sifre.length < 6 || sifre.length > 1024) {
       return res
         .status(400)
-        .json({ basarili: false, hata: 'Şifrə ən azı 6 simvoldan ibarət olmalıdır.' });
+        .json({ basarili: false, hata: 'Təhlükəsizlik tokeni mütləqdir.', kod: 'TOKEN_YOK' });
+    }
+    if (typeof sifre !== 'string' || sifre.length < 6 || sifre.length > 1024) {
+      return res.status(400).json({
+        basarili: false,
+        hata: 'Şifrə ən azı 6 simvoldan ibarət olmalıdır.',
+        kod: 'SIFRE_KISA',
+      });
     }
     if (
       (adSoyad !== undefined && (typeof adSoyad !== 'string' || adSoyad.trim().length > 150)) ||
       (telefon !== undefined &&
         (typeof telefon !== 'string' || (telefon.trim() && !normalizePhone(telefon.trim()))))
     ) {
-      return res
-        .status(400)
-        .json({ basarili: false, hata: 'Ad və telefon məlumatlarını yoxlayın.' });
+      return res.status(400).json({
+        basarili: false,
+        hata: 'Ad və telefon məlumatlarını yoxlayın.',
+        kod: 'AD_TELEFON_GECERSIZ',
+      });
     }
     const cleanToken = token.trim();
     const user = await findActivationUser(cleanToken);
@@ -162,6 +176,7 @@ router.post(['/auth/sifre-belirle', '/firmalar/davet/katil'], async (req, res) =
         return res.status(400).json({
           basarili: false,
           hata: 'Bu aktivasiya linki etibarsızdır və ya vaxtı bitmişdir.',
+          kod: 'AKTIVASIYA_LINKI_GECERSIZ',
         });
       }
       const { user: activatedUser, firma } = await activateUser(cleanToken, {
@@ -189,20 +204,24 @@ router.post(['/auth/sifre-belirle', '/firmalar/davet/katil'], async (req, res) =
       return res.status(404).json({
         basarili: false,
         hata: 'Bu tokenə uyğun gözləyən qeydiyyat və ya dəvət tapılmadı.',
+        kod: 'BEKLEYEN_KAYIT_YOK',
       });
     if (!isAvailableInvite(invite, cleanToken)) {
       return res.status(400).json({
         basarili: false,
         hata: 'Bu dəvət etibarsızdır, istifadə edilib və ya vaxtı bitmişdir.',
+        kod: 'DAVET_GECERSIZ',
       });
     }
     if (
       (email !== undefined && typeof email !== 'string') ||
       (telefon !== undefined && typeof telefon !== 'string')
     ) {
-      return res
-        .status(400)
-        .json({ basarili: false, hata: 'E-poçt və telefon mətn formatında olmalıdır.' });
+      return res.status(400).json({
+        basarili: false,
+        hata: 'E-poçt və telefon mətn formatında olmalıdır.',
+        kod: 'EPOSTA_TELEFON_BICIMI',
+      });
     }
     if (
       invite.email &&
@@ -210,9 +229,11 @@ router.post(['/auth/sifre-belirle', '/firmalar/davet/katil'], async (req, res) =
       email.trim() &&
       email.trim().toLowerCase() !== invite.email.trim().toLowerCase()
     ) {
-      return res
-        .status(403)
-        .json({ basarili: false, hata: 'E-poçt ünvanı dəvətdəki ünvanla uyğun gəlmir.' });
+      return res.status(403).json({
+        basarili: false,
+        hata: 'E-poçt ünvanı dəvətdəki ünvanla uyğun gəlmir.',
+        kod: 'DAVET_EPOSTA_UYUSMUYOR',
+      });
     }
     const userEmail =
       (typeof invite.email === 'string' ? invite.email.trim().toLowerCase() : '') ||
@@ -226,12 +247,20 @@ router.post(['/auth/sifre-belirle', '/firmalar/davet/katil'], async (req, res) =
       return res.status(400).json({
         basarili: false,
         hata: 'Sonradan giriş üçün etibarlı e-poçt ünvanı və ya telefon nömrəsi daxil edin.',
+        kod: 'GIRIS_KIMLIGI_GECERSIZ',
       });
     }
     const firma = await findFirma(invite.tenantId);
-    if (!firma) return res.status(404).json({ basarili: false, hata: 'Əlaqəli butik tapılmadı.' });
+    if (!firma)
+      return res
+        .status(404)
+        .json({ basarili: false, hata: 'Əlaqəli butik tapılmadı.', kod: 'BUTIK_BULUNAMADI' });
     if (!isAvailableInvite(invite, cleanToken)) {
-      return res.status(400).json({ basarili: false, hata: 'Bu dəvət artıq etibarlı deyil.' });
+      return res.status(400).json({
+        basarili: false,
+        hata: 'Bu dəvət artıq etibarlı deyil.',
+        kod: 'DAVET_ARTIK_GECERSIZ',
+      });
     }
     const newUser: KullaniciKaydi = {
       id: 'usr_' + randomUUID(),
@@ -268,10 +297,13 @@ router.post(['/auth/sifre-belirle', '/firmalar/davet/katil'], async (req, res) =
     });
   } catch (error) {
     if (error instanceof OnboardingError)
-      return res.status(error.status).json({ basarili: false, hata: error.message });
+      return res
+        .status(error.status)
+        .json({ basarili: false, hata: error.message, ...(error.kod ? { kod: error.kod } : {}) });
     return res.status(503).json({
       basarili: false,
       hata: 'Şifrə hazırda təyin edilə bilmir. Daha sonra yenidən cəhd edin.',
+      kod: 'SIFRE_GECICI_HATA',
     });
   }
 });
@@ -329,18 +361,26 @@ router.post(['/auth/giris', '/firmalar/giris'], async (req, res) => {
     const { identifikator, email, kullaniciAdi, telefon, kod, sifre } = req.body || {};
     const identifier = identifikator || email || kullaniciAdi || telefon || kod;
     if (typeof identifier !== 'string' || !identifier.trim() || identifier.length > 254) {
-      return res
-        .status(400)
-        .json({ basarili: false, hata: 'E-poçt ünvanınızı və ya telefon nömrənizi daxil edin.' });
+      return res.status(400).json({
+        basarili: false,
+        hata: 'E-poçt ünvanınızı və ya telefon nömrənizi daxil edin.',
+        kod: 'GIRIS_KIMLIK_EKSIK',
+      });
     }
     if (typeof sifre !== 'string' || !sifre || sifre.length > 1024) {
-      return res.status(400).json({ basarili: false, hata: 'Zəhmət olmasa şifrənizi daxil edin.' });
+      return res.status(400).json({
+        basarili: false,
+        hata: 'Zəhmət olmasa şifrənizi daxil edin.',
+        kod: 'GIRIS_SIFRE_EKSIK',
+      });
     }
     const user = await findLoginUser(identifier.trim());
     if (!user) {
-      return res
-        .status(404)
-        .json({ basarili: false, hata: 'Bu məlumatlara uyğun aktiv istifadəçi tapılmadı.' });
+      return res.status(404).json({
+        basarili: false,
+        hata: 'Bu məlumatlara uyğun aktiv istifadəçi tapılmadı.',
+        kod: 'GIRIS_KULLANICI_YOK',
+      });
     }
     if (user.durum !== 'AKTIF') {
       return res.status(403).json({
@@ -349,10 +389,16 @@ router.post(['/auth/giris', '/firmalar/giris'], async (req, res) => {
           user.durum === 'BEKLEMEDE_SIFRE'
             ? 'Hesabınız hələ aktivləşdirilməyib. E-poçt ünvanınıza göndərilən linkdən şifrənizi təyin edin.'
             : 'Hesabınız aktiv deyil.',
+        kod:
+          user.durum === 'BEKLEMEDE_SIFRE' ? 'GIRIS_HESAP_AKTIF_DEGIL_SIFRE' : 'GIRIS_HESAP_PASIF',
       });
     }
     if (!user.sifre_hash || !sifreDogrula(sifre, user.sifre_hash)) {
-      return res.status(401).json({ basarili: false, hata: 'Daxil edilmiş şifrə yanlışdır.' });
+      return res.status(401).json({
+        basarili: false,
+        hata: 'Daxil edilmiş şifrə yanlışdır.',
+        kod: 'GIRIS_SIFRE_YANLIS',
+      });
     }
     const firma = user.rol === 'SUPER_ADMIN' ? undefined : await findFirma(user.tenant_id);
     const session = await createSession(user, res);
@@ -372,12 +418,14 @@ router.post(['/auth/giris', '/firmalar/giris'], async (req, res) => {
       },
       firma,
       ...session,
+      butikDili: await butikDiliniOku(tenantId),
       mesaj: `Xoş gəldiniz, ${user.ad_soyad}!`,
     });
   } catch {
     return res.status(503).json({
       basarili: false,
       hata: 'Giriş hazırda yoxlanıla bilmir. Daha sonra yenidən cəhd edin.',
+      kod: 'GIRIS_GECICI_HATA',
     });
   }
 });
@@ -386,15 +434,23 @@ router.get('/auth/oturum', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   try {
     const session = req.auth || (await readSession(req));
-    if (!session) return res.status(401).json({ basarili: false, hata: 'Giriş tələb olunur.' });
+    if (!session)
+      return res
+        .status(401)
+        .json({ basarili: false, hata: 'Giriş tələb olunur.', kod: 'OTURUM_GEREKLI' });
     return res.json({
       basarili: true,
       kullanici: session.kullanici,
       csrfToken: session.csrfToken,
       expiresAt: session.expiresAt,
+      butikDili: await butikDiliniOku(session.kullanici.tenantId),
     });
   } catch {
-    return res.status(503).json({ basarili: false, hata: 'Oturum hazırda yoxlanıla bilmir.' });
+    return res.status(503).json({
+      basarili: false,
+      hata: 'Oturum hazırda yoxlanıla bilmir.',
+      kod: 'OTURUM_GECICI_HATA',
+    });
   }
 });
 
@@ -405,9 +461,11 @@ router.post('/auth/cikis', async (req, res) => {
     await revokeSession(req, res);
     return res.json({ basarili: true });
   } catch {
-    return res
-      .status(503)
-      .json({ basarili: false, hata: 'Oturum ləğv edilə bilmədi. Yenidən cəhd edin.' });
+    return res.status(503).json({
+      basarili: false,
+      hata: 'Oturum ləğv edilə bilmədi. Yenidən cəhd edin.',
+      kod: 'CIKIS_GECICI_HATA',
+    });
   }
 });
 

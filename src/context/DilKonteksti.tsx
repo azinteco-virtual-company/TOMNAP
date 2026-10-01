@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext } from 'react';
+import { useTranslation } from 'react-i18next';
+import { elleDilSec } from '../i18n';
 
 export type DilKodu = 'az' | 'en' | 'ru';
 
@@ -161,7 +163,8 @@ const SOZLUKLER: Record<DilKodu, Sozluk> = {
     inboxTesdiqGozleyen: 'Gələn Qutusu: Təsdiq Gözləyən Sifarişlər',
 
     bannerBaslik: 'WhatsApp Qrupu & Görsəl Sifariş Masası',
-    bannerAciklama: 'Qrupdan gələn məhsul şəkillərini və söhbət notlarını tək toxunuşla yükləyib Gemini AI ilə sifarişə çevirin.',
+    bannerAciklama:
+      'Qrupdan gələn məhsul şəkillərini və söhbət notlarını tək toxunuşla yükləyib Gemini AI ilə sifarişə çevirin.',
     bannerAc: 'Görsəl Masanı Aç',
 
     sira: '№',
@@ -249,7 +252,7 @@ const SOZLUKLER: Record<DilKodu, Sozluk> = {
     bolge: 'Bölgə',
     telefonYoxdur: 'Telefon qeyd olunmayıb',
     unvanYoxdur: 'Ünvan qeyd olunmayıb',
-    paketTapilmadi: 'Bu filtr üzrə çatdırılma paketi tapılmadı.'
+    paketTapilmadi: 'Bu filtr üzrə çatdırılma paketi tapılmadı.',
   },
 
   en: {
@@ -280,7 +283,8 @@ const SOZLUKLER: Record<DilKodu, Sozluk> = {
     inboxTesdiqGozleyen: 'Inbox: Pending Order Approvals',
 
     bannerBaslik: 'WhatsApp Group & Visual Order Desk',
-    bannerAciklama: 'Upload customer order photos and chat messages instantly to convert them into orders using Gemini AI.',
+    bannerAciklama:
+      'Upload customer order photos and chat messages instantly to convert them into orders using Gemini AI.',
     bannerAc: 'Open Visual Desk',
 
     sira: '#',
@@ -368,7 +372,7 @@ const SOZLUKLER: Record<DilKodu, Sozluk> = {
     bolge: 'Zone',
     telefonYoxdur: 'No phone provided',
     unvanYoxdur: 'No address provided',
-    paketTapilmadi: 'No delivery packages found matching this filter.'
+    paketTapilmadi: 'No delivery packages found matching this filter.',
   },
 
   ru: {
@@ -399,7 +403,8 @@ const SOZLUKLER: Record<DilKodu, Sozluk> = {
     inboxTesdiqGozleyen: 'Входящие: Заказы на подтверждении',
 
     bannerBaslik: 'Группа WhatsApp и Стол Визуальных Заказов',
-    bannerAciklama: 'Загружайте фотографии товаров и текст из чатов в один клик, превращая их в заказы с помощью Gemini AI.',
+    bannerAciklama:
+      'Загружайте фотографии товаров и текст из чатов в один клик, превращая их в заказы с помощью Gemini AI.',
     bannerAc: 'Открыть Фото-Стол',
 
     sira: '№',
@@ -487,8 +492,8 @@ const SOZLUKLER: Record<DilKodu, Sozluk> = {
     bolge: 'Район',
     telefonYoxdur: 'Телефон не указан',
     unvanYoxdur: 'Адрес не указан',
-    paketTapilmadi: 'По данному фильтру посылок не найдено.'
-  }
+    paketTapilmadi: 'По данному фильтру посылок не найдено.',
+  },
 };
 
 interface DilKontekstiTipi {
@@ -500,33 +505,23 @@ interface DilKontekstiTipi {
 const DilKonteksti = createContext<DilKontekstiTipi>({
   dil: 'en',
   setDil: () => {},
-  t: SOZLUKLER.en
+  t: SOZLUKLER.en,
 });
 
+/**
+ * Eski sözlük (az/en/ru) yerinde kalır; dil artık tek kuraldan gelir (src/i18n, docs/i18n.md).
+ * Ekranlar dokunuldukça çeviri anahtarlarına taşınır; bu sağlayıcı geçiş dönemi köprüsüdür.
+ */
 export const DilSaglayici: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [dil, setDilState] = useState<DilKodu>(() => {
-    try {
-      const kayitli = (localStorage.getItem('tomnap_dil') || localStorage.getItem('knb_dil')) as DilKodu;
-      if (kayitli === 'az' || kayitli === 'en' || kayitli === 'ru') {
-        return kayitli;
-      }
-    } catch {}
-    return 'en'; // Default is English!
-  });
-
-  const setDil = (yeniDil: DilKodu) => {
-    setDilState(yeniDil);
-    try {
-      localStorage.setItem('tomnap_dil', yeniDil);
-    } catch {}
-  };
-
-  const t = SOZLUKLER[dil] || SOZLUKLER.az;
+  const { i18n } = useTranslation();
+  const dil: DilKodu =
+    i18n.language === 'az' || i18n.language === 'en' || i18n.language === 'ru'
+      ? i18n.language
+      : 'en';
+  const t = SOZLUKLER[dil] || SOZLUKLER.en;
 
   return (
-    <DilKonteksti.Provider value={{ dil, setDil, t }}>
-      {children}
-    </DilKonteksti.Provider>
+    <DilKonteksti.Provider value={{ dil, setDil: elleDilSec, t }}>{children}</DilKonteksti.Provider>
   );
 };
 

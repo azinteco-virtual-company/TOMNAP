@@ -15,6 +15,9 @@ export const fixture = {
   orderB: '22222222-2222-4222-8222-222222222222',
   customerA: 'Synthetic Customer Alpha',
   customerB: 'Synthetic Customer Beta',
+  // B1 (Deploy 3): a long boutique name for the manifest layout check.
+  boutiqueB:
+    'Synthetic Boutique B — Uzun Adlı Kanada–Bakı Moda, Ayaqqabı və Aksesuar Evi (Toronto / Vancouver / Bakı)',
   cargoPassword: 'Synthetic-carrier-secret!42',
   png: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=',
 };
