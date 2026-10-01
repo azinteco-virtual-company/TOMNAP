@@ -24,6 +24,8 @@ import {
 import { loadSpreadsheet, loadPdf, reportDocumentError } from '../utils/documentLibraries';
 import { cleanPdfText, safePrintHtml } from '../utils/pdfHelpers';
 import { html } from '../utils/guvenliHtml';
+import { pdfFontuYukle } from '../i18n/pdfFontu';
+import { belgeDili } from '../i18n';
 
 interface KargoManifestoModalProps {
   siparisler: Siparis[];
@@ -395,6 +397,9 @@ export const KargoManifestoModal: React.FC<KargoManifestoModalProps> = ({
         unit: 'mm',
         format: 'a4',
       });
+      // Unicode font (docs/i18n.md): letters stay as they are; cleanPdfText no longer
+      // turns ə into e.
+      const font = await pdfFontuYukle(doc, belgeDili());
 
       // Başlık alanı
       doc.setFillColor(15, 23, 42);
@@ -402,7 +407,7 @@ export const KargoManifestoModal: React.FC<KargoManifestoModalProps> = ({
 
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(13);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(font, 'bold');
       doc.text(
         cleanPdfText('KNB LOJISTIK -- KANADA - BAKU KARGO MANIFESTOSU & CEKI LISTESI'),
         14,
@@ -410,7 +415,7 @@ export const KargoManifestoModal: React.FC<KargoManifestoModalProps> = ({
       );
 
       doc.setFontSize(8.5);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont(font, 'normal');
       doc.setTextColor(203, 213, 225);
       doc.text(
         cleanPdfText(
@@ -426,7 +431,7 @@ export const KargoManifestoModal: React.FC<KargoManifestoModalProps> = ({
 
       doc.setTextColor(30, 41, 59);
       doc.setFontSize(9);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(font, 'bold');
       doc.text(cleanPdfText(`Toplam Baglama: ${dahilSiparisler.length} eded`), 20, 36);
       doc.text(cleanPdfText(`Toplam Mehsul: ${toplamAdet} eded`), 85, 36);
       doc.text(cleanPdfText(`Toplam Mebleg: ${toplamDeger.toFixed(2)} AZN`), 150, 36);
@@ -489,6 +494,7 @@ export const KargoManifestoModal: React.FC<KargoManifestoModalProps> = ({
         body: tableRows,
         startY: 46,
         theme: 'grid',
+        styles: { font },
         headStyles: {
           fillColor: [30, 41, 59],
           textColor: [255, 255, 255],
@@ -696,43 +702,45 @@ export const KargoManifestoModal: React.FC<KargoManifestoModalProps> = ({
               </thead>
               <tbody>
                 ${dahilSiparisler.map(
-                (s, idx) => html`
-                  <tr>
-                    <td class="text-center">${idx + 1}</td>
-                    <td>
-                      <strong>${s.musteri_adi || '-'}</strong>
-                      <div style="font-size: 10px; color: #475569;">
-                        ${s.telefon_numarasi || ''}
-                      </div>
-                    </td>
-                    <td>
-                      <div>${s.teslimat_sehri || 'Bakı'}</div>
-                      <div style="font-size: 9px; color: #64748b;">${s.teslimat_adresi || ''}</div>
-                    </td>
-                    <td>
-                      <div>${s.urun_aciklamasi || '-'}</div>
-                      <div style="font-size: 9px; color: #64748b;">
-                        ${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}
-                      </div>
-                    </td>
-                    <td class="text-center"><strong>${s.adet || 1}</strong></td>
-                    <td class="text-right">${(s.toplam_tutar || 0).toFixed(2)} AZN</td>
-                    <td class="text-right ${s.kalan_tutar > 0 ? 'debt' : ''}">
-                      ${s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN` : html`<span style="color: #059669;">Ödənilib</span>`}
-                    </td>
-                    <td>
-                      <span class="badge">${getLojistikEtiketi(s.lojistik_durumu).label}</span>
-                      ${s.uluslararasi_kargo_kodu ? html`<div style="font-size: 9px; font-family: monospace; margin-top: 2px;">Kod: ${s.uluslararasi_kargo_kodu}</div>` : ''}
-                      ${s.kanada_takip_kodu ? html`<div style="font-size: 8px; color: #64748b;">${s.kanada_takip_kodu}</div>` : ''}
-                    </td>
-                    <td style="font-size: 9.5px;">
-                      ${s.ozel_not ? html`<div><strong>📌 Not:</strong> ${s.ozel_not}</div>` : ''}
-                      ${s.baku_tahsilat_notu ? html`<div style="color: #92400e; font-style: italic; margin-top: 2px;">💬 ${s.baku_tahsilat_notu}</div>` : ''}
-                      ${!s.ozel_not && !s.baku_tahsilat_notu ? '—' : ''}
-                    </td>
-                  </tr>
-                `
-              )}
+                  (s, idx) => html`
+                    <tr>
+                      <td class="text-center">${idx + 1}</td>
+                      <td>
+                        <strong>${s.musteri_adi || '-'}</strong>
+                        <div style="font-size: 10px; color: #475569;">
+                          ${s.telefon_numarasi || ''}
+                        </div>
+                      </td>
+                      <td>
+                        <div>${s.teslimat_sehri || 'Bakı'}</div>
+                        <div style="font-size: 9px; color: #64748b;">
+                          ${s.teslimat_adresi || ''}
+                        </div>
+                      </td>
+                      <td>
+                        <div>${s.urun_aciklamasi || '-'}</div>
+                        <div style="font-size: 9px; color: #64748b;">
+                          ${[s.beden_veya_olcu, s.renk].filter(Boolean).join(' • ')}
+                        </div>
+                      </td>
+                      <td class="text-center"><strong>${s.adet || 1}</strong></td>
+                      <td class="text-right">${(s.toplam_tutar || 0).toFixed(2)} AZN</td>
+                      <td class="text-right ${s.kalan_tutar > 0 ? 'debt' : ''}">
+                        ${s.kalan_tutar > 0 ? `${s.kalan_tutar.toFixed(2)} AZN` : html`<span style="color: #059669;">Ödənilib</span>`}
+                      </td>
+                      <td>
+                        <span class="badge">${getLojistikEtiketi(s.lojistik_durumu).label}</span>
+                        ${s.uluslararasi_kargo_kodu ? html`<div style="font-size: 9px; font-family: monospace; margin-top: 2px;">Kod: ${s.uluslararasi_kargo_kodu}</div>` : ''}
+                        ${s.kanada_takip_kodu ? html`<div style="font-size: 8px; color: #64748b;">${s.kanada_takip_kodu}</div>` : ''}
+                      </td>
+                      <td style="font-size: 9.5px;">
+                        ${s.ozel_not ? html`<div><strong>📌 Not:</strong> ${s.ozel_not}</div>` : ''}
+                        ${s.baku_tahsilat_notu ? html`<div style="color: #92400e; font-style: italic; margin-top: 2px;">💬 ${s.baku_tahsilat_notu}</div>` : ''}
+                        ${!s.ozel_not && !s.baku_tahsilat_notu ? '—' : ''}
+                      </td>
+                    </tr>
+                  `
+                )}
               </tbody>
             </table>
 
