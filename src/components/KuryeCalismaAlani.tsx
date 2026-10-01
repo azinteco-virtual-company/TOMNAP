@@ -95,6 +95,21 @@ export const KuryeCalismaAlani: React.FC<Props> = ({ userName, onLogout }) => {
     }
   }
 
+  // B3: the cash section reports the server's new amount due; update that card in place
+  // instead of reloading the list (a reload would unmount the section and its notice).
+  function kalanGuncelle(siparisId: string, kalanTutar: number) {
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            gorevler: current.gorevler.map((item) =>
+              item.id === siparisId ? { ...item, kalan_tutar: kalanTutar } : item
+            ),
+          }
+        : current
+    );
+  }
+
   const tasks = useMemo(
     () =>
       (data?.gorevler || []).filter((task) =>
@@ -177,7 +192,7 @@ export const KuryeCalismaAlani: React.FC<Props> = ({ userName, onLogout }) => {
         )}
         {!loading && data?.kurye && KuryeNakitBolumu && (
           <Suspense fallback={null}>
-            <KuryeNakitBolumu />
+            <KuryeNakitBolumu onYazildi={kalanGuncelle} />
           </Suspense>
         )}
         {!loading && data?.kurye && (

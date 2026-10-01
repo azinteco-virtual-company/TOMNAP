@@ -13,7 +13,12 @@ interface NakitDurumu {
  * aldığı nakdi yazma. VITE_FF_V2_FLOW açıkken kurye ekranına ayrı parça olarak eklenir;
  * sunucu bayrağı kapalıysa (404) hiçbir şey göstermez.
  */
-export default function KuryeNakitBolumu() {
+export default function KuryeNakitBolumu({
+  onYazildi,
+}: {
+  /** The server's new amount due for the order, so the task card updates too (B3). */
+  onYazildi?: (siparisId: string, kalanTutar: number) => void;
+}) {
   const [durum, setDurum] = useState<NakitDurumu | null>(null);
   const [kapali, setKapali] = useState(false);
   const [tutarlar, setTutarlar] = useState<Record<string, string>>({});
@@ -46,11 +51,13 @@ export default function KuryeNakitBolumu() {
     setBekliyor(true);
     setMesaj(null);
     try {
-      await apiFetch('/api/v2/kurye/tahsilat', {
+      const response = await apiFetch('/api/v2/kurye/tahsilat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(govde),
       });
+      const { ozet } = (await response.json()) as { ozet?: { kalanTutar?: unknown } };
+      if (typeof ozet?.kalanTutar === 'number') onYazildi?.(siparis.id, ozet.kalanTutar);
       setMesaj(`${govde.tutar_azn.toFixed(2)} AZN nağd yazıldı.`);
       delete islemAnahtarlari.current[siparis.id];
       setTutarlar({ ...tutarlar, [siparis.id]: '' });
