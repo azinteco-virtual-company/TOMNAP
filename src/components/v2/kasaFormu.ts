@@ -2,6 +2,7 @@
  * Kurye nakdi ve kasa teslimi ekranlarının (A11) saf kuralları. Son söz RPC'lerindir.
  */
 import { sayiOku } from './siparisFormu';
+import { v2t } from './v2Ceviri';
 
 export interface AcikTahsilat {
   id: string;
@@ -60,9 +61,9 @@ export function kuryeTahsilatIstegi(
   | { govde: null; hata: string } {
   const deger = sayiOku(tutar);
   if (!Number.isFinite(deger) || deger <= 0 || Math.round(deger * 100) / 100 !== deger)
-    return { govde: null, hata: 'Məbləğ 0-dan böyük, ən çox 2 onluq olmalıdır.' };
+    return { govde: null, hata: v2t('kasa.tutarGecersiz') };
   if (Math.round(deger * 100) > Math.round(siparis.kalanTutar * 100))
-    return { govde: null, hata: `Ən çox ${siparis.kalanTutar.toFixed(2)} AZN yazıla bilər.` };
+    return { govde: null, hata: v2t('kasa.enCox', { mebleg: siparis.kalanTutar.toFixed(2) }) };
   return {
     govde: {
       siparis_id: siparis.id,

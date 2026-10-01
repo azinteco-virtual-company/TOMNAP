@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import {
   bosForm,
   bosSatir,
@@ -9,6 +9,7 @@ import {
   sayiOku,
   type AyristirmaSonucu,
 } from '../../src/components/v2/siparisFormu';
+import { dilHazirla } from '../helpers/i18n';
 
 const oneri: AyristirmaSonucu = {
   oneri: {
@@ -41,6 +42,9 @@ const oneri: AyristirmaSonucu = {
   musteriEslesen: { musteri_id: 'm-1', ad_soyad: 'Aytən Məmmədova' },
   musteriAdaylari: [],
 };
+
+// The texts come from the az translation files (docs/i18n.md); the wording is unchanged.
+beforeAll(() => dilHazirla('az', ['v2']));
 
 describe('v2 order form (A9)', () => {
   it('reads decimal commas and computes line and order totals in cents', () => {

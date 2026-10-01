@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiFetch } from '../../lib/apiClient';
+import { hataMetni } from '../../i18n/hata';
+import { tarihSaat } from '../../i18n/bicim';
 import { azn } from './odemeFormu';
 import { seciliToplam, teslimIstegi, type KuryeBakiyesi } from './kasaFormu';
 
@@ -9,6 +12,7 @@ import { seciliToplam, teslimIstegi, type KuryeBakiyesi } from './kasaFormu';
  * bakiyeleri görür (teslimAlabilir = false).
  */
 export default function KuryeBakiyeleri({ teslimAlabilir }: { teslimAlabilir: boolean }) {
+  const { t } = useTranslation('v2');
   const [kuryeler, setKuryeler] = useState<KuryeBakiyesi[] | null>(null);
   const [secilenKurye, setSecilenKurye] = useState<string | null>(null);
   const [secili, setSecili] = useState<Set<string>>(new Set());
@@ -20,9 +24,9 @@ export default function KuryeBakiyeleri({ teslimAlabilir }: { teslimAlabilir: bo
       const response = await apiFetch('/api/v2/kasa/kurye-bakiyeleri');
       setKuryeler(((await response.json()) as { kuryeler: KuryeBakiyesi[] }).kuryeler);
     } catch (error) {
-      setMesaj(error instanceof Error ? error.message : 'Kuryer qalıqları yüklənmədi.');
+      setMesaj(hataMetni(error, t('kasa.kurye.yuklenmedi')));
     }
-  }, []);
+  }, [t]);
   useEffect(() => {
     void yukle();
   }, [yukle]);
@@ -54,13 +58,13 @@ export default function KuryeBakiyeleri({ teslimAlabilir }: { teslimAlabilir: bo
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(govde),
       });
-      setMesaj(`${azn(govde.tutar_azn)} kassaya təhvil alındı.`);
+      setMesaj(t('kasa.kurye.alindi', { mebleg: azn(govde.tutar_azn) }));
       // B6: the hand-over is done; close the panel, the table shows the new balance.
       setSecilenKurye(null);
       setSecili(new Set());
       await yukle();
     } catch (error) {
-      setMesaj(error instanceof Error ? error.message : 'Təhvil alınmadı.');
+      setMesaj(hataMetni(error, t('kasa.kurye.alinmadi')));
     } finally {
       setBekliyor(false);
     }
@@ -69,19 +73,19 @@ export default function KuryeBakiyeleri({ teslimAlabilir }: { teslimAlabilir: bo
   return (
     <section aria-labelledby="v2-kurye-bakiyeleri" className="space-y-4">
       <h3 id="v2-kurye-bakiyeleri" className="text-sm font-semibold">
-        Kuryerlərdə olan nağd pul
+        {t('kasa.kurye.baslik')}
       </h3>
       {kuryeler && kuryeler.length === 0 && (
-        <p className="text-sm text-slate-400">Kuryerlərdə nağd pul yoxdur.</p>
+        <p className="text-sm text-slate-400">{t('kasa.kurye.bos')}</p>
       )}
       {kuryeler && kuryeler.length > 0 && (
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-start text-sm">
           <thead className="text-xs text-slate-400">
             <tr>
-              <th className="py-2">Kuryer</th>
-              <th className="text-right">Yığılıb</th>
-              <th className="text-right">Təhvil verilib</th>
-              <th className="text-right">Qalıq</th>
+              <th className="py-2">{t('kasa.kurye.kuryer')}</th>
+              <th className="text-end">{t('kasa.kurye.yigilib')}</th>
+              <th className="text-end">{t('kasa.kurye.tehvilVerilib')}</th>
+              <th className="text-end">{t('kasa.kurye.qaliq')}</th>
               <th />
             </tr>
           </thead>
@@ -89,17 +93,17 @@ export default function KuryeBakiyeleri({ teslimAlabilir }: { teslimAlabilir: bo
             {kuryeler.map((k) => (
               <tr key={k.kuryeKullaniciId} className="border-t border-slate-800">
                 <td className="py-2">{k.adSoyad ?? k.kuryeKullaniciId}</td>
-                <td className="text-right">{azn(k.tahsilatToplami)}</td>
-                <td className="text-right">{azn(k.teslimToplami)}</td>
-                <td className="text-right font-semibold">{azn(k.bakiye)}</td>
-                <td className="text-right">
+                <td className="text-end">{azn(k.tahsilatToplami)}</td>
+                <td className="text-end">{azn(k.teslimToplami)}</td>
+                <td className="text-end font-semibold">{azn(k.bakiye)}</td>
+                <td className="text-end">
                   {teslimAlabilir && k.acikTahsilatlar.length > 0 && (
                     <button
                       type="button"
                       onClick={() => sec(k.kuryeKullaniciId)}
                       className="text-xs text-sky-400 underline"
                     >
-                      Təhvil al
+                      {t('kasa.kurye.tehvilAl')}
                     </button>
                   )}
                 </td>
@@ -110,7 +114,9 @@ export default function KuryeBakiyeleri({ teslimAlabilir }: { teslimAlabilir: bo
       )}
       {kurye && (
         <div className="space-y-3 rounded-xl border border-slate-800 p-4">
-          <p className="text-sm">{kurye.adSoyad ?? kurye.kuryeKullaniciId}: açıq ödənişlər</p>
+          <p className="text-sm">
+            {t('kasa.kurye.aciqOdenisler', { kuryer: kurye.adSoyad ?? kurye.kuryeKullaniciId })}
+          </p>
           <ul className="space-y-1 text-sm">
             {kurye.acikTahsilatlar.map((o) => (
               <li key={o.id}>
@@ -121,7 +127,7 @@ export default function KuryeBakiyeleri({ teslimAlabilir }: { teslimAlabilir: bo
                     onChange={() => degistir(o.id)}
                   />
                   <span className="flex-1">
-                    {o.musteriAdi ?? o.siparisId} · {new Date(o.almaZamani).toLocaleString()}
+                    {o.musteriAdi ?? o.siparisId} · {tarihSaat(o.almaZamani)}
                   </span>
                   <span>{azn(o.tutarAzn)}</span>
                 </label>
@@ -134,7 +140,9 @@ export default function KuryeBakiyeleri({ teslimAlabilir }: { teslimAlabilir: bo
             onClick={() => void teslimAl()}
             className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {azn(seciliToplam(kurye.acikTahsilatlar, secili))} kassaya təhvil al
+            {t('kasa.kurye.kassayaTehvilAl', {
+              mebleg: azn(seciliToplam(kurye.acikTahsilatlar, secili)),
+            })}
           </button>
         </div>
       )}

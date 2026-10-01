@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import {
   kaynakSecenekleri,
   odemeIstegi,
@@ -7,6 +7,7 @@ import {
   tersKayitYapilabilir,
   type DefterSatiri,
 } from '../../src/components/v2/odemeFormu';
+import { dilHazirla } from '../helpers/i18n';
 
 const satir = (extra: Partial<DefterSatiri> = {}): DefterSatiri => ({
   id: 'p-1',
@@ -23,6 +24,9 @@ const satir = (extra: Partial<DefterSatiri> = {}): DefterSatiri => ({
   tersKaydiVar: false,
   ...extra,
 });
+
+// The texts come from the az translation files (docs/i18n.md); the wording is unchanged.
+beforeAll(() => dilHazirla('az', ['v2']));
 
 describe('v2 payment ledger form (A10)', () => {
   it('offers recording only to the FINANCE roles, sales only in the boutique', () => {

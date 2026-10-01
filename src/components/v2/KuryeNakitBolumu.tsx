@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ApiError, apiFetch } from '../../lib/apiClient';
+import { hataMetni } from '../../i18n/hata';
+import { para } from '../../i18n/bicim';
 import { kuryeTahsilatIstegi, type AcikTahsilat, type KuryeSiparisi } from './kasaFormu';
 
 interface NakitDurumu {
@@ -19,6 +22,7 @@ export default function KuryeNakitBolumu({
   /** The server's new amount due for the order, so the task card updates too (B3). */
   onYazildi?: (siparisId: string, kalanTutar: number) => void;
 }) {
+  const { t } = useTranslation('v2');
   const [durum, setDurum] = useState<NakitDurumu | null>(null);
   const [kapali, setKapali] = useState(false);
   const [tutarlar, setTutarlar] = useState<Record<string, string>>({});
@@ -33,9 +37,9 @@ export default function KuryeNakitBolumu({
       setDurum((await response.json()) as NakitDurumu);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) setKapali(true);
-      else setMesaj(error instanceof Error ? error.message : 'Nağd pul məlumatı yüklənmədi.');
+      else setMesaj(hataMetni(error, t('kasa.nakit.yuklenmedi')));
     }
-  }, []);
+  }, [t]);
   useEffect(() => {
     void yukle();
   }, [yukle]);
@@ -58,12 +62,12 @@ export default function KuryeNakitBolumu({
       });
       const { ozet } = (await response.json()) as { ozet?: { kalanTutar?: unknown } };
       if (typeof ozet?.kalanTutar === 'number') onYazildi?.(siparis.id, ozet.kalanTutar);
-      setMesaj(`${govde.tutar_azn.toFixed(2)} AZN nağd yazıldı.`);
+      setMesaj(t('kasa.nakit.yazildi', { mebleg: para(govde.tutar_azn) }));
       delete islemAnahtarlari.current[siparis.id];
       setTutarlar({ ...tutarlar, [siparis.id]: '' });
       await yukle();
     } catch (error) {
-      setMesaj(error instanceof Error ? error.message : 'Ödəniş yazılmadı.');
+      setMesaj(hataMetni(error, t('kasa.nakit.yazilmadi')));
     } finally {
       setBekliyor(false);
     }
@@ -77,15 +81,18 @@ export default function KuryeNakitBolumu({
       className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-5"
     >
       <h2 id="kurye-nakit" className="text-base font-bold">
-        Üzərimdə olan nağd pul: {durum.bakiye.toFixed(2)} AZN
+        {t('kasa.nakit.baslik', { mebleg: para(durum.bakiye) })}
       </h2>
       {durum.siparisler.map((siparis) => (
         <div key={siparis.id} className="flex flex-wrap items-end gap-2 text-sm">
           <span className="flex-1">
-            {siparis.musteriAdi} · qalıq {siparis.kalanTutar.toFixed(2)} AZN
+            {t('kasa.nakit.siparis', {
+              musteri: siparis.musteriAdi,
+              mebleg: para(siparis.kalanTutar),
+            })}
           </span>
           <input
-            aria-label={`${siparis.musteriAdi} üçün alınan nağd`}
+            aria-label={t('kasa.nakit.alinanEtiket', { musteri: siparis.musteriAdi })}
             inputMode="decimal"
             placeholder={siparis.kalanTutar.toFixed(2)}
             value={tutarlar[siparis.id] ?? ''}
@@ -101,7 +108,7 @@ export default function KuryeNakitBolumu({
             onClick={() => void yaz(siparis)}
             className="min-h-11 rounded-lg bg-amber-600 px-3 font-semibold text-white disabled:opacity-50"
           >
-            Nağd aldım
+            {t('kasa.nakit.aldim')}
           </button>
         </div>
       ))}

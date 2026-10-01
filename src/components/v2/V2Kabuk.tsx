@@ -1,11 +1,13 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ApiError, apiFetch } from '../../lib/apiClient';
 import { useAppStore } from '../../store/appStore';
 import { rolGrubunda } from '../../shared/roller';
 import V2Kurlar from './V2Kurlar';
 import V2Ayarlar from './V2Ayarlar';
 import { v2ButikSecimi } from './butikSecimi';
+import { DilSecici } from '../DilSecici';
 
 // Sipariş girişi kendi parçasında: kabuk açılınca değil, sekme seçilince yüklenir.
 const SiparisGirisi = lazy(() => import('./SiparisGirisi'));
@@ -22,6 +24,7 @@ type Sekme = 'siparisler' | 'kasa' | 'kacaklar' | 'kurlar' | 'ayarlar';
  * ayarlar OWNERS.
  */
 export default function V2Kabuk() {
+  const { t } = useTranslation('v2');
   const navigate = useNavigate();
   const aktifRol = useAppStore((state) => state.aktifRol);
   const firmalar = useAppStore((state) => state.firmalar);
@@ -31,11 +34,21 @@ export default function V2Kabuk() {
   const butik = v2ButikSecimi(aktifRol, seciliFirmaId, firmalar);
   const [durum, setDurum] = useState<SunucuDurumu>('yukleniyor');
   const sekmeler: Array<{ id: Sekme; ad: string }> = [
-    ...(rolGrubunda(aktifRol, 'STAFF') ? [{ id: 'siparisler' as const, ad: 'Sifarişlər' }] : []),
-    ...(rolGrubunda(aktifRol, 'FINANCE') ? [{ id: 'kasa' as const, ad: 'Kassa' }] : []),
-    ...(rolGrubunda(aktifRol, 'KASA') ? [{ id: 'kacaklar' as const, ad: 'Qaçaqlar' }] : []),
-    ...(rolGrubunda(aktifRol, 'RATES') ? [{ id: 'kurlar' as const, ad: 'Kurlar' }] : []),
-    ...(rolGrubunda(aktifRol, 'OWNERS') ? [{ id: 'ayarlar' as const, ad: 'Ayarlar' }] : []),
+    ...(rolGrubunda(aktifRol, 'STAFF')
+      ? [{ id: 'siparisler' as const, ad: t('kabuk.sekme.siparisler') }]
+      : []),
+    ...(rolGrubunda(aktifRol, 'FINANCE')
+      ? [{ id: 'kasa' as const, ad: t('kabuk.sekme.kasa') }]
+      : []),
+    ...(rolGrubunda(aktifRol, 'KASA')
+      ? [{ id: 'kacaklar' as const, ad: t('kabuk.sekme.kacaklar') }]
+      : []),
+    ...(rolGrubunda(aktifRol, 'RATES')
+      ? [{ id: 'kurlar' as const, ad: t('kabuk.sekme.kurlar') }]
+      : []),
+    ...(rolGrubunda(aktifRol, 'OWNERS')
+      ? [{ id: 'ayarlar' as const, ad: t('kabuk.sekme.ayarlar') }]
+      : []),
   ];
   const [secili, setSecili] = useState<Sekme | null>(null);
   const aktif = sekmeler.find((sekme) => sekme.id === secili)?.id ?? sekmeler[0]?.id ?? null;
@@ -59,19 +72,19 @@ export default function V2Kabuk() {
     <div data-v2-kabuk="tomnap-v2-kabuk" className="min-h-screen bg-slate-950 text-slate-100">
       <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
         <div>
-          <h1 className="text-lg font-bold">TOMNAP v2</h1>
-          <p className="text-xs text-slate-400">Önizləmə — yeni axın hələ hazırlanır</p>
+          <h1 className="text-lg font-bold">{t('kabuk.baslik')}</h1>
+          <p className="text-xs text-slate-400">{t('kabuk.altBaslik')}</p>
         </div>
         {butik.secici && (
           <label className="text-xs text-slate-400">
-            Butik
+            {t('kabuk.butik')}
             <select
               value={butik.secimGerekli ? '' : seciliFirmaId}
               onChange={(event) => event.target.value && setSeciliFirmaId(event.target.value)}
-              className="ml-2 rounded-lg bg-slate-800 px-2 py-1.5 text-sm text-white"
+              className="ms-2 rounded-lg bg-slate-800 px-2 py-1.5 text-sm text-white"
             >
               <option value="" disabled>
-                Butik seçin
+                {t('kabuk.butikSecin')}
               </option>
               {butik.secenekler.map((firma) => (
                 <option key={firma.id} value={firma.id}>
@@ -81,32 +94,35 @@ export default function V2Kabuk() {
             </select>
           </label>
         )}
-        <button
-          type="button"
-          onClick={() => navigate('/app')}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
-        >
-          Mövcud panelə qayıt
-        </button>
+        <div className="flex items-center gap-2">
+          <DilSecici darkTheme />
+          <button
+            type="button"
+            onClick={() => navigate('/app')}
+            className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            {t('kabuk.panelQayit')}
+          </button>
+        </div>
       </header>
       {/* A new boutique remounts every screen, so each one reads its own data again. */}
       <main key={seciliFirmaId} className="mx-auto max-w-4xl space-y-6 px-6 py-8">
         {durum !== 'acik' && (
           <p role="status" className="text-sm text-slate-300">
             {durum === 'yukleniyor'
-              ? 'Server yoxlanılır…'
+              ? t('kabuk.serverYoxlanilir')
               : durum === 'kapali'
-                ? 'Serverdə v2 axını aktiv deyil (FF_V2_FLOW).'
-                : 'Server v2 vəziyyəti yoxlanıla bilmədi.'}
+                ? t('kabuk.aktivDeyil')
+                : t('kabuk.yoxlanilaBilmedi')}
           </p>
         )}
         {durum === 'acik' && butik.secimGerekli && (
           <p role="status" className="text-sm text-slate-300">
-            v2 məlumatı bir butikə aiddir. Davam etmək üçün yuxarıdan butik seçin.
+            {t('kabuk.butikGerekli')}
           </p>
         )}
         {durum === 'acik' && !butik.secimGerekli && sekmeler.length > 1 && (
-          <nav className="flex gap-2" aria-label="v2 bölmələri">
+          <nav className="flex flex-wrap gap-2" aria-label={t('kabuk.bolmeler')}>
             {sekmeler.map((sekme) => (
               <button
                 key={sekme.id}
@@ -123,24 +139,24 @@ export default function V2Kabuk() {
           </nav>
         )}
         {durum === 'acik' && !butik.secimGerekli && aktif === 'siparisler' && (
-          <Suspense fallback={<p className="text-sm text-slate-400">Yüklənir…</p>}>
+          <Suspense fallback={<p className="text-sm text-slate-400">{t('ortak:yukleniyor')}</p>}>
             <SiparisGirisi />
           </Suspense>
         )}
         {durum === 'acik' && !butik.secimGerekli && aktif === 'kasa' && (
-          <Suspense fallback={<p className="text-sm text-slate-400">Yüklənir…</p>}>
+          <Suspense fallback={<p className="text-sm text-slate-400">{t('ortak:yukleniyor')}</p>}>
             <V2Kasa />
           </Suspense>
         )}
         {durum === 'acik' && !butik.secimGerekli && aktif === 'kacaklar' && (
-          <Suspense fallback={<p className="text-sm text-slate-400">Yüklənir…</p>}>
+          <Suspense fallback={<p className="text-sm text-slate-400">{t('ortak:yukleniyor')}</p>}>
             <KacaklarPanosu />
           </Suspense>
         )}
         {durum === 'acik' && !butik.secimGerekli && aktif === 'kurlar' && <V2Kurlar />}
         {durum === 'acik' && !butik.secimGerekli && aktif === 'ayarlar' && <V2Ayarlar />}
         {durum === 'acik' && !butik.secimGerekli && aktif === null && (
-          <p className="text-sm text-slate-400">Rolunuz üçün hələ v2 bölməsi yoxdur.</p>
+          <p className="text-sm text-slate-400">{t('kabuk.bolmeYoxdur')}</p>
         )}
       </main>
     </div>

@@ -599,8 +599,13 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
 
 41. **i18n geçiş dönemi (bilinen durum, 1 Ekim 2026).**
     - Taşınan ekranlar: giriş, kayıt, davet kabulü, şifre belirleme, v1 sipariş detayı, kargo
-      manifestosu, v2 ayarları; belgeler (manifesto, etiket, tahsilat listesi, Excel, PDF,
-      WhatsApp metinleri). Liste: `tests/client/i18nKurallari.test.ts` → `TASINAN_DOSYALAR`.
+      manifestosu; v2'nin bütün ekranları (`src/components/v2/` klasörünün tamamı: kabuk,
+      sipariş, aşama, kasa, ödeme defteri, kurye nakdi, kaçaklar, kurlar, ayarlar); belgeler
+      (manifesto, etiket, tahsilat listesi, Excel, PDF, WhatsApp metinleri). Liste:
+      `tests/client/i18nKurallari.test.ts` → `TASINAN_DOSYALAR`.
+    - v2'de tarihler artık tek yardımcıdan (OQ 40): eskiden tarayıcının diline göre değişirdi
+      (İngilizce cihazda "9/30/2026, 12:56:35 PM"), şimdi her cihazda Bakü saatiyle
+      "30.09.2026 12:56". Metinler ve tutarlar Azerbaycan dilinde aynı kaldı.
     - v1'in geri kalanı dokunuldukça taşınır; toplu taşıma yok. Eski sözlük
       (`src/context/DilKonteksti.tsx`) köprüdür: dili artık tek kuraldan alır.
     - **Bilinen durum:** İngilizce cihazda taşınmamış v1 ekranları eski dillerinde (çoğu

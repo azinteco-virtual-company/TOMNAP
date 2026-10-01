@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiFetch } from '../../lib/apiClient';
+import { hataMetni as cevrilmisHata } from '../../i18n/hata';
+import { tarihSaat } from '../../i18n/bicim';
 import { bakuTarihi } from '../../shared/bakuTarihi';
 
 type ParaBirimi = 'CAD' | 'USD';
@@ -18,8 +21,6 @@ interface KurListesi {
 
 // Today in Baku, not in UTC (Codex R3 F13).
 const bugun = () => bakuTarihi();
-const hataMetni = (error: unknown) =>
-  error instanceof Error ? error.message : 'Əməliyyat tamamlanmadı.';
 
 /**
  * Kurlar (K4): güncel kur ve son girişler. Kurlar dəyişdirilmir; düzəliş yeni
@@ -27,6 +28,8 @@ const hataMetni = (error: unknown) =>
  * (kâr hesabı Faz D-də serverə keçəndə götürüləcək).
  */
 export default function V2Kurlar() {
+  const { t } = useTranslation('v2');
+  const hataMetni = (error: unknown) => cevrilmisHata(error, t('ortak.xeta'));
   const [liste, setListe] = useState<KurListesi | null>(null);
   const [para, setPara] = useState<ParaBirimi>('CAD');
   const [tarih, setTarih] = useState(bugun);
@@ -50,7 +53,7 @@ export default function V2Kurlar() {
     event.preventDefault();
     const deger = Number(oran.replace(',', '.'));
     if (!Number.isFinite(deger) || deger <= 0) {
-      setMesaj('Kur müsbət rəqəm olmalıdır.');
+      setMesaj(t('kurlar.musbet'));
       return;
     }
     setGonderiliyor(true);
@@ -68,7 +71,7 @@ export default function V2Kurlar() {
       });
       setOran('');
       setKaynak('');
-      setMesaj('Kur yadda saxlanıldı.');
+      setMesaj(t('kurlar.saxlanildi'));
       await yukle();
     } catch (error) {
       setMesaj(hataMetni(error));
@@ -80,16 +83,16 @@ export default function V2Kurlar() {
   return (
     <section aria-labelledby="v2-kurlar" className="space-y-6">
       <h2 id="v2-kurlar" className="text-base font-semibold">
-        Valyuta kurları (1 vahid = … AZN)
+        {t('kurlar.baslik')}
       </h2>
       <div className="grid grid-cols-2 gap-3">
         {(['CAD', 'USD'] as const).map((kod) => {
           const kayit = liste?.guncel[kod];
           return (
             <div key={kod} className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-              <p className="text-xs text-slate-400">{kod} → AZN</p>
+              <p className="text-xs text-slate-400">{t('kurlar.cevirme', { kod })}</p>
               <p className="text-2xl font-bold">{kayit ? kayit.aznKarsiligi : '—'}</p>
-              <p className="text-xs text-slate-500">{kayit ? kayit.tarih : 'Hələ kur yoxdur'}</p>
+              <p className="text-xs text-slate-500">{kayit ? kayit.tarih : t('kurlar.yoxdur')}</p>
             </div>
           );
         })}
@@ -99,7 +102,7 @@ export default function V2Kurlar() {
         className="grid gap-3 rounded-xl border border-slate-800 p-4 sm:grid-cols-5"
       >
         <label className="text-xs text-slate-400">
-          Valyuta
+          {t('kurlar.valyuta')}
           <select
             value={para}
             onChange={(event) => setPara(event.target.value as ParaBirimi)}
@@ -110,7 +113,7 @@ export default function V2Kurlar() {
           </select>
         </label>
         <label className="text-xs text-slate-400">
-          Tarix
+          {t('kurlar.tarix')}
           <input
             type="date"
             value={tarih}
@@ -120,7 +123,7 @@ export default function V2Kurlar() {
           />
         </label>
         <label className="text-xs text-slate-400">
-          AZN qarşılığı
+          {t('kurlar.aznQarsiligi')}
           <input
             inputMode="decimal"
             value={oran}
@@ -130,7 +133,7 @@ export default function V2Kurlar() {
           />
         </label>
         <label className="text-xs text-slate-400">
-          Mənbə (istəyə bağlı)
+          {t('kurlar.menbeIsteye')}
           <input
             value={kaynak}
             maxLength={100}
@@ -143,7 +146,7 @@ export default function V2Kurlar() {
           disabled={gonderiliyor}
           className="self-end rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          Yeni kur əlavə et
+          {t('kurlar.elaveEt')}
         </button>
       </form>
       {mesaj && (
@@ -151,14 +154,14 @@ export default function V2Kurlar() {
           {mesaj}
         </p>
       )}
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-start text-sm">
         <thead className="text-xs text-slate-400">
           <tr>
-            <th className="py-2">Tarix</th>
-            <th>Valyuta</th>
+            <th className="py-2">{t('kurlar.tarix')}</th>
+            <th>{t('kurlar.valyuta')}</th>
             <th>AZN</th>
-            <th>Mənbə</th>
-            <th>Daxil edilib</th>
+            <th>{t('kurlar.menbe')}</th>
+            <th>{t('kurlar.daxilEdilib')}</th>
           </tr>
         </thead>
         <tbody>
@@ -168,7 +171,7 @@ export default function V2Kurlar() {
               <td>{kayit.paraBirimi}</td>
               <td>{kayit.aznKarsiligi}</td>
               <td className="text-slate-400">{kayit.kaynak ?? '—'}</td>
-              <td className="text-slate-500">{new Date(kayit.olusturmaZamani).toLocaleString()}</td>
+              <td className="text-slate-500">{tarihSaat(kayit.olusturmaZamani)}</td>
             </tr>
           ))}
         </tbody>

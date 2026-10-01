@@ -21,5 +21,224 @@
       "yalnizPatron": "Only the boutique owner can change it.",
       "saxlanildi": "The boutique language was saved."
     }
+  },
+  "kabuk": {
+    "baslik": "TOMNAP v2",
+    "altBaslik": "Preview — the new flow is still being built",
+    "butik": "Boutique",
+    "butikSecin": "Choose a boutique",
+    "panelQayit": "Back to the current panel",
+    "serverYoxlanilir": "Checking the server…",
+    "aktivDeyil": "The v2 flow is not active on the server (FF_V2_FLOW).",
+    "yoxlanilaBilmedi": "The server's v2 state could not be checked.",
+    "butikGerekli": "v2 data belongs to one boutique. Choose a boutique above to continue.",
+    "bolmeler": "v2 sections",
+    "bolmeYoxdur": "There is no v2 section for your role yet.",
+    "sekme": {
+      "siparisler": "Orders",
+      "kasa": "Cash desk",
+      "kacaklar": "Leaks",
+      "kurlar": "Rates",
+      "ayarlar": "Settings"
+    }
+  },
+  "asama": {
+    "onay": "{{musteri}}: {{eski}} → {{yeni}}. The stage cannot be moved back. Continue?"
+  },
+  "kasa": {
+    "tutarGecersiz": "The amount must be above 0 with at most 2 decimals.",
+    "enCox": "At most {{mebleg}} AZN can be recorded.",
+    "ekran": {
+      "yuklenmedi": "Orders could not be loaded.",
+      "baslik": "Cash desk (v2)",
+      "bos": "No v2 orders yet.",
+      "tarix": "Date",
+      "musteri": "Customer",
+      "cem": "Total",
+      "odenib": "Paid",
+      "qaliq": "Balance",
+      "veziyyet": "Status"
+    },
+    "finans": {
+      "BEKLIYOR": "Unpaid",
+      "KISMI_ODEME": "Partial",
+      "ODENDI": "Paid"
+    },
+    "kurye": {
+      "yuklenmedi": "Courier balances could not be loaded.",
+      "alindi": "{{mebleg}} received into the cash desk.",
+      "alinmadi": "The hand-over failed.",
+      "baslik": "Cash held by couriers",
+      "bos": "No cash is held by couriers.",
+      "kuryer": "Courier",
+      "yigilib": "Collected",
+      "tehvilVerilib": "Handed over",
+      "qaliq": "Balance",
+      "tehvilAl": "Receive",
+      "aciqOdenisler": "{{kuryer}}: open payments",
+      "kassayaTehvilAl": "Receive {{mebleg}} into the cash desk"
+    },
+    "nakit": {
+      "yuklenmedi": "Cash details could not be loaded.",
+      "yazildi": "{{mebleg}} cash recorded.",
+      "yazilmadi": "The payment was not recorded.",
+      "baslik": "Cash I hold: {{mebleg}}",
+      "siparis": "{{musteri}} · balance {{mebleg}}",
+      "alinanEtiket": "Cash received from {{musteri}}",
+      "aldim": "Cash received"
+    }
+  },
+  "odeme": {
+    "yontem": {
+      "NAKIT": "Cash",
+      "KART": "Card",
+      "HAVALE": "Transfer",
+      "DIGER": "Other"
+    },
+    "kaynak": {
+      "TESLIMAT": "Delivery",
+      "BUTIK": "Boutique",
+      "ONLINE": "Online"
+    },
+    "durum": {
+      "ODENMEDI": "Unpaid",
+      "KISMI": "Partly paid",
+      "TAM": "Paid",
+      "FAZLA": "Overpaid"
+    },
+    "tutarGecersiz": "The amount must be 0–1,000,000 AZN with at most 2 decimals.",
+    "qeydUzun": "The note can be at most 500 characters.",
+    "sebebYaz": "Write the reason for the reversal.",
+    "sebebUzun": "The reason can be at most 500 characters.",
+    "defter": {
+      "yazildi": "Payment recorded.",
+      "geriQaytarildi": "Payment reversed.",
+      "yuklenir": "Loading the payment ledger…",
+      "etiket": "Payment ledger",
+      "cem": "Total",
+      "odenib": "Paid",
+      "qaliq": "Balance",
+      "veziyyet": "Status",
+      "tarix": "Date",
+      "mebleg": "Amount",
+      "usul": "Method",
+      "menbe": "Source",
+      "qeyd": "Note",
+      "bos": "No payments yet.",
+      "geriQaytarma": "Reversal:",
+      "geriQaytarilib": "(reversed)",
+      "sebeb": "Reason for the reversal",
+      "tesdiqle": "Confirm",
+      "geriQaytar": "Reverse",
+      "meblegAzn": "Amount (AZN)",
+      "odenisYaz": "Record payment"
+    }
+  },
+  "siparis": {
+    "hata": {
+      "musteriAdi": "The customer name is required.",
+      "sahip": "Choose the order owner.",
+      "satirYok": "At least one line is required.",
+      "cokSatir": "At most 100 lines are allowed.",
+      "urunAdi": "Line {{sira}}: the item name is required.",
+      "adet": "Line {{sira}}: the quantity must be a whole number from 1 to 1000.",
+      "fiyat": "Line {{sira}}: the price must be 0–1,000,000 AZN with at most 2 decimals."
+    },
+    "baslik": "Orders (v2)",
+    "saxlanildi": "The order was saved.",
+    "mesaj": "Customer message",
+    "gorselEkle": "Add a screenshot ({{sayi}}/{{en}})",
+    "gorselSil": "Remove image {{ad}}",
+    "ayrisdirilir": "Splitting…",
+    "aiAyir": "Split into lines with AI",
+    "alan": {
+      "musteriAdi": "Customer name",
+      "telefon": "Phone",
+      "instagram": "Instagram",
+      "sehir": "City",
+      "adres": "Address",
+      "ozelNot": "Note"
+    },
+    "kartaBagli": "Linked to customer card ({{id}}).",
+    "baglantiSil": "Remove the link",
+    "kartYoxdur": "No customer card chosen; saved as a new customer.",
+    "sahib": "Order owner",
+    "sahibSecin": "Choose the owner",
+    "men": "Me (creating the order)",
+    "cem": "Total:",
+    "saxlanilir": "Saving…",
+    "tesdiqle": "Confirm and save the order"
+  },
+  "gorsel": {
+    "tur": "Choose a JPEG, PNG or WebP image only.",
+    "hazirlanmadi": "The image could not be prepared.",
+    "cokBoyuk": "The image is too large; choose a smaller screenshot."
+  },
+  "ortak": {
+    "xeta": "The action was not completed."
+  },
+  "satir": {
+    "mehsul": "Item",
+    "olcu": "Size",
+    "reng": "Colour",
+    "say": "Qty",
+    "qiymet": "Price (AZN)",
+    "olke": "Country",
+    "cem": "Total",
+    "ekle": "Add a line",
+    "etiket": {
+      "mehsul": "Line {{sira}} item",
+      "olcu": "Line {{sira}} size",
+      "reng": "Line {{sira}} colour",
+      "say": "Line {{sira}} quantity",
+      "qiymet": "Line {{sira}} price",
+      "olke": "Line {{sira}} country",
+      "sil": "Remove line {{sira}}"
+    }
+  },
+  "liste": {
+    "asamaDegisti": "The stage was changed.",
+    "tarix": "Date",
+    "musteri": "Customer",
+    "satir": "Lines",
+    "sahib": "Owner",
+    "veziyyet": "Status",
+    "cem": "Total (AZN)",
+    "gozleyin": "Please wait…",
+    "novbetiMerhele": "Next stage →"
+  },
+  "kacak": {
+    "yuklenmedi": "Leaks could not be loaded.",
+    "baslik": "Leaks (v0)",
+    "yoxdur": "None.",
+    "q4": {
+      "baslik": "Q4 · Delivered, not paid ({{sayi}})",
+      "musteri": "Customer",
+      "kuryer": "Courier",
+      "qaliq": "Balance",
+      "gun": "Days"
+    },
+    "q5": {
+      "baslik": "Q5 · Cash waiting with couriers ({{sayi}})",
+      "hedd": "Threshold (hours)",
+      "kuryer": "Courier",
+      "nagd": "Cash",
+      "odenis": "Payments",
+      "gozleyir": "Waiting (hours)"
+    }
+  },
+  "kurlar": {
+    "musbet": "The rate must be a positive number.",
+    "saxlanildi": "Rate saved.",
+    "baslik": "Exchange rates (1 unit = … AZN)",
+    "cevirme": "{{kod}} → AZN",
+    "yoxdur": "No rate yet",
+    "valyuta": "Currency",
+    "tarix": "Date",
+    "aznQarsiligi": "AZN equivalent",
+    "menbeIsteye": "Source (optional)",
+    "elaveEt": "Add new rate",
+    "menbe": "Source",
+    "daxilEdilib": "Entered"
   }
 }

@@ -3,6 +3,7 @@
  * SatirTablosu) yalnız bunları kullanır; kurallar sunucudaki doğrulamayla aynı
  * sınırları izler, son söz yine sunucunundur.
  */
+import { v2t } from './v2Ceviri';
 
 export type KaynakUlke = 'CA' | 'US';
 
@@ -132,19 +133,19 @@ export function formdanIstek(
   { sahipZorunlu = false }: { sahipZorunlu?: boolean } = {}
 ): { govde: Record<string, unknown>; hatalar: [] } | { govde: null; hatalar: string[] } {
   const hatalar: string[] = [];
-  if (!form.musteriAdi.trim()) hatalar.push('Müştəri adı lazımdır.');
-  if (sahipZorunlu && !form.sahipKullaniciId) hatalar.push('Sifarişin sahibini seçin.');
-  if (form.satirlar.length === 0) hatalar.push('Ən azı bir sətir lazımdır.');
-  if (form.satirlar.length > 100) hatalar.push('Ən çox 100 sətir ola bilər.');
+  if (!form.musteriAdi.trim()) hatalar.push(v2t('siparis.hata.musteriAdi'));
+  if (sahipZorunlu && !form.sahipKullaniciId) hatalar.push(v2t('siparis.hata.sahip'));
+  if (form.satirlar.length === 0) hatalar.push(v2t('siparis.hata.satirYok'));
+  if (form.satirlar.length > 100) hatalar.push(v2t('siparis.hata.cokSatir'));
   const satirlar = form.satirlar.map((satir, index) => {
-    const etiket = `${index + 1}. sətir`;
+    const sira = index + 1;
     const adet = sayiOku(satir.adet);
     const fiyat = sayiOku(satir.fiyat);
-    if (!satir.urunAciklamasi.trim()) hatalar.push(`${etiket}: məhsul adı lazımdır.`);
+    if (!satir.urunAciklamasi.trim()) hatalar.push(v2t('siparis.hata.urunAdi', { sira }));
     if (!Number.isInteger(adet) || adet < 1 || adet > 1000)
-      hatalar.push(`${etiket}: say 1-1000 arası tam ədəd olmalıdır.`);
+      hatalar.push(v2t('siparis.hata.adet', { sira }));
     if (!Number.isFinite(fiyat) || fiyat >= 1_000_000 || Math.round(fiyat * 100) / 100 !== fiyat)
-      hatalar.push(`${etiket}: qiymət 0-1.000.000 AZN, ən çox 2 onluq olmalıdır.`);
+      hatalar.push(v2t('siparis.hata.fiyat', { sira }));
     return {
       urun_aciklamasi: satir.urunAciklamasi.trim(),
       ...(bosIse(satir.beden) ? { beden: satir.beden.trim() } : {}),
