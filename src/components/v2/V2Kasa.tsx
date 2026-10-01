@@ -67,7 +67,8 @@ export default function V2Kasa() {
               <th className="text-right">Cəm</th>
               <th className="text-right">Ödənib</th>
               <th className="text-right">Qalıq</th>
-              <th>Vəziyyət</th>
+              {/* B5: the right-aligned amount and the status text must not touch. */}
+              <th className="ps-6">Vəziyyət</th>
             </tr>
           </thead>
           <tbody>
@@ -91,7 +92,7 @@ export default function V2Kasa() {
                 <td className="text-right">{azn(siparis.toplamTutar)}</td>
                 <td className="text-right">{azn(siparis.alinanTutar)}</td>
                 <td className="text-right">{azn(siparis.kalanTutar)}</td>
-                <td>{FINANS_ADI[siparis.finansDurumu] ?? siparis.finansDurumu}</td>
+                <td className="ps-6">{FINANS_ADI[siparis.finansDurumu] ?? siparis.finansDurumu}</td>
               </tr>
             ))}
           </tbody>

@@ -95,6 +95,21 @@ export const KuryeCalismaAlani: React.FC<Props> = ({ userName, onLogout }) => {
     }
   }
 
+  // B3: the cash section reports the server's new amount due; update that card in place
+  // instead of reloading the list (a reload would unmount the section and its notice).
+  function kalanGuncelle(siparisId: string, kalanTutar: number) {
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            gorevler: current.gorevler.map((item) =>
+              item.id === siparisId ? { ...item, kalan_tutar: kalanTutar } : item
+            ),
+          }
+        : current
+    );
+  }
+
   const tasks = useMemo(
     () =>
       (data?.gorevler || []).filter((task) =>
@@ -106,6 +121,7 @@ export const KuryeCalismaAlani: React.FC<Props> = ({ userName, onLogout }) => {
   );
   const pending =
     data?.gorevler.filter((task) => task.lojistik_durumu !== 'TESLIM_EDILDI').length || 0;
+  const completed = (data?.gorevler.length || 0) - pending;
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -177,7 +193,7 @@ export const KuryeCalismaAlani: React.FC<Props> = ({ userName, onLogout }) => {
         )}
         {!loading && data?.kurye && KuryeNakitBolumu && (
           <Suspense fallback={null}>
-            <KuryeNakitBolumu />
+            <KuryeNakitBolumu onYazildi={kalanGuncelle} />
           </Suspense>
         )}
         {!loading && data?.kurye && (
@@ -197,7 +213,7 @@ export const KuryeCalismaAlani: React.FC<Props> = ({ userName, onLogout }) => {
                 onClick={() => setFilter('completed')}
                 className={`min-h-11 rounded-lg px-4 text-sm font-semibold ${filter === 'completed' ? 'bg-indigo-600 text-white' : 'border border-slate-300 bg-white'}`}
               >
-                Təhvil verilən
+                Təhvil verilən ({completed})
               </button>
             </div>
             {tasks.length === 0 && (
