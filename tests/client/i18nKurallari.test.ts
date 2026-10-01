@@ -19,6 +19,18 @@ export const TASINAN_DOSYALAR = [
   // B2: v1 sipariş detay penceresi.
   'src/components/SiparisDetayModal.tsx',
   'src/components/siparisDetayFormu.ts',
+  // B1: kargo manifestosu ekranı ve belgeleri (yazdırma, etiket, Excel, PDF, kurye metni).
+  'src/components/KargoManifestoSayfasi.tsx',
+  'src/components/kargoManifesto/ManifestoBasligi.tsx',
+  'src/components/kargoManifesto/ManifestoFiltreleri.tsx',
+  'src/components/kargoManifesto/ManifestoTablosu.tsx',
+  'src/components/kargoManifesto/manifestoFiltresi.ts',
+  'src/belgeler/manifesto.ts',
+  'src/belgeler/manifestoYazdirma.ts',
+  'src/belgeler/manifestoPdf.ts',
+  'src/belgeler/tahsilat.ts',
+  'src/i18n/pdfFontu.ts',
+  'src/i18n/belge.ts',
 ];
 
 const KOK = 'src/i18n/locales';
@@ -78,10 +90,17 @@ describe('i18n rules', () => {
         'const b = <p className="px-2 text-sm" title="Bağla">Saxla</p>;',
         "const c = 'TESLIM_EDILDI' === x ? '/api/v2/x' : 'Close';",
         "const d = 'Format kalıbı'; // i18n-teknik",
+        'const e = html`<html lang="${a}" dir="${b}"><style>td { color: red; }</style><td class="son">${c}</td></html>`;',
+        'const f = html`<div class="x">Bakı paylanış ${a}</div>`;',
       ].join('\n')
     );
     try {
-      expect(duzMetinler(ornek).map((b) => b.metin)).toEqual(['Bağla', 'Saxla', 'Close']);
+      expect(duzMetinler(ornek).map((b) => b.metin)).toEqual([
+        'Bağla',
+        'Saxla',
+        'Close',
+        'Bakı paylanış',
+      ]);
     } finally {
       fs.rmSync(path.dirname(ornek), { recursive: true, force: true });
     }

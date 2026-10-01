@@ -56,7 +56,7 @@ const created = '2026-09-17T09:00:00.000Z';
 saveIdentitySnapshot({
   companies: [fixture.tenantA, fixture.tenantB].map((id, index) => ({
     id,
-    ad: `Synthetic Boutique ${index ? 'B' : 'A'}`,
+    ad: index ? fixture.boutiqueB : 'Synthetic Boutique A',
     sehir: 'Bakı',
     varsayilanParaBirimi: 'AZN',
     varsayilanKomisyonYuzdesi: 15,

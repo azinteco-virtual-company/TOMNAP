@@ -77,11 +77,30 @@ function teknik(metin: string) {
   if (!ASCII.test(m)) return false;
   if (/^[A-Z0-9_]+$/.test(m)) return true; // ENUM_VALUE
   if (/^[A-Z0-9]+(?:-[A-Z0-9]+)+$/.test(m)) return true; // code sample: TOR-ZARA-9821
+  if (/^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+$/.test(m)) return true; // file or frame name: Kargo_Etiketleri
+  if (/^![a-z]+$/.test(m)) return true; // spreadsheet keys: !cols
+  if (/^[A-Z][a-z]+(?:[A-Z][a-z0-9]+)+$/.test(m)) return true; // PascalCase name: NotoSans
   if (/^[a-z][a-zA-Z0-9_.\-]*$/.test(m)) return true; // identifier, key, kebab, locale
   if (/^[/#.?&=:@]/.test(m) || /^https?:/.test(m) || /^[\w.+-]+\/[\w.+*-]+$/.test(m)) return true;
   if (/^[\w-]+\[[^\]]*\]$/.test(m)) return true; // CSS selector
   if (/^[A-Z][a-z]+(?:-[A-Z][a-z]+)+$/.test(m)) return true; // HTTP header (Content-Type)
   return sinifListesi(m);
+}
+
+/** Markup of an `html` template part: tags, inline CSS and entities are not user text. */
+function isaretlemesiz(metin: string): string {
+  return metin
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/^[^<]*?>/, ' ')
+    .replace(/<[^>]*$/, ' ')
+    .replace(/&[a-z]+;/gi, ' ');
+}
+/** The literal parts of an `html` tagged template, in order. */
+function htmlParcalari(node: ts.TaggedTemplateExpression): ts.Node[] {
+  const sablon = node.template;
+  if (ts.isNoSubstitutionTemplateLiteral(sablon)) return [sablon];
+  return [sablon.head, ...sablon.templateSpans.map((span) => span.literal)];
 }
 
 function oznitelikAdi(node: ts.Node): string | null {
@@ -136,10 +155,25 @@ export function duzMetinler(dosya: string): DuzMetin[] {
     if (/\/\/\s*i18n-teknik\b/.test(satirlar[satir] ?? '')) return;
     sonuc.push({ dosya, satir: satir + 1, metin: metin.trim().slice(0, 80) });
   };
+  const islenmis = new Set<ts.Node>();
   const gez = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return;
+    if (ts.isTaggedTemplateExpression(node) && node.tag.getText() === 'html') {
+      // Markup is judged on the whole template: a part may sit inside a tag (" dir=").
+      const parcalar = htmlParcalari(node);
+      const ayrac = '\u0000';
+      const temiz = isaretlemesiz(
+        parcalar.map((p) => (p as ts.TemplateLiteralLikeNode).text).join(ayrac)
+      ).split(ayrac);
+      parcalar.forEach((parca, i) => {
+        islenmis.add(parca);
+        const metin = temiz[i] ?? '';
+        if (HARF.test(metin) && !teknik(metin)) ekle(parca, metin);
+      });
+    }
+    if (islenmis.has(node)) return;
     if (ts.isJsxText(node)) {
-      if (HARF.test(node.text)) ekle(node, node.text);
+      if (HARF.test(node.text) && !teknik(node.text)) ekle(node, node.text);
     } else if (
       ts.isStringLiteral(node) ||
       ts.isNoSubstitutionTemplateLiteral(node) ||
@@ -155,6 +189,7 @@ export function duzMetinler(dosya: string): DuzMetin[] {
           (TEKNIK_OZNITELIKLER.has(oznitelik) || oznitelik.startsWith('data-'))) ||
         anahtarArgumani(node) ||
         konsolArgumani(node) ||
+        (node.parent && ts.isElementAccessExpression(node.parent)) ||
         (node.parent && ts.isLiteralTypeNode(node.parent));
       if (!muaf) ekle(node, metin);
     }
