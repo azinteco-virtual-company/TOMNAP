@@ -27,7 +27,10 @@ export default function KuryeBakiyeleri({ teslimAlabilir }: { teslimAlabilir: bo
     void yukle();
   }, [yukle]);
 
-  const kurye = kuryeler?.find((k) => k.kuryeKullaniciId === secilenKurye) ?? null;
+  // A courier with nothing open has no panel (also after a reload elsewhere).
+  const kurye =
+    kuryeler?.find((k) => k.kuryeKullaniciId === secilenKurye && k.acikTahsilatlar.length > 0) ??
+    null;
   const sec = (id: string) => {
     setSecilenKurye(id);
     const bulunan = kuryeler?.find((k) => k.kuryeKullaniciId === id);
@@ -52,8 +55,10 @@ export default function KuryeBakiyeleri({ teslimAlabilir }: { teslimAlabilir: bo
         body: JSON.stringify(govde),
       });
       setMesaj(`${azn(govde.tutar_azn)} kassaya təhvil alındı.`);
-      await yukle();
+      // B6: the hand-over is done; close the panel, the table shows the new balance.
+      setSecilenKurye(null);
       setSecili(new Set());
+      await yukle();
     } catch (error) {
       setMesaj(error instanceof Error ? error.message : 'Təhvil alınmadı.');
     } finally {
