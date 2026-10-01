@@ -140,6 +140,8 @@ DO $$ BEGIN
   END IF;
 END $$;
 \ir ../../supabase/migrations/20260924140000_kurlar_ve_v2_ayarlari.sql
+-- Migration 20 adds a column to tenant_v2_ayarlari: re-apply it with its table.
+\ir ../../supabase/migrations/20261001100000_butik_varsayilan_dili.sql
 DO $$ BEGIN
   IF to_regclass('public.kurlar') IS NULL OR to_regclass('public.tenant_v2_ayarlari') IS NULL
      OR NOT has_table_privilege('service_role', 'public.kurlar', 'INSERT')

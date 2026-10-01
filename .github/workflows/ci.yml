@@ -162,6 +162,8 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/odeme-islem-anahtari.sql
           # v2 stage bridge (TEMPORARY, O-38): one step forward, roles, history; down -> up.
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/v2-asama-koprusu.sql
+          # Boutique default language (docs/i18n.md): default az, format CHECK, access; down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/butik-varsayilan-dili.sql
           node tests/sql/siparis-satirlari-concurrency.mjs
           node tests/sql/odemeler-concurrency.mjs
           node tests/sql/kasa-concurrency.mjs
