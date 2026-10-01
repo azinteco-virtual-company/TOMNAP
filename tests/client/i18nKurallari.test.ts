@@ -16,6 +16,9 @@ export const TASINAN_DOSYALAR = [
   'src/components/landing/ButikQeydiyyatModal.tsx',
   'src/components/DavetQebulSayfasi.tsx',
   'src/components/SifreBelirleSayfasi.tsx',
+  // B2: v1 sipariş detay penceresi.
+  'src/components/SiparisDetayModal.tsx',
+  'src/components/siparisDetayFormu.ts',
 ];
 
 const KOK = 'src/i18n/locales';

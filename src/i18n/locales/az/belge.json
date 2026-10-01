@@ -1,1 +1,7 @@
-{}
+{
+  "whatsapp": {
+    "eksikBilgi": "Salam hörmətli {{musteri}}, sifarişiniz ({{urun}}) qeydə alındı. Lakin çatdırılmanı tamamlamaq üçün aşağıdakı məlumatlar lazımdır: {{eksikler}}. Zəhmət olmasa qeyd edərdiniz.",
+    "varsayilanEksikler": "ünvan və əlaqə nömrəsi",
+    "teslimat": "Salam hörmətli {{musteri}}, Kanadadan sifariş etdiyiniz \"{{urun}}\" artıq Bakıdadır! Dostumuz vasitəsilə təhvil ala bilərsiniz. Qalan borcunuz: {{kalan}}. Əlaqə üçün yazın."
+  }
+}

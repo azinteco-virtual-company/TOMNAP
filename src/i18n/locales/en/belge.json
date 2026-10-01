@@ -1,1 +1,7 @@
-{}
+{
+  "whatsapp": {
+    "eksikBilgi": "Hello {{musteri}}, your order ({{urun}}) has been registered. To complete the delivery we still need: {{eksikler}}. Please send them to us.",
+    "varsayilanEksikler": "your address and phone number",
+    "teslimat": "Hello {{musteri}}, your order \"{{urun}}\" from Canada is now in Baku! Our contact can hand it over to you. Balance due: {{kalan}}. Write to us to arrange it."
+  }
+}

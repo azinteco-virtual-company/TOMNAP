@@ -29,7 +29,7 @@ export function sayi(deger: number, ondalik = 2): string {
   return sayiBicimi(ondalik).format(Number.isFinite(deger) ? deger : 0);
 }
 
-export function para(tutar: number, birim: ParaBirimi = 'AZN'): string {
+export function para(tutar: number, birim: ParaBirimi | string = 'AZN'): string {
   return `${sayi(tutar, 2)} ${birim}`;
 }
 

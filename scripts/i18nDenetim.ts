@@ -76,6 +76,7 @@ function teknik(metin: string) {
   if (!HARF.test(m)) return true;
   if (!ASCII.test(m)) return false;
   if (/^[A-Z0-9_]+$/.test(m)) return true; // ENUM_VALUE
+  if (/^[A-Z0-9]+(?:-[A-Z0-9]+)+$/.test(m)) return true; // code sample: TOR-ZARA-9821
   if (/^[a-z][a-zA-Z0-9_.\-]*$/.test(m)) return true; // identifier, key, kebab, locale
   if (/^[/#.?&=:@]/.test(m) || /^https?:/.test(m) || /^[\w.+-]+\/[\w.+*-]+$/.test(m)) return true;
   if (/^[\w-]+\[[^\]]*\]$/.test(m)) return true; // CSS selector

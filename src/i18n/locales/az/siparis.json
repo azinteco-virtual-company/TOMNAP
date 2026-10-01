@@ -1,0 +1,79 @@
+{
+  "detay": {
+    "kimlikRozeti": "ID",
+    "baslik": "Sifariş təfərrüatı: {{musteri}}",
+    "olusturulma": "Yaradılıb: {{tarih}} • Kanal: {{kanal}}",
+    "hamMesaj": "Müştərinin göndərdiyi ilkin mesaj",
+    "aiGirisi": "AI girişi",
+    "finans": "Ödəniş vəziyyəti",
+    "toplam": "Ümumi məbləğ:",
+    "tahsilEdilen": "Alınıb (Bakı):",
+    "kalanBorc": "Qalıq borc:",
+    "lojistik": "Logistika vəziyyəti",
+    "sehir": "Çatdırılma şəhəri:",
+    "sehirVarsayilan": "Bakı",
+    "adres": "Ünvan:",
+    "belirtilmeyib": "Göstərilməyib",
+    "elaqe": "Əlaqə:",
+    "telefonYoxdur": "Telefon yoxdur",
+    "kanada": {
+      "baslik": "🇨🇦 Kanada alış qəbzi / fakturası və mağaza",
+      "etiket": "Kanada əməliyyatı",
+      "magaza": "Alındığı mağaza / ticarət mərkəzi",
+      "magazaOrnek": "Məs: Toronto Eaton Centre (Zara / Sephora)",
+      "alisTutari": "Kanada alış məbləği (CAD $)",
+      "fatura": "Qəbz / faktura şəkli və ya sənədi",
+      "faturaYukle": "Qəbz / faktura şəkli yüklə",
+      "faturaGorseli": "Faktura",
+      "faturaYuklendi": "Qəbz yükləndi",
+      "kaldir": "Sil",
+      "faturaYoxdur": "Qəbz yüklənməyib"
+    },
+    "baki": {
+      "baslik": "Bakı kuryeri və gömrük (FİN) məlumatları",
+      "etiket": "Bakıda paylanma",
+      "fin": "Müştəri FİN kodu / Smart Customs (gömrük alıcısı)",
+      "finOrnek": "Məs: 7ABC123 (7 simvollu FİN)",
+      "finNotu": "* Kargo qaiməsində rəsmi alıcı kimi bəyan edilir."
+    },
+    "notlar": {
+      "baslik": "İzləmə kodları və ödəniş qeydləri",
+      "kanadaKodu": "🇨🇦 Kanada mağaza / kargo kodu",
+      "kanadaKoduYarat": "Yeni Kanada izləmə kodu yarat",
+      "avtoYarat": "Avto yarat",
+      "kargoKodu": "✈️ Beynəlxalq hava kargo kodu",
+      "kargoKoduYarat": "Yeni beynəlxalq hava kargo kodu yarat",
+      "talimat": "Müştərinin xüsusi çatdırılma və sürücü / əməliyyat təlimatı",
+      "talimatEtiket": "Kargo / əldən təlimat",
+      "talimatOrnek": "Məs: Bakıya çatanda xəbər edilsin, sürücümüz özü gedib götürəcək (kargo yox, əldən təhvil)",
+      "talimatNotu": "* Bu qeyd kargo manifestində və Bakı çatdırılma hesabatında görünür; sürücü, kuryer və Bakıdakı dostumuz onu nəzərə alır.",
+      "tahsilat": "Bakı ödəniş qeydi",
+      "tahsilatOrnek": "Məs: 20 manat Bakıda əldən verildi, qalanı sonra ödəniləcək..."
+    },
+    "kaydedildi": "Sifariş qeydləri və izləmə kodları yeniləndi.",
+    "whatsapp": {
+      "baslik": "Müştəri üçün hazır WhatsApp mesajı",
+      "eksikBilgi": "AI bu sifarişdə bu məlumatların çatışmadığını aşkar etdi: {{eksikler}}",
+      "teslimat": "Çatdırılma mərhələsində Bakıdakı paylayıcı üçün müştəriyə bildiriş:",
+      "ac": "WhatsApp bildirişini aç"
+    },
+    "saxlanildi": "Saxlanıldı",
+    "yaddaSaxla": "Yadda saxla",
+    "degisiklikYok": "Dəyişiklik yoxdur.",
+    "kaydedilmedi": "Saxlanılmadı. Bildirişdəki səbəbə baxın.",
+    "faturaCokBuyuk": "Faktura şəkli ən çox 3 MB ola bilər.",
+    "alisFiyatiGecersiz": "Alış qiyməti (CAD) düzgün rəqəm olmalıdır."
+  },
+  "finans": {
+    "BEKLIYOR": "Ödənməyib",
+    "KISMI_ODEME": "Qismən ödənilib",
+    "ODENDI": "Ödənilib"
+  },
+  "lojistik": {
+    "KANADA_SATINALIM_BEKLIYOR": "Kanada alışı gözlənilir",
+    "KANADA_DEPO": "Kanada anbarında",
+    "ULUSLARARASI_KARGO": "Beynəlxalq kargoda",
+    "BAKU_DAGITIM_ARKADAS": "Bakıda paylanmada",
+    "TESLIM_EDILDI": "Təhvil verilib"
+  }
+}

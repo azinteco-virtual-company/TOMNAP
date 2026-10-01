@@ -108,7 +108,7 @@ describe('order detail form saves through PATCH /api/siparisler/:id (Codex R3 F1
 
   it('sends nothing for an unchanged form and refuses invalid values', async () => {
     expect(await formBody({})).toEqual({ degisiklikler: {} });
-    expect((await formBody({ alisFiyatiCad: 'on beş' })).hata).toMatch(/Alış fiyatı/);
+    expect((await formBody({ alisFiyatiCad: 'on beş' })).hata).toBe('detay.alisFiyatiGecersiz');
     for (const edits of [
       { finKodu: '12' },
       { pasaportNo: 'C-1' },
