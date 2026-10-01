@@ -121,6 +121,7 @@ export const KuryeCalismaAlani: React.FC<Props> = ({ userName, onLogout }) => {
   );
   const pending =
     data?.gorevler.filter((task) => task.lojistik_durumu !== 'TESLIM_EDILDI').length || 0;
+  const completed = (data?.gorevler.length || 0) - pending;
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -212,7 +213,7 @@ export const KuryeCalismaAlani: React.FC<Props> = ({ userName, onLogout }) => {
                 onClick={() => setFilter('completed')}
                 className={`min-h-11 rounded-lg px-4 text-sm font-semibold ${filter === 'completed' ? 'bg-indigo-600 text-white' : 'border border-slate-300 bg-white'}`}
               >
-                Təhvil verilən
+                Təhvil verilən ({completed})
               </button>
             </div>
             {tasks.length === 0 && (
