@@ -70,3 +70,52 @@ for (const ekran of EKRANLAR) {
     );
   }
 }
+
+/**
+ * Çeviri dosyaları ve PDF fontu (docs/i18n.md): dil dosyaları ve Noto Sans ayrı parçalardır;
+ * index.html'in yüklediği ya da ön yüklediği hiçbir dosyada olmaz, font service worker'ın
+ * kurulumda indirdiği listeye (precache) girmez. Her dil dosyasının en uzun metni ilk yük
+ * paketinde aranır.
+ */
+function ceviriVeFontKontrolu(): string | null {
+  const html = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
+  const ilkYuk = [...html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="\/?([^"?#]+)"/g)]
+    .map((match) => path.join(dist, match[1]))
+    .filter((dosya) => dosya.endsWith('.js'));
+  const ilkIcerik = ilkYuk.map((dosya) => fs.readFileSync(dosya, 'utf8')).join('\n');
+  const kok = 'src/i18n/locales';
+  const yapraklar = (agac: unknown): string[] =>
+    typeof agac === 'string'
+      ? [agac]
+      : agac && typeof agac === 'object'
+        ? Object.values(agac).flatMap(yapraklar)
+        : [];
+  for (const dil of fs.readdirSync(kok)) {
+    const klasor = path.join(kok, dil);
+    if (!fs.statSync(klasor).isDirectory()) continue;
+    for (const dosya of fs.readdirSync(klasor)) {
+      const enUzun = yapraklar(JSON.parse(fs.readFileSync(path.join(klasor, dosya), 'utf8')))
+        .filter((metin) => !/["\\\n]/.test(metin))
+        .sort((a, b) => b.length - a.length)[0];
+      if (!enUzun) continue;
+      if (ilkIcerik.includes(enUzun)) return `Çeviri dosyası ilk yük paketinde: ${dil}/${dosya}`;
+      const parca = jsDosyalari(dist).find((js) => fs.readFileSync(js, 'utf8').includes(enUzun));
+      if (!parca) return `Çeviri dosyası derlemede bulunamadı: ${dil}/${dosya}`;
+    }
+  }
+  const fontlar = fs.readdirSync(path.join(dist, 'assets')).filter((f) => f.endsWith('.ttf'));
+  if (fontlar.length < 2) return 'PDF fontu (Noto Sans, normal ve kalın) derlemede yok.';
+  if (/\.ttf\b/.test(html)) return 'PDF fontu index.html tarafından yükleniyor.';
+  const sw = path.join(dist, 'sw.js');
+  if (fs.existsSync(sw) && /url:"[^"]*\.ttf"/.test(fs.readFileSync(sw, 'utf8')))
+    return 'PDF fontu service worker kurulum listesinde (precache).';
+  return null;
+}
+
+const ceviriHatasi = ceviriVeFontKontrolu();
+if (ceviriHatasi) {
+  console.error(ceviriHatasi);
+  process.exitCode = 1;
+} else {
+  console.log('Çeviri dosyaları ve PDF fontu ayrı parçalarda; ilk yük paketinde değil.');
+}
