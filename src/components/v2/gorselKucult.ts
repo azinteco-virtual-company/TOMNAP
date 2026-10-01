@@ -3,6 +3,7 @@
  * keser; üç görsel en çok ~0,8 MB JPEG olarak (base64 ile ~3,2 MB) gider. Görsel hiçbir
  * yere yüklenmez; yalnız AI önerisi için sunucuya gönderilir (sunucu sınırı: 3 × 1 MB).
  */
+import { v2t } from './v2Ceviri';
 
 export const KUCULTME = {
   adet: 3,
@@ -42,8 +43,7 @@ function jpeg(canvas: HTMLCanvasElement, kalite: number): Promise<Blob | null> {
 
 /** Downscales one image to a JPEG under the target size; throws if it cannot. */
 export async function gorseliKucult(dosya: Blob): Promise<GonderilecekGorsel> {
-  if (!/^image\/(jpeg|png|webp)$/.test(dosya.type))
-    throw new Error('Yalnız JPEG, PNG və ya WebP şəkil seçin.');
+  if (!/^image\/(jpeg|png|webp)$/.test(dosya.type)) throw new Error(v2t('gorsel.tur'));
   const bitmap = await createImageBitmap(dosya);
   try {
     let kenar = KUCULTME.uzunKenar;
@@ -53,7 +53,7 @@ export async function gorseliKucult(dosya: Blob): Promise<GonderilecekGorsel> {
       canvas.width = genislik;
       canvas.height = yukseklik;
       const context = canvas.getContext('2d');
-      if (!context) throw new Error('Şəkil hazırlana bilmədi.');
+      if (!context) throw new Error(v2t('gorsel.hazirlanmadi'));
       context.drawImage(bitmap, 0, 0, genislik, yukseklik);
       for (const kalite of KUCULTME.kaliteler) {
         const blob = await jpeg(canvas, kalite);
@@ -65,7 +65,7 @@ export async function gorseliKucult(dosya: Blob): Promise<GonderilecekGorsel> {
       }
       kenar = Math.floor(kenar * KUCULTME.kucultmeOrani);
     }
-    throw new Error('Şəkil çox böyükdür; daha kiçik ekran görüntüsü seçin.');
+    throw new Error(v2t('gorsel.cokBoyuk'));
   } finally {
     bitmap.close();
   }

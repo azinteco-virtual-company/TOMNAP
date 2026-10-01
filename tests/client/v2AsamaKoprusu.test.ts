@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { asamaIlerletebilir, sonrakiAsama, V2_ASAMA_SIRASI } from '../../src/shared/v2Asama';
 import { asamaIstegi, asamaOnayMetni } from '../../src/components/v2/asamaFormu';
+import { dilHazirla } from '../helpers/i18n';
 
 // TEMPORARY v2 stage bridge (OPEN_QUESTIONS 38): one rule for the server's memory store
 // and for the "next stage" button.
+// The texts come from the az translation files (docs/i18n.md); the wording is unchanged.
+beforeAll(() => dilHazirla('az', ['v2']));
+
 describe('v2 stage bridge rule (O-38)', () => {
   it('knows only the next stage, never after Baku distribution', () => {
     expect(V2_ASAMA_SIRASI).toEqual([

@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiFetch } from '../../lib/apiClient';
+import { hataMetni as cevrilmisHata } from '../../i18n/hata';
+import { sayi, tarih } from '../../i18n/bicim';
 import { useAppStore } from '../../store/appStore';
 import { asamaIlerletebilir } from '../../shared/v2Asama';
 import { asamaIstegi, asamaOnayMetni } from './asamaFormu';
@@ -15,9 +18,6 @@ export interface V2SiparisOzeti {
   satirlar: unknown[];
 }
 
-const hataMetni = (error: unknown) =>
-  error instanceof Error ? error.message : 'Əməliyyat tamamlanmadı.';
-
 /**
  * v2 sipariş listesi. GEÇİCİ aşama köprüsü (OPEN_QUESTIONS 38): yetkili rol bir v2
  * siparişini onay sorulduktan sonra bir sonraki lojistik mərhələyə keçirir.
@@ -31,6 +31,7 @@ export default function SiparisListesi({
   sahipAdi: (id: string) => string;
   onDegisti: () => Promise<void>;
 }) {
+  const { t } = useTranslation('v2');
   const aktifRol = useAppStore((state) => state.aktifRol);
   const [bekleyen, setBekleyen] = useState<string | null>(null);
   const [mesaj, setMesaj] = useState<string | null>(null);
@@ -46,9 +47,9 @@ export default function SiparisListesi({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(govde),
       });
-      setMesaj('Mərhələ dəyişdirildi.');
+      setMesaj(t('liste.asamaDegisti'));
     } catch (error) {
-      setMesaj(hataMetni(error));
+      setMesaj(cevrilmisHata(error, t('ortak.xeta')));
     } finally {
       setBekleyen(null);
       await onDegisti();
@@ -62,23 +63,21 @@ export default function SiparisListesi({
           {mesaj}
         </p>
       )}
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-start text-sm">
         <thead className="text-xs text-slate-400">
           <tr>
-            <th className="py-2">Tarix</th>
-            <th>Müştəri</th>
-            <th>Sətir</th>
-            <th>Sahib</th>
-            <th>Vəziyyət</th>
-            <th className="text-right">Cəm (AZN)</th>
+            <th className="py-2">{t('liste.tarix')}</th>
+            <th>{t('liste.musteri')}</th>
+            <th>{t('liste.satir')}</th>
+            <th>{t('liste.sahib')}</th>
+            <th>{t('liste.veziyyet')}</th>
+            <th className="text-end">{t('liste.cem')}</th>
           </tr>
         </thead>
         <tbody>
           {siparisler.map((siparis) => (
             <tr key={siparis.id} className="border-t border-slate-800">
-              <td className="py-2 text-slate-400">
-                {new Date(siparis.olusturmaTarihi).toLocaleDateString()}
-              </td>
+              <td className="py-2 text-slate-400">{tarih(siparis.olusturmaTarihi)}</td>
               <td>{siparis.musteriAdi}</td>
               <td>{siparis.satirlar.length}</td>
               <td className="text-slate-400">
@@ -91,13 +90,13 @@ export default function SiparisListesi({
                     type="button"
                     disabled={bekleyen !== null}
                     onClick={() => void ilerlet(siparis)}
-                    className="ml-2 rounded border border-slate-600 px-2 py-0.5 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+                    className="ms-2 rounded border border-slate-600 px-2 py-0.5 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50"
                   >
-                    {bekleyen === siparis.id ? 'Gözləyin…' : 'Növbəti mərhələ →'}
+                    {bekleyen === siparis.id ? t('liste.gozleyin') : t('liste.novbetiMerhele')}
                   </button>
                 )}
               </td>
-              <td className="text-right">{siparis.toplamTutar.toFixed(2)}</td>
+              <td className="text-end">{sayi(siparis.toplamTutar)}</td>
             </tr>
           ))}
         </tbody>
