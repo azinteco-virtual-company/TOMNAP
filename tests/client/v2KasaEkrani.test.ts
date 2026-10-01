@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setApiSession } from '../../src/lib/apiClient';
 import { useAppStore } from '../../src/store/appStore';
 import V2Kasa from '../../src/components/v2/V2Kasa';
 import KuryeBakiyeleri from '../../src/components/v2/KuryeBakiyeleri';
 import { buttonByText, click, render, stubApi, waitFor } from '../helpers/dom';
+import { dilHazirla } from '../helpers/i18n';
 
 // Deploy 3 findings on the v2 cash desk (B5, B6).
 const rauf = (bakiye: number, acik: boolean) => ({
@@ -33,6 +34,9 @@ afterEach(() => {
   useAppStore.setState({ aktifRol: null });
   vi.unstubAllGlobals();
 });
+
+// The texts come from the az translation files (docs/i18n.md); the wording is unchanged.
+beforeAll(() => dilHazirla('az', ['v2']));
 
 describe('v2 cash desk order table (B5)', () => {
   it('keeps the amount due and the status in separate, spaced columns', async () => {

@@ -4,6 +4,8 @@
  */
 import { rolGrubunda, type KullaniciRolu } from '../../shared/roller';
 import { sayiOku } from './siparisFormu';
+import { v2t } from './v2Ceviri';
+import { para } from '../../i18n/bicim';
 
 export type OdemeYontemi = 'NAKIT' | 'KART' | 'HAVALE' | 'DIGER';
 export type OdemeKaynagi = 'TESLIMAT' | 'BUTIK' | 'ONLINE';
@@ -35,23 +37,21 @@ export interface OdemeDefteriYaniti {
   odemeler: DefterSatiri[];
 }
 
+const yontem = (id: OdemeYontemi) => ({
+  id,
+  get ad() {
+    return v2t(`odeme.yontem.${id}`);
+  },
+});
+/** Payment methods; the name is read in the interface language (docs/i18n.md). */
 export const YONTEMLER: ReadonlyArray<{ id: OdemeYontemi; ad: string }> = [
-  { id: 'NAKIT', ad: 'Nağd' },
-  { id: 'KART', ad: 'Kart' },
-  { id: 'HAVALE', ad: 'Köçürmə' },
-  { id: 'DIGER', ad: 'Digər' },
+  yontem('NAKIT'),
+  yontem('KART'),
+  yontem('HAVALE'),
+  yontem('DIGER'),
 ];
-export const KAYNAK_ADI: Record<OdemeKaynagi, string> = {
-  TESLIMAT: 'Çatdırılma',
-  BUTIK: 'Butik',
-  ONLINE: 'Onlayn',
-};
-export const DURUM_ADI: Record<OdemeDurumu, string> = {
-  ODENMEDI: 'Ödənməyib',
-  KISMI: 'Qismən',
-  TAM: 'Tam',
-  FAZLA: 'Artıq ödənib',
-};
+export const kaynakAdi = (kaynak: OdemeKaynagi) => v2t(`odeme.kaynak.${kaynak}`);
+export const durumAdi = (durum: OdemeDurumu) => v2t(`odeme.durum.${durum}`);
 
 /** Who may record and reverse payments (PAYMENT_WRITE; SUPER_ADMIN only reads). */
 export const odemeYazabilir = (rol: KullaniciRolu | null) => rolGrubunda(rol, 'PAYMENT_WRITE');
@@ -103,8 +103,8 @@ export function odemeIstegi(
     tutar >= 1_000_000 ||
     Math.round(tutar * 100) / 100 !== tutar
   )
-    hatalar.push('Məbləğ 0-1.000.000 AZN, ən çox 2 onluq olmalıdır.');
-  if (form.aciklama.trim().length > 500) hatalar.push('Qeyd ən çox 500 simvol ola bilər.');
+    hatalar.push(v2t('odeme.tutarGecersiz'));
+  if (form.aciklama.trim().length > 500) hatalar.push(v2t('odeme.qeydUzun'));
   if (hatalar.length) return { govde: null, hatalar };
   return {
     govde: {
@@ -124,9 +124,10 @@ export function tersKayitIstegi(
   gerekce: string
 ): { govde: { aciklama: string }; hata: null } | { govde: null; hata: string } {
   const temiz = gerekce.trim();
-  if (!temiz) return { govde: null, hata: 'Geri qaytarmanın səbəbini yazın.' };
-  if (temiz.length > 500) return { govde: null, hata: 'Səbəb ən çox 500 simvol ola bilər.' };
+  if (!temiz) return { govde: null, hata: v2t('odeme.sebebYaz') };
+  if (temiz.length > 500) return { govde: null, hata: v2t('odeme.sebebUzun') };
   return { govde: { aciklama: temiz }, hata: null };
 }
 
-export const azn = (value: number) => `${value.toFixed(2)} AZN`;
+/** Money in AZN from the one formatting helper (docs/i18n.md): "5.00 AZN". */
+export const azn = (value: number) => para(value);

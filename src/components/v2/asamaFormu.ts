@@ -1,4 +1,5 @@
 import { sonrakiAsama } from '../../shared/v2Asama';
+import { v2t } from './v2Ceviri';
 
 /** GEÇİCİ aşama köprüsü (OPEN_QUESTIONS 38): the "next stage" button's request and question. */
 export interface AsamaSiparisi {
@@ -12,8 +13,9 @@ export function asamaIstegi(siparis: AsamaSiparisi): { beklenen_asama: string } 
 }
 
 export function asamaOnayMetni(siparis: AsamaSiparisi): string {
-  return (
-    `${siparis.musteriAdi}: ${siparis.lojistikDurumu} → ${sonrakiAsama(siparis.lojistikDurumu)}. ` +
-    'Mərhələ geri qaytarıla bilməz. Davam edilsin?'
-  );
+  return v2t('asama.onay', {
+    musteri: siparis.musteriAdi,
+    eski: siparis.lojistikDurumu,
+    yeni: sonrakiAsama(siparis.lojistikDurumu),
+  });
 }

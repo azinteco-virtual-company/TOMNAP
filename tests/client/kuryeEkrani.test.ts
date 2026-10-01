@@ -32,6 +32,9 @@ async function kuryeEkrani() {
   vi.stubEnv('VITE_FF_V2_FLOW', 'true');
   vi.resetModules();
   const { KuryeCalismaAlani } = await import('../../src/components/KuryeCalismaAlani');
+  // The fresh module graph has its own i18n instance: its texts come from the az files.
+  const { dilHazirla } = await import('../helpers/i18n');
+  await dilHazirla('az', ['v2']);
   return KuryeCalismaAlani;
 }
 

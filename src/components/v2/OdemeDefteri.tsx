@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiFetch } from '../../lib/apiClient';
+import { hataMetni as cevrilmisHata } from '../../i18n/hata';
+import { tarihSaat } from '../../i18n/bicim';
 import { useAppStore } from '../../store/appStore';
 import {
-  DURUM_ADI,
-  KAYNAK_ADI,
   YONTEMLER,
   azn,
   bosOdemeFormu,
+  durumAdi,
+  kaynakAdi,
   kaynakSecenekleri,
   odemeIstegi,
   tersKayitIstegi,
@@ -16,8 +19,6 @@ import {
 } from './odemeFormu';
 
 const girdi = 'mt-1 w-full rounded-lg bg-slate-800 p-2 text-sm text-white';
-const hataMetni = (error: unknown) =>
-  error instanceof Error ? error.message : 'Əməliyyat tamamlanmadı.';
 const json = (body: unknown): RequestInit => ({
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -35,6 +36,8 @@ export default function OdemeDefteri({
   siparisId: string;
   onDegisti?: () => void;
 }) {
+  const { t } = useTranslation('v2');
+  const hataMetni = (error: unknown) => cevrilmisHata(error, t('ortak.xeta'));
   const aktifRol = useAppStore((state) => state.aktifRol);
   const kullaniciId = useAppStore((state) => state.session?.id ?? null);
   const kaynaklar = kaynakSecenekleri(aktifRol);
@@ -90,31 +93,37 @@ export default function OdemeDefteri({
     islemAnahtari.current ??= crypto.randomUUID();
     const { govde, hatalar: yeni } = odemeIstegi(siparisId, form, islemAnahtari.current);
     setHatalar(yeni);
-    if (govde && (await gonder('/api/v2/odemeler', govde, 'Ödəniş yazıldı.')))
+    if (govde && (await gonder('/api/v2/odemeler', govde, t('odeme.defter.yazildi'))))
       setForm(bosOdemeFormu(form.kaynak));
   };
 
   const tersKaydet = async (odemeId: string) => {
     const { govde, hata } = tersKayitIstegi(gerekce);
     if (!govde) return setMesaj(hata);
-    if (await gonder(`/api/v2/odemeler/${odemeId}/ters-kayit`, govde, 'Ödəniş geri qaytarıldı.')) {
+    if (
+      await gonder(
+        `/api/v2/odemeler/${odemeId}/ters-kayit`,
+        govde,
+        t('odeme.defter.geriQaytarildi')
+      )
+    ) {
       setTersAcik(null);
       setGerekce('');
     }
   };
 
   if (!defter)
-    return <p className="text-sm text-slate-400">{mesaj ?? 'Ödəniş dəftəri yüklənir…'}</p>;
+    return <p className="text-sm text-slate-400">{mesaj ?? t('odeme.defter.yuklenir')}</p>;
   const { ozet } = defter;
   return (
-    <section aria-label="Ödəniş dəftəri" className="space-y-4">
+    <section aria-label={t('odeme.defter.etiket')} className="space-y-4">
       <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         {(
           [
-            ['Cəm', azn(ozet.toplamTutar)],
-            ['Ödənib', azn(ozet.odenenTutar)],
-            ['Qalıq', azn(ozet.kalanTutar)],
-            ['Vəziyyət', DURUM_ADI[ozet.durum]],
+            [t('odeme.defter.cem'), azn(ozet.toplamTutar)],
+            [t('odeme.defter.odenib'), azn(ozet.odenenTutar)],
+            [t('odeme.defter.qaliq'), azn(ozet.kalanTutar)],
+            [t('odeme.defter.veziyyet'), durumAdi(ozet.durum)],
           ] as const
         ).map(([ad, deger]) => (
           <div key={ad} className="rounded-lg bg-slate-900 p-3">
@@ -124,14 +133,14 @@ export default function OdemeDefteri({
         ))}
       </dl>
 
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-start text-sm">
         <thead className="text-xs text-slate-400">
           <tr>
-            <th className="py-2">Tarix</th>
-            <th>Məbləğ</th>
-            <th>Üsul</th>
-            <th>Mənbə</th>
-            <th>Qeyd</th>
+            <th className="py-2">{t('odeme.defter.tarix')}</th>
+            <th>{t('odeme.defter.mebleg')}</th>
+            <th>{t('odeme.defter.usul')}</th>
+            <th>{t('odeme.defter.menbe')}</th>
+            <th>{t('odeme.defter.qeyd')}</th>
             <th />
           </tr>
         </thead>
@@ -139,27 +148,27 @@ export default function OdemeDefteri({
           {defter.odemeler.length === 0 && (
             <tr>
               <td colSpan={6} className="py-2 text-slate-400">
-                Hələ ödəniş yoxdur.
+                {t('odeme.defter.bos')}
               </td>
             </tr>
           )}
           {defter.odemeler.map((satir) => (
             <tr key={satir.id} className="border-t border-slate-800 align-top">
-              <td className="py-2 text-slate-400">{new Date(satir.almaZamani).toLocaleString()}</td>
+              <td className="py-2 text-slate-400">{tarihSaat(satir.almaZamani)}</td>
               <td className={satir.tutarAzn < 0 ? 'text-rose-300' : ''}>{azn(satir.tutarAzn)}</td>
               <td>{YONTEMLER.find((y) => y.id === satir.yontem)?.ad ?? satir.yontem}</td>
-              <td>{KAYNAK_ADI[satir.kaynak]}</td>
+              <td>{kaynakAdi(satir.kaynak)}</td>
               <td className="text-slate-400">
-                {satir.tersKayitOdemeId ? 'Geri qaytarma: ' : ''}
+                {satir.tersKayitOdemeId ? `${t('odeme.defter.geriQaytarma')} ` : ''}
                 {satir.aciklama ?? ''}
-                {satir.tersKaydiVar ? ' (geri qaytarılıb)' : ''}
+                {satir.tersKaydiVar ? ` ${t('odeme.defter.geriQaytarilib')}` : ''}
               </td>
-              <td className="text-right">
+              <td className="text-end">
                 {tersKayitYapilabilir(aktifRol, kullaniciId, satir) &&
                   (tersAcik === satir.id ? (
                     <span className="flex gap-2">
                       <input
-                        aria-label="Geri qaytarmanın səbəbi"
+                        aria-label={t('odeme.defter.sebeb')}
                         value={gerekce}
                         maxLength={500}
                         onChange={(event) => setGerekce(event.target.value)}
@@ -171,7 +180,7 @@ export default function OdemeDefteri({
                         onClick={() => void tersKaydet(satir.id)}
                         className="rounded bg-rose-700 px-2 text-xs text-white disabled:opacity-50"
                       >
-                        Təsdiqlə
+                        {t('odeme.defter.tesdiqle')}
                       </button>
                     </span>
                   ) : (
@@ -183,7 +192,7 @@ export default function OdemeDefteri({
                       }}
                       className="text-xs text-rose-300 underline"
                     >
-                      Geri qaytar
+                      {t('odeme.defter.geriQaytar')}
                     </button>
                   ))}
               </td>
@@ -198,7 +207,7 @@ export default function OdemeDefteri({
           className="grid gap-3 rounded-xl border border-slate-800 p-4 sm:grid-cols-5"
         >
           <label className="text-xs text-slate-400">
-            Məbləğ (AZN)
+            {t('odeme.defter.meblegAzn')}
             <input
               inputMode="decimal"
               value={form.tutar}
@@ -207,7 +216,7 @@ export default function OdemeDefteri({
             />
           </label>
           <label className="text-xs text-slate-400">
-            Üsul
+            {t('odeme.defter.usul')}
             <select
               value={form.yontem}
               onChange={(event) =>
@@ -223,7 +232,7 @@ export default function OdemeDefteri({
             </select>
           </label>
           <label className="text-xs text-slate-400">
-            Mənbə
+            {t('odeme.defter.menbe')}
             <select
               value={form.kaynak}
               onChange={(event) =>
@@ -233,13 +242,13 @@ export default function OdemeDefteri({
             >
               {kaynaklar.map((k) => (
                 <option key={k} value={k}>
-                  {KAYNAK_ADI[k]}
+                  {kaynakAdi(k)}
                 </option>
               ))}
             </select>
           </label>
           <label className="text-xs text-slate-400">
-            Qeyd
+            {t('odeme.defter.qeyd')}
             <input
               value={form.aciklama}
               maxLength={500}
@@ -252,10 +261,10 @@ export default function OdemeDefteri({
             disabled={bekliyor}
             className="self-end rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            Ödəniş yaz
+            {t('odeme.defter.odenisYaz')}
           </button>
           {hatalar.length > 0 && (
-            <ul role="alert" className="list-disc pl-5 text-xs text-rose-300 sm:col-span-5">
+            <ul role="alert" className="list-disc ps-5 text-xs text-rose-300 sm:col-span-5">
               {hatalar.map((item) => (
                 <li key={item}>{item}</li>
               ))}

@@ -21,5 +21,224 @@
       "yalnizPatron": "Yalnız butik sahibi dəyişə bilər.",
       "saxlanildi": "Butikin dili yadda saxlanıldı."
     }
+  },
+  "kabuk": {
+    "baslik": "TOMNAP v2",
+    "altBaslik": "Önizləmə — yeni axın hələ hazırlanır",
+    "butik": "Butik",
+    "butikSecin": "Butik seçin",
+    "panelQayit": "Mövcud panelə qayıt",
+    "serverYoxlanilir": "Server yoxlanılır…",
+    "aktivDeyil": "Serverdə v2 axını aktiv deyil (FF_V2_FLOW).",
+    "yoxlanilaBilmedi": "Server v2 vəziyyəti yoxlanıla bilmədi.",
+    "butikGerekli": "v2 məlumatı bir butikə aiddir. Davam etmək üçün yuxarıdan butik seçin.",
+    "bolmeler": "v2 bölmələri",
+    "bolmeYoxdur": "Rolunuz üçün hələ v2 bölməsi yoxdur.",
+    "sekme": {
+      "siparisler": "Sifarişlər",
+      "kasa": "Kassa",
+      "kacaklar": "Qaçaqlar",
+      "kurlar": "Kurlar",
+      "ayarlar": "Ayarlar"
+    }
+  },
+  "asama": {
+    "onay": "{{musteri}}: {{eski}} → {{yeni}}. Mərhələ geri qaytarıla bilməz. Davam edilsin?"
+  },
+  "kasa": {
+    "tutarGecersiz": "Məbləğ 0-dan böyük, ən çox 2 onluq olmalıdır.",
+    "enCox": "Ən çox {{mebleg}} AZN yazıla bilər.",
+    "ekran": {
+      "yuklenmedi": "Sifarişlər yüklənmədi.",
+      "baslik": "Kassa (v2)",
+      "bos": "Hələ v2 sifarişi yoxdur.",
+      "tarix": "Tarix",
+      "musteri": "Müştəri",
+      "cem": "Cəm",
+      "odenib": "Ödənib",
+      "qaliq": "Qalıq",
+      "veziyyet": "Vəziyyət"
+    },
+    "finans": {
+      "BEKLIYOR": "Ödənməyib",
+      "KISMI_ODEME": "Qismən",
+      "ODENDI": "Ödənib"
+    },
+    "kurye": {
+      "yuklenmedi": "Kuryer qalıqları yüklənmədi.",
+      "alindi": "{{mebleg}} kassaya təhvil alındı.",
+      "alinmadi": "Təhvil alınmadı.",
+      "baslik": "Kuryerlərdə olan nağd pul",
+      "bos": "Kuryerlərdə nağd pul yoxdur.",
+      "kuryer": "Kuryer",
+      "yigilib": "Yığılıb",
+      "tehvilVerilib": "Təhvil verilib",
+      "qaliq": "Qalıq",
+      "tehvilAl": "Təhvil al",
+      "aciqOdenisler": "{{kuryer}}: açıq ödənişlər",
+      "kassayaTehvilAl": "{{mebleg}} kassaya təhvil al"
+    },
+    "nakit": {
+      "yuklenmedi": "Nağd pul məlumatı yüklənmədi.",
+      "yazildi": "{{mebleg}} nağd yazıldı.",
+      "yazilmadi": "Ödəniş yazılmadı.",
+      "baslik": "Üzərimdə olan nağd pul: {{mebleg}}",
+      "siparis": "{{musteri}} · qalıq {{mebleg}}",
+      "alinanEtiket": "{{musteri}} üçün alınan nağd",
+      "aldim": "Nağd aldım"
+    }
+  },
+  "odeme": {
+    "yontem": {
+      "NAKIT": "Nağd",
+      "KART": "Kart",
+      "HAVALE": "Köçürmə",
+      "DIGER": "Digər"
+    },
+    "kaynak": {
+      "TESLIMAT": "Çatdırılma",
+      "BUTIK": "Butik",
+      "ONLINE": "Onlayn"
+    },
+    "durum": {
+      "ODENMEDI": "Ödənməyib",
+      "KISMI": "Qismən",
+      "TAM": "Tam",
+      "FAZLA": "Artıq ödənib"
+    },
+    "tutarGecersiz": "Məbləğ 0-1.000.000 AZN, ən çox 2 onluq olmalıdır.",
+    "qeydUzun": "Qeyd ən çox 500 simvol ola bilər.",
+    "sebebYaz": "Geri qaytarmanın səbəbini yazın.",
+    "sebebUzun": "Səbəb ən çox 500 simvol ola bilər.",
+    "defter": {
+      "yazildi": "Ödəniş yazıldı.",
+      "geriQaytarildi": "Ödəniş geri qaytarıldı.",
+      "yuklenir": "Ödəniş dəftəri yüklənir…",
+      "etiket": "Ödəniş dəftəri",
+      "cem": "Cəm",
+      "odenib": "Ödənib",
+      "qaliq": "Qalıq",
+      "veziyyet": "Vəziyyət",
+      "tarix": "Tarix",
+      "mebleg": "Məbləğ",
+      "usul": "Üsul",
+      "menbe": "Mənbə",
+      "qeyd": "Qeyd",
+      "bos": "Hələ ödəniş yoxdur.",
+      "geriQaytarma": "Geri qaytarma:",
+      "geriQaytarilib": "(geri qaytarılıb)",
+      "sebeb": "Geri qaytarmanın səbəbi",
+      "tesdiqle": "Təsdiqlə",
+      "geriQaytar": "Geri qaytar",
+      "meblegAzn": "Məbləğ (AZN)",
+      "odenisYaz": "Ödəniş yaz"
+    }
+  },
+  "siparis": {
+    "hata": {
+      "musteriAdi": "Müştəri adı lazımdır.",
+      "sahip": "Sifarişin sahibini seçin.",
+      "satirYok": "Ən azı bir sətir lazımdır.",
+      "cokSatir": "Ən çox 100 sətir ola bilər.",
+      "urunAdi": "{{sira}}. sətir: məhsul adı lazımdır.",
+      "adet": "{{sira}}. sətir: say 1-1000 arası tam ədəd olmalıdır.",
+      "fiyat": "{{sira}}. sətir: qiymət 0-1.000.000 AZN, ən çox 2 onluq olmalıdır."
+    },
+    "baslik": "Sifarişlər (v2)",
+    "saxlanildi": "Sifariş yadda saxlanıldı.",
+    "mesaj": "Müştəri mesajı",
+    "gorselEkle": "Ekran görüntüsü əlavə et ({{sayi}}/{{en}})",
+    "gorselSil": "{{ad}} şəklini sil",
+    "ayrisdirilir": "Ayrışdırılır…",
+    "aiAyir": "AI ilə sətirlərə ayır",
+    "alan": {
+      "musteriAdi": "Müştəri adı",
+      "telefon": "Telefon",
+      "instagram": "Instagram",
+      "sehir": "Şəhər",
+      "adres": "Ünvan",
+      "ozelNot": "Qeyd"
+    },
+    "kartaBagli": "Müştəri kartına bağlıdır ({{id}}).",
+    "baglantiSil": "Bağı sil",
+    "kartYoxdur": "Müştəri kartı seçilməyib; yeni müştəri kimi yazılacaq.",
+    "sahib": "Sifarişin sahibi",
+    "sahibSecin": "Sahibi seçin",
+    "men": "Mən (sifarişi yaradan)",
+    "cem": "Cəm:",
+    "saxlanilir": "Yadda saxlanılır…",
+    "tesdiqle": "Sifarişi təsdiqlə və yadda saxla"
+  },
+  "gorsel": {
+    "tur": "Yalnız JPEG, PNG və ya WebP şəkil seçin.",
+    "hazirlanmadi": "Şəkil hazırlana bilmədi.",
+    "cokBoyuk": "Şəkil çox böyükdür; daha kiçik ekran görüntüsü seçin."
+  },
+  "ortak": {
+    "xeta": "Əməliyyat tamamlanmadı."
+  },
+  "satir": {
+    "mehsul": "Məhsul",
+    "olcu": "Ölçü",
+    "reng": "Rəng",
+    "say": "Say",
+    "qiymet": "Qiymət (AZN)",
+    "olke": "Ölkə",
+    "cem": "Cəm",
+    "ekle": "Sətir əlavə et",
+    "etiket": {
+      "mehsul": "{{sira}}. sətir məhsul",
+      "olcu": "{{sira}}. sətir ölçü",
+      "reng": "{{sira}}. sətir rəng",
+      "say": "{{sira}}. sətir say",
+      "qiymet": "{{sira}}. sətir qiymət",
+      "olke": "{{sira}}. sətir ölkə",
+      "sil": "{{sira}}. sətri sil"
+    }
+  },
+  "liste": {
+    "asamaDegisti": "Mərhələ dəyişdirildi.",
+    "tarix": "Tarix",
+    "musteri": "Müştəri",
+    "satir": "Sətir",
+    "sahib": "Sahib",
+    "veziyyet": "Vəziyyət",
+    "cem": "Cəm (AZN)",
+    "gozleyin": "Gözləyin…",
+    "novbetiMerhele": "Növbəti mərhələ →"
+  },
+  "kacak": {
+    "yuklenmedi": "Qaçaqlar yüklənmədi.",
+    "baslik": "Qaçaqlar (v0)",
+    "yoxdur": "Yoxdur.",
+    "q4": {
+      "baslik": "Q4 · Təhvil verilib, ödənməyib ({{sayi}})",
+      "musteri": "Müştəri",
+      "kuryer": "Kuryer",
+      "qaliq": "Qalıq",
+      "gun": "Gün"
+    },
+    "q5": {
+      "baslik": "Q5 · Kuryerdə gözləyən nağd ({{sayi}})",
+      "hedd": "Həddi (saat)",
+      "kuryer": "Kuryer",
+      "nagd": "Nağd",
+      "odenis": "Ödəniş",
+      "gozleyir": "Gözləyir (saat)"
+    }
+  },
+  "kurlar": {
+    "musbet": "Kur müsbət rəqəm olmalıdır.",
+    "saxlanildi": "Kur yadda saxlanıldı.",
+    "baslik": "Valyuta kurları (1 vahid = … AZN)",
+    "cevirme": "{{kod}} → AZN",
+    "yoxdur": "Hələ kur yoxdur",
+    "valyuta": "Valyuta",
+    "tarix": "Tarix",
+    "aznQarsiligi": "AZN qarşılığı",
+    "menbeIsteye": "Mənbə (istəyə bağlı)",
+    "elaveEt": "Yeni kur əlavə et",
+    "menbe": "Mənbə",
+    "daxilEdilib": "Daxil edilib"
   }
 }

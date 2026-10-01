@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiFetch } from '../../lib/apiClient';
+import { hataMetni as cevrilmisHata } from '../../i18n/hata';
+import { sayi } from '../../i18n/bicim';
 import { useAppStore } from '../../store/appStore';
 import { PLATFORM_ROLU, rolGrubunda } from '../../shared/roller';
 import SatirTablosu from './SatirTablosu';
@@ -21,8 +24,6 @@ interface Sahip {
 }
 
 const girdi = 'mt-1 w-full rounded-lg bg-slate-800 p-2 text-sm text-white';
-const hataMetni = (error: unknown) =>
-  error instanceof Error ? error.message : 'Əməliyyat tamamlanmadı.';
 const json = (body: unknown): RequestInit => ({
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -34,6 +35,8 @@ const json = (body: unknown): RequestInit => ({
  * AI'a yalnız mesaj gider; müşteri eşleştirmesini sunucu yapar (A1).
  */
 export default function SiparisGirisi() {
+  const { t } = useTranslation('v2');
+  const hataMetni = (error: unknown) => cevrilmisHata(error, t('ortak.xeta'));
   const aktifRol = useAppStore((state) => state.aktifRol);
   const girebilir = rolGrubunda(aktifRol, 'SALES');
   const sahipSecebilir = rolGrubunda(aktifRol, 'OWNERS');
@@ -129,7 +132,7 @@ export default function SiparisGirisi() {
       setGorseller([]);
       setAdaylar([]);
       setEksik([]);
-      setMesaj('Sifariş yadda saxlanıldı.');
+      setMesaj(t('siparis.saxlanildi'));
       await listeyiYukle();
     } catch (error) {
       setMesaj(hataMetni(error));
@@ -147,13 +150,13 @@ export default function SiparisGirisi() {
       className="space-y-8"
     >
       <h2 id="v2-siparisler" className="text-base font-semibold">
-        Sifarişlər (v2)
+        {t('siparis.baslik')}
       </h2>
       {girebilir && (
         <form onSubmit={kaydet} className="space-y-6 rounded-xl border border-slate-800 p-4">
           <div>
             <label className="block text-xs text-slate-400">
-              Müştəri mesajı
+              {t('siparis.mesaj')}
               <textarea
                 value={form.hamMesaj}
                 onChange={(event) => alan('hamMesaj')(event.target.value)}
@@ -164,7 +167,7 @@ export default function SiparisGirisi() {
             </label>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
               <label className="cursor-pointer rounded-lg border border-slate-700 px-3 py-1.5 hover:bg-slate-800">
-                Ekran görüntüsü əlavə et ({gorseller.length}/{KUCULTME.adet})
+                {t('siparis.gorselEkle', { sayi: gorseller.length, en: KUCULTME.adet })}
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -183,7 +186,7 @@ export default function SiparisGirisi() {
                   type="button"
                   onClick={() => setGorseller(gorseller.filter((_, i) => i !== index))}
                   className="rounded-full border border-slate-700 px-2 py-0.5"
-                  aria-label={`${g.ad} şəklini sil`}
+                  aria-label={t('siparis.gorselSil', { ad: g.ad })}
                 >
                   {g.ad} ×
                 </button>
@@ -195,10 +198,10 @@ export default function SiparisGirisi() {
               disabled={bekliyor !== null || (!form.hamMesaj.trim() && !gorseller.length)}
               className="mt-2 rounded-lg bg-slate-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
             >
-              {bekliyor === 'ai' ? 'Ayrışdırılır…' : 'AI ilə sətirlərə ayır'}
+              {bekliyor === 'ai' ? t('siparis.ayrisdirilir') : t('siparis.aiAyir')}
             </button>
             {eksik.length > 0 && (
-              <ul className="mt-2 list-disc pl-5 text-xs text-amber-300">
+              <ul className="mt-2 list-disc ps-5 text-xs text-amber-300">
                 {eksik.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
@@ -207,41 +210,34 @@ export default function SiparisGirisi() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            {(
-              [
-                ['musteriAdi', 'Müştəri adı'],
-                ['telefon', 'Telefon'],
-                ['instagram', 'Instagram'],
-                ['sehir', 'Şəhər'],
-                ['adres', 'Ünvan'],
-                ['ozelNot', 'Qeyd'],
-              ] as const
-            ).map(([key, etiket]) => (
-              <label key={key} className="text-xs text-slate-400">
-                {etiket}
-                <input
-                  value={form[key]}
-                  onChange={(event) => alan(key)(event.target.value)}
-                  className={girdi}
-                />
-              </label>
-            ))}
+            {(['musteriAdi', 'telefon', 'instagram', 'sehir', 'adres', 'ozelNot'] as const).map(
+              (key) => (
+                <label key={key} className="text-xs text-slate-400">
+                  {t(`siparis.alan.${key}`)}
+                  <input
+                    value={form[key]}
+                    onChange={(event) => alan(key)(event.target.value)}
+                    className={girdi}
+                  />
+                </label>
+              )
+            )}
           </div>
 
           <div className="text-xs text-slate-400">
             {form.musteriId ? (
               <p>
-                Müştəri kartına bağlıdır ({form.musteriId}).{' '}
+                {t('siparis.kartaBagli', { id: form.musteriId })}{' '}
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, musteriId: null })}
                   className="text-sky-400 underline"
                 >
-                  Bağı sil
+                  {t('siparis.baglantiSil')}
                 </button>
               </p>
             ) : (
-              <p>Müştəri kartı seçilməyib; yeni müştəri kimi yazılacaq.</p>
+              <p>{t('siparis.kartYoxdur')}</p>
             )}
             {adaylar.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -263,7 +259,7 @@ export default function SiparisGirisi() {
 
           {sahipSecebilir && (
             <label className="block text-xs text-slate-400 sm:w-1/3">
-              Sifarişin sahibi
+              {t('siparis.sahib')}
               <select
                 value={form.sahipKullaniciId ?? ''}
                 onChange={(event) =>
@@ -271,7 +267,9 @@ export default function SiparisGirisi() {
                 }
                 className={girdi}
               >
-                <option value="">{sahipZorunlu ? 'Sahibi seçin' : 'Mən (sifarişi yaradan)'}</option>
+                <option value="">
+                  {sahipZorunlu ? t('siparis.sahibSecin') : t('siparis.men')}
+                </option>
                 {sahipler.map((sahip) => (
                   <option key={sahip.id} value={sahip.id}>
                     {sahip.adSoyad}
@@ -285,12 +283,12 @@ export default function SiparisGirisi() {
             satirlar={form.satirlar}
             onChange={(satirlar) => setForm({ ...form, satirlar })}
           />
-          <p className="text-right text-sm text-slate-200">
-            Cəm: <strong>{formToplami(form).toFixed(2)} AZN</strong>
+          <p className="text-end text-sm text-slate-200">
+            {t('siparis.cem')} <strong>{sayi(formToplami(form))} AZN</strong>
           </p>
 
           {hatalar.length > 0 && (
-            <ul role="alert" className="list-disc pl-5 text-xs text-rose-300">
+            <ul role="alert" className="list-disc ps-5 text-xs text-rose-300">
               {hatalar.map((item) => (
                 <li key={item}>{item}</li>
               ))}
@@ -301,7 +299,7 @@ export default function SiparisGirisi() {
             disabled={bekliyor !== null}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {bekliyor === 'kayit' ? 'Yadda saxlanılır…' : 'Sifarişi təsdiqlə və yadda saxla'}
+            {bekliyor === 'kayit' ? t('siparis.saxlanilir') : t('siparis.tesdiqle')}
           </button>
         </form>
       )}

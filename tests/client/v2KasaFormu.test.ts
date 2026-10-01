@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import {
   kuryeTahsilatIstegi,
   seciliToplam,
   teslimIstegi,
   type KuryeBakiyesi,
 } from '../../src/components/v2/kasaFormu';
+import { dilHazirla } from '../helpers/i18n';
 
 const kurye: KuryeBakiyesi = {
   kuryeKullaniciId: 'k-1',
@@ -18,6 +19,9 @@ const kurye: KuryeBakiyesi = {
     { id: 'c', siparisId: 's-3', tutarAzn: 30.1, almaZamani: 'z', musteriAdi: 'C' },
   ],
 };
+
+// The texts come from the az translation files (docs/i18n.md); the wording is unchanged.
+beforeAll(() => dilHazirla('az', ['v2']));
 
 describe('v2 cash desk forms (A11)', () => {
   it('hands over exactly the selected collections, summed in cents', () => {

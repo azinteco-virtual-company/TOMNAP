@@ -31,9 +31,11 @@ export const TASINAN_DOSYALAR = [
   'src/belgeler/tahsilat.ts',
   'src/i18n/pdfFontu.ts',
   'src/i18n/belge.ts',
-  // v2 ayarları: butikin dili burada seçilir.
-  'src/components/v2/V2Ayarlar.tsx',
-  'src/components/v2/ayarFormu.ts',
+  // v2: the whole folder (PR-C); a new v2 file is checked without being listed.
+  ...fs
+    .readdirSync('src/components/v2')
+    .filter((dosya) => /\.tsx?$/.test(dosya))
+    .map((dosya) => `src/components/v2/${dosya}`),
 ];
 
 const KOK = 'src/i18n/locales';
