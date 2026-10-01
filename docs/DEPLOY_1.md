@@ -341,17 +341,16 @@ Ayrı bir staging yok. Preview'a verilen veritabanı değişkenleri **aynı Supa
    curl -s -o /dev/null -w '%{http_code}\n' https://<canli>/api/v2/durum
    ```
    `404` dönmeli.
-5. **Preview'da deneme** (demo hesaplarla; `/v2` adresi elle açılır, menüde bağlantı yok):
+5. **Preview'da deneme** (demo hesaplarla; `/v2`'ye v1 yan menüsündeki "TOMNAP v2 · Önizləmə" bağlantısıyla ya da adresle girilir, #39):
    - **Kabuk:** PATRON ile `/v2`: sekmeler "Sifarişlər", "Kassa", "Qaçaqlar", "Kurlar", "Ayarlar". SATIS_SORUMLUSU: "Sifarişlər" ve "Kassa". KANADA_SATINALMA: "Sifarişlər" ve "Kurlar". BAKU_FINANS: "Sifarişlər", "Kassa", "Qaçaqlar", "Kurlar"; Kassa'da ödeme formu görünür, kurye nakdini o teslim alır. BAKU_KURYE `/v2`'de kendi teslimat ekranına düşer.
-   - **API adresleri:** Uygulamanın service worker'ı adres çubuğuna yazılan her adresi uygulama sayfasıyla yanıtlar (API dahil). API denemeleri tarayıcı konsolundan yapılır: `fetch('/api/v2/durum').then(r => r.status)`.
+   - **API adresleri:** #40'tan beri service worker `/api/` ve `/uploads/` adreslerini ağa bırakır; adres çubuğundan açılabilir. Eski service worker'ı olan tarayıcıda ilk açılış hâlâ uygulama sayfasını gösterebilir; bir yenileme yeter. Konsoldan da olur: `fetch('/api/v2/durum').then(r => r.status)`.
    - **Sipariş:** Mesajdan ve bir ekran görüntüsünden öneri alın. Satırları düzeltip kaydedin. SUPER_ADMIN sahip seçmeden kaydedemez. Mevcut sipariş tablosunda sipariş "v2" rozetiyle görünür.
    - **Kassa:** Siparişe butik ödemesi yazın, sonra gerekçeyle ters kayıt yapın. Mevcut listede `alinan_tutar` ve ödeme durumu aynı anda değişmeli.
-   - **Kurye nakdi:** Kurye kaydına bağlı bir kuryeye v2 sipariş atayın. Sipariş kargo takibinde `BAKU_DAGITIM_ARKADAS` durumuna geçmiş olmalı. Kurye ekranındaki "Üzərimdə olan nağd pul" bölümünden nakit yazın. "Kassa"da kurye bakiyesini görüp teslim alın; bakiye 0 olmalı.
-     - **27 Eylül: bu sürümde yapılamıyor.** v2 siparişi bu aşamaya taşıyan bir ekran yok: eski ekranın aşama değişikliği v2'de bilerek reddedilir (409), canlı kargo takibi de AWB'siz v2 siparişine dokunmaz. Atanmış sipariş kuryenin listesinde görünmez. v2 aşama geçişi ayrı bir karar (Uygulama kaydı — Deploy 2).
-   - **Qaçaqlar:** Q4'te teslim edilmiş ama ödenmemiş siparişler, Q5'te kuryede 24 saatten uzun bekleyen nakit görünür.
+   - **Aşama:** v2 listesindeki "Növbəti mərhələ →" siparişi bir adım ilerletir (migration 19, GEÇİCİ köprü, OQ 38). Kanada ve kargo adımları PATRON ve satın almacılar; Bakü dağıtımına geçiş PATRON ya da KANADA_SATINALMA. Son aşamada düğme yok; teslimi kurye yazar.
+   - **Kurye nakdi:** Kurye kaydına bağlı bir kuryeye, `BAKU_DAGITIM_ARKADAS` aşamasındaki v2 siparişini v1 sipariş detayından atayın. Kurye ekranındaki "Üzərimdə olan nağd pul" bölümünde önce tutarı yazın, sonra "Nağd aldım"; kutu boşsa kalanın tamamı yazılır. "Kassa"da kurye bakiyesini görüp teslim alın; bakiye 0 olmalı. (27 Eylül'e kadar v2 siparişini bu aşamaya taşıyan yol yoktu; Deploy 3'te uçtan uca denendi.)
+   - **Qaçaqlar:** Q4'te teslim edilmiş ama ödenmemiş siparişler, Q5'te kuryede 24 saatten uzun bekleyen nakit görünür. Denemede Q5'in "Həddi (saat)" alanına 0 yazılınca yeni nakit hemen görünür.
    - **Ret:** SATIS_SORUMLUSU `GET /api/v2/kasa/kurye-bakiyeleri` → 403; kurye başka bir kuryenin siparişine nakit yazamaz.
-   - **SUPER_ADMIN yalnız okur:** Defteri, kurye bakiyelerini ve kaçakları görür. Ödeme formu ve "Təhvil al" düğmesi görünmez; `POST /api/v2/odemeler` ve `POST /api/v2/kasa/teslimler` → 403.
-     - **27 Eylül: ekrandan denenemedi.** `/v2` adresle açılınca sayfa yeniden yüklenir, v1'deki butik seçimi sıfırlanır ve v2'de butik seçici yok; SUPER_ADMIN "Bütün Butiklər" modunda kalır ve her v2 isteği "Bir butik seçilmelidir" (400) alır.
+   - **SUPER_ADMIN parayı ve aşamayı yazmaz:** Üstteki "Butik" seçicisinden bir butik seçer (#39). Defteri, kurye bakiyelerini ve kaçakları görür. Ödeme formu, "Geri qaytar", "Təhvil al" ve "Növbəti mərhələ" görünmez; `POST /api/v2/odemeler` ve `POST /api/v2/kasa/teslimler` → 403. Sipariş açabilir ama sahibi seçmek zorunda (OQ 24).
    - **Kayıtlar:** Vercel → Logs, Preview: 5xx olmamalı.
 6. **Bayrağı kapatarak geri çekme:** Preview'da `FF_V2_FLOW` boşaltılıp yeniden deploy edilince `/api/v2` 404 döner ve `/v2` "aktiv deyil" gösterir. `VITE_FF_V2_FLOW` yeniden derlemeyle kalkar. Yazılmış v2 verisi yerinde kalır; mevcut ekranlar v2 siparişini rozetle göstermeye devam eder.
 7. **Production'a açma (karar 25 Eylül 2026):** v2 yayında önce **yalnız Preview**'da açılır. Production'da açma kararını proje sahibi sonra verir; o zamana kadar iki değişken Production'da boş kalır. Açılacağı zaman aynı iki değişken Production'a girilir ve `main` yeniden deploy edilir.
@@ -570,3 +569,70 @@ Codex R4 düzeltmeleri (#34, #35, #36) ve v2'nin Preview denemesi. Veritabanı v
 - `v2-deneme` değişkenleri yerinde; Production'da bayrak yok, `/api/v2/durum` 404. v2'yi Production'da açma kararı proje sahibinin.
 - Çift "Aytən xanım" siparişi ve DENEME kayıtları demo verisinde duruyor; silinmedi.
 - Vercel CLI 48.10.2 eski.
+
+## Uygulama kaydı — Deploy 3 (27 Eylül – 1 Ekim 2026)
+
+#37–#42 (R4 T1–T3, service worker, gelen kutusu, kargo butik seçici, v2 aşama köprüsü ve butik seçici, silme kuralı) ve v2'nin Preview'da uçtan uca denemesi. Veritabanı ve Vercel panelindeki işlemleri proje sahibi yaptı; sıra, komutlar ve doğrulama bu oturumda hazırlandı. Veriye yazan SQL çalıştırılmadı; migration 19 yalnız yeni bir fonksiyon ekler.
+
+**Önce:** Canlı `a8e6c88` (`tomnap-or0ji7srt`).
+
+**Yedek:** 27 Eylül 17:48 (+04), Deploy 2'deki yolla. `siparisler` 27 (24, çift "Aytən xanım" ve Deploy 2'nin DENEME siparişi), `odemeler` 2, `siparis_satirlari` 1; SHA256 doğrulandı. Şema dökümünün SHA256'sı Deploy 2'dekiyle aynı.
+
+**Durum sorgusu:** 19 satıra genişletildi; pano `LANG=en_US.UTF-8 pbcopy` ve bayt karşılaştırmasıyla. Önce: migration 18/19 (yalnız 19 yok), gerekli kolonlar 32/32, `guncellenme_tarihi` var, `ozel_not` yok, kodlama kalkanının iki satırı `true`.
+
+**Aşama 1 — Production:**
+
+1. Migration 19 (`20260927100000_v2_asama_koprusu`) SQL Editor'da: "Success. No rows returned". Durum: **19/19**, diğer satırlar aynı.
+2. `main` `57c5b95`'in temiz worktree'sinden `vercel deploy --prod`: deployment `tomnap-7ia325m4u` (27 Eylül), `tomnap.com` ve `www.tomnap.com` ona bağlı. Derleme günlüğü: v2 kabuğu ve AWB paneli pakette yok; service worker kontrolü geçti. Geri dönüş hedefi `tomnap-or0ji7srt`; migration 19 geri alınmaz, eski sürüm onu kullanmıyor.
+3. Smoke test:
+
+| Adım                                   | Sonuç                                                                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1–3, 5–7 (curl)                        | ✅ başlıklar, health GET/HEAD, manifest, oturumsuz 401, `X-Forwarded-Uri` yok sayıldı, `/api/v2/durum` 404                                       |
+| Service worker                         | ✅ sunulan `sw.js`'te `/api/` ve `/uploads/` hariç; Safari'de adres çubuğundan `/api/health` sunucuya ulaştı                                     |
+| 4. Giriş (proje sahibi)                | ✅ PATRON; kargo manifestosu 27 siparişle açıldı                                                                                                 |
+| Yazdırma                               | ✅ Brave: manifesto 2 sayfa, paket etiketleri 3 sayfa. Safari: manifesto yazdırma penceresi. Bakü tahsilat Safari'de ayrıca denenmedi (aynı yol) |
+| Telefon                                | ✅ tek liste (kartlar); borçlu kartlarda "Qalıq", "Tam Ödənildi" yok                                                                             |
+| 8. Kayıtlar (30 Eylül 08:29–08:44 UTC) | ✅ 5xx ve error yok; 401'ler yalnız giriş öncesi oturum kontrolleri                                                                              |
+
+**Aşama 2 — v2 Preview, uçtan uca (30 Eylül – 1 Ekim):**
+
+- `v2-deneme` `main` ile birleştirildi (`a414d6e`, `main`'den farksız) ve normal push edildi; Preview `tomnap-8vf1sa32q`. `/api/v2/durum`: Production 404, Preview 200.
+- Denemede canlı demo verisine yazılanlar: bir v2 siparişi ("DENEME Uçdan uca", 1 satır, 5 AZN, not "DENEME"), üç aşama geçişi (geçmişte üç kayıt), bir kurye ataması, 2 AZN kurye tahsilatı, teslim (teslim alan "DENEME") ve 2 AZN kasa teslimi. Sipariş teslim edildi; müşterinin 3 AZN borcu kalıyor (Q4'te görünüyor).
+
+| Adım                              | Sonuç                                                                                                                                                           |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| v2 siparişi (PATRON)              | ✅ 5.00 AZN, "Sifariş yadda saxlanıldı"                                                                                                                         |
+| İki aşama (PATRON)                | ✅ `KANADA_DEPO`, sonra `ULUSLARARASI_KARGO`; her adımda onay penceresi                                                                                         |
+| Bakü adımı (KANADA_SATINALMA)     | ✅ `BAKU_DAGITIM_ARKADAS`; son aşamada düğme yok. Menüsü yalnız "Sifarişlər" ve "Kurlar"                                                                        |
+| Kurye ataması (PATRON, v1 detay)  | ✅ "Kuryer təyinatı saxlanıldı"                                                                                                                                 |
+| Kurye nakdi, 2 AZN                | ✅ 201; kuryenin üzerinde 2.00, sipariş kalanı 3.00                                                                                                             |
+| Teslim                            | ✅ 200; sipariş "Təhvil verilən"de, kalan 3.00                                                                                                                  |
+| Q4 ve Q5 (BAKU_FINANS)            | ✅ Q4: DENEME 3.00, 0 gün. Q5: 24 saat eşiğinde boş, 0 saatte kurye 2.00                                                                                        |
+| Kasa teslimi (BAKU_FINANS)        | ✅ 201; kurye toplanan 2.00, teslim 2.00, kalan 0.00                                                                                                            |
+| SUPER_ADMIN, butik seçiciyle      | ✅ sipariş, defter (2.00 nağd, kaynak kurye), kurye bakiyesi ve Q4 okunuyor; "Növbəti mərhələ", ödeme formu, "Geri qaytar" ve "Təhvil al" yok; yazma isteği yok |
+| v1 menüsünde "TOMNAP v2"          | ✅ görünüyor; v2'den dönüşte butik seçimi korunuyor                                                                                                             |
+| Kayıtlar (1 Ekim 04:49–05:17 UTC) | ✅ 5xx ve error yok; yazmalar yalnız tahsilat 201, teslim 200, kasa teslimi 201. Tek uyarı süresi dolmuş bir oturumun çıkışı (401)                              |
+
+30 Eylül'deki sipariş ve aşama adımları kayıt dışa aktarımında yok; ekranda sunucu yanıtı ve yeniden yüklenen listeyle doğrulandı.
+
+**Bulunan hatalar (hepsi ekran düzeyinde; para ve yetki doğru):**
+
+1. Kargo manifestosunun üst bölümü (768 px ve üstü): düğme grubu küçülmüyor (`shrink-0`), başlık dar bir sütuna sıkışıyor, Safari'de "Package Labels (Barcode)" kesiliyor. Etiketlerde İngilizce ve Azerbaycan dili karışık.
+2. v1 sipariş detay penceresinde Türkçe, Azerbaycan dili ve İngilizce karışık ("Close", "Save Details").
+3. Kurye ekranı: "Nağd aldım"dan sonra sipariş kartındaki "Qalıq məbləğ" yenilenmiyor (5.00 kalıyor, nakit bölümü 3.00 gösteriyor). Teslimden ya da "Yenilə"den sonra doğru.
+4. Kurye ekranı: "Gözləyən (n)" sayıyı gösteriyor, "Təhvil verilən" göstermiyor.
+5. v2 Kassa tablosu: sağa yaslı "Qalıq" ile sola yaslı "Vəziyyət" arasında boşluk yok ("3.00 AZNQismən").
+6. v2 Kassa: kasaya teslimden sonra kuryenin paneli boş açık kalıyor, altında pasif "0.00 AZN kassaya təhvil al".
+
+**Not:** SUPER_ADMIN v2'de sipariş formunu görüyor ve sahibi seçmeden kaydedemiyor. Bu OQ 24 kararı, hata değil.
+
+**Sonra:** `canli-57c5b95` dalı açıldı; Codex'in sonraki incelemesi buradan karşılaştırır. Taslak #26 (`canli-90b8eae` → `main`) yorumla kapatıldı, merge edilmedi.
+
+**Açık kalanlar:**
+
+- 1–6 ayrı, küçük bir PR'da.
+- DENEME kayıtları (iki v2 siparişi, defter satırları, kasa teslimi) ve çift "Aytən xanım" demo verisinde duruyor; silinmedi. Defterler append-only.
+- v2 Production'da kapalı, `v2-deneme` değişkenleri yerinde. Production'da açma kararı proje sahibinin.
+- Migration 19 GEÇİCİ (OQ 38): Faz C'de birim ekseni gelince kaldırılacak.
+- Vercel CLI 48.10.2 eski (güncel 61.x).
