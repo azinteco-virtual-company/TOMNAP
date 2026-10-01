@@ -24,3 +24,13 @@ describe("Baku's calendar day for rates (Codex R3 F13)", () => {
     expect(() => kurGirdisiniDogrula(kur('2026-09-26'), noon)).toThrow();
   });
 });
+
+describe('the day in another time zone (docs/i18n.md)', () => {
+  it('takes the zone as a parameter; Baku stays the default', () => {
+    const an = new Date('2026-09-25T21:30:00Z');
+    expect(bakuTarihi(an)).toBe('2026-09-26');
+    expect(bakuTarihi(an, 'Asia/Baku')).toBe('2026-09-26');
+    expect(bakuTarihi(an, 'America/Toronto')).toBe('2026-09-25');
+    expect(bakuTarihi(an, 'UTC')).toBe('2026-09-25');
+  });
+});

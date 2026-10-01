@@ -7,7 +7,9 @@ let onUnauthorized: (() => void) | undefined;
 export class ApiError extends Error {
   constructor(
     message: string,
-    public readonly status: number
+    public readonly status: number,
+    /** The server's stable code (docs/i18n.md); the client translates it when it can. */
+    public readonly kod?: string
   ) {
     super(message);
     this.name = 'ApiError';
@@ -79,7 +81,8 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     const data = await response.json().catch(() => null);
     throw new ApiError(
       data?.hata || data?.mesaj || `Sorğu yerinə yetirilmədi (${response.status}).`,
-      response.status
+      response.status,
+      typeof data?.kod === 'string' ? data.kod : undefined
     );
   }
   return scopedResponse(response, version);
