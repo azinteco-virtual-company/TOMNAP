@@ -2,5 +2,13 @@
   "dil": {
     "sec": "Dili dəyiş",
     "baslik": "Dil"
+  },
+  "bagla": "Bağla",
+  "baglantiHatasi": "Serverlə əlaqə qurularkən xəta baş verdi.",
+  "xetaBasVerdi": "Xəta baş verdi.",
+  "anaSehifeyeQayit": "Ana səhifəyə qayıt",
+  "marka": {
+    "ad": "TOMNAP",
+    "harf": "T"
   }
 }

@@ -79,6 +79,7 @@ function teknik(metin: string) {
   if (/^[a-z][a-zA-Z0-9_.\-]*$/.test(m)) return true; // identifier, key, kebab, locale
   if (/^[/#.?&=:@]/.test(m) || /^https?:/.test(m) || /^[\w.+-]+\/[\w.+*-]+$/.test(m)) return true;
   if (/^[\w-]+\[[^\]]*\]$/.test(m)) return true; // CSS selector
+  if (/^[A-Z][a-z]+(?:-[A-Z][a-z]+)+$/.test(m)) return true; // HTTP header (Content-Type)
   return sinifListesi(m);
 }
 

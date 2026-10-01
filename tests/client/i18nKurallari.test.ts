@@ -8,7 +8,15 @@ import dilListesi from '../../src/i18n/diller.json';
 // is written only through a translation key, and the az and en files change together.
 
 /** Files moved to translation keys. A file is added here when its screen is moved. */
-export const TASINAN_DOSYALAR = ['src/components/DilSecici.tsx', 'src/i18n/hata.ts'];
+export const TASINAN_DOSYALAR = [
+  'src/components/DilSecici.tsx',
+  'src/i18n/hata.ts',
+  // Giriş öncesi: giriş, kayıt, davet kabulü, şifre belirleme.
+  'src/components/AccessGateModal.tsx',
+  'src/components/landing/ButikQeydiyyatModal.tsx',
+  'src/components/DavetQebulSayfasi.tsx',
+  'src/components/SifreBelirleSayfasi.tsx',
+];
 
 const KOK = 'src/i18n/locales';
 

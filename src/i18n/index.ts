@@ -65,7 +65,8 @@ export function seciliDil(): string {
   });
 }
 
-function htmlDiliniAyarla(dil: string) {
+/** `<html lang>` and `dir` follow the interface language (RTL: ar, fa, he). */
+export function htmlDiliniAyarla(dil: string) {
   if (typeof document === 'undefined') return;
   document.documentElement.lang = dil;
   document.documentElement.dir = yaziYonu(dil);

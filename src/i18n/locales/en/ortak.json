@@ -2,5 +2,13 @@
   "dil": {
     "sec": "Change language",
     "baslik": "Language"
+  },
+  "bagla": "Close",
+  "baglantiHatasi": "Could not connect to the server.",
+  "xetaBasVerdi": "Something went wrong.",
+  "anaSehifeyeQayit": "Back to the home page",
+  "marka": {
+    "ad": "TOMNAP",
+    "harf": "T"
   }
 }

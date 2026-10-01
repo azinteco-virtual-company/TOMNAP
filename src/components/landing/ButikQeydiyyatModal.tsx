@@ -1,30 +1,40 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Building2, User, Phone, Mail, ArrowRight, Loader2 } from 'lucide-react';
-import { useDil } from '../../context/DilKonteksti';
+import { useTranslation } from 'react-i18next';
 import { butikKaydet, type ButikKayitSonucu } from '../../lib/butikKayit';
 import { PAKET_ROL_LIMITLERI } from '../../shared/roller';
+import { hataMetni } from '../../i18n/hata';
 
 interface ButikQeydiyyatModalProps {
   acik: boolean;
   onKapat: () => void;
-  onBasariliKayit?: (yeniFirma: any) => void;
+  onBasariliKayit?: (yeniFirma: ButikKayitSonucu['firma']) => void;
   onDemoAc?: () => void;
 }
+
+const ULKELER = [
+  { kod: 'CA', bayrak: '🇨🇦' },
+  { kod: 'US', bayrak: '🇺🇸' },
+  { kod: 'TR', bayrak: '🇹🇷' },
+  { kod: 'JP', bayrak: '🇯🇵' },
+  { kod: 'GB', bayrak: '🇬🇧' },
+  { kod: 'DE', bayrak: '🇩🇪' },
+] as const;
+
+const GIRDI =
+  'w-full bg-slate-800/80 border border-slate-700 rounded-xl ps-9 pe-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500';
 
 export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
   acik,
   onKapat,
   onDemoAc,
 }) => {
-  const { dil } = useDil();
-  const isEn = dil === 'en';
-  const isRu = dil === 'ru';
-
+  const { t } = useTranslation('giris');
   const [butikAdi, setButikAdi] = useState('');
   const [sahipAdi, setSahipAdi] = useState('');
   const [sahipTelefon, setSahipTelefon] = useState('+994 ');
   const [sahipEmail, setSahipEmail] = useState('');
-  const [sehir, setSehir] = useState(isEn ? 'Baku' : 'Bakı');
+  const [sehir, setSehir] = useState(() => t('kayit.form.sehirVarsayilan'));
   const [menseiUlke, setMenseiUlke] = useState('CA');
   const [paket, setPaket] = useState<'BASLANGIC' | 'PRO' | 'ENTERPRISE'>('PRO');
   const [yukleniyor, setYukleniyor] = useState(false);
@@ -47,13 +57,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
       !sahipEmail.includes('@') ||
       sahipTelefon.length < 9
     ) {
-      setHata(
-        isEn
-          ? 'Please enter Store Name, Owner Name, Valid Email, and Contact Number.'
-          : isRu
-            ? 'Пожалуйста, укажите название бутика, имя владельца, корректный email и телефон.'
-            : 'Zəhmət olmasa Butik Adı, Sahib Adı, Düzgün E-poçt və Əlaqə Nömrəsini tam daxil edin.'
-      );
+      setHata(t('kayit.form.alanEksik'));
       return;
     }
 
@@ -62,33 +66,29 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
       const sonuc = await butikKaydet(
         {
           ad: butikAdi.trim(),
-          sehir: sehir.trim() || 'Baku',
+          sehir: sehir.trim() || t('kayit.form.sehirVarsayilan'),
           sahipAdi: sahipAdi.trim(),
           sahipEmail: sahipEmail.trim().toLowerCase(),
           sahipTelefon: sahipTelefon.trim(),
           paket,
           menseiUlke,
         },
-        isEn
-          ? 'Registration could not be completed. Please try again.'
-          : isRu
-            ? 'Не удалось завершить регистрацию. Попробуйте ещё раз.'
-            : 'Qeydiyyat tamamlanmadı. Zəhmət olmasa yenidən cəhd edin.'
+        t('kayit.form.tamamlanmadi')
       );
 
       setKayitliButik(sonuc.firma);
       setEmailGonderildi(sonuc.emailGonderildi);
       setTamamlandi(true);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Butik qeydiyyatı xətası:', err);
-      setHata(
-        err.message ||
-          (isEn ? 'Connection error to server.' : 'Serverlə əlaqə qurularkən xəta baş verdi.')
-      );
+      setHata(hataMetni(err, t('kayit.form.baglantiHatasi')));
     } finally {
       setYukleniyor(false);
     }
   };
+
+  const limit = (rol: keyof (typeof PAKET_ROL_LIMITLERI)['PRO']) =>
+    kayitliButik?.rolLimitleri?.[rol] || PAKET_ROL_LIMITLERI.PRO[rol];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -104,36 +104,17 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-bold text-white tracking-tight">
-                {tamamlandi
-                  ? isEn
-                    ? 'Application Submitted!'
-                    : isRu
-                      ? 'Заявка Принята!'
-                      : 'Müraciətiniz Qeydə Alındı!'
-                  : isEn
-                    ? 'Register Your Boutique on TOMNAP'
-                    : isRu
-                      ? 'Регистрация Бутика в TOMNAP'
-                      : 'TOMNAP Butik Qeydiyyatı'}
+                {tamamlandi ? t('kayit.tamam.baslik') : t('kayit.baslik')}
               </h3>
               <p className="text-xs text-slate-400">
-                {tamamlandi
-                  ? isEn
-                    ? 'Follow the email verification steps to set up your account'
-                    : isRu
-                      ? 'Завершите подтверждение по электронной почте для настройки аккаунта'
-                      : 'Hesabınızı qurmaq üçün e-poçt təsdiqi addımlarını tamamlayın'
-                  : isEn
-                    ? 'Automate cross-border order ingestion and parcel logistics'
-                    : isRu
-                      ? 'Автоматизируйте выкуп, авиакарго и доставку курьерами'
-                      : 'Platformaya qoşulun, sifariş və kargo idarəetməsini avtomatlaşdırın'}
+                {tamamlandi ? t('kayit.tamam.altBaslik') : t('kayit.altBaslik')}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onKapat}
+            aria-label={t('ortak:bagla')}
             className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -149,81 +130,42 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
               </div>
               <div className="space-y-2 max-w-md mx-auto">
                 <h4 className="text-xl font-bold text-white">
-                  {isEn
-                    ? `Congratulations, "${kayitliButik?.ad}" registered successfully!`
-                    : isRu
-                      ? `Поздравляем, «${kayitliButik?.ad}» успешно зарегистрирован!`
-                      : `Təbriklər, "${kayitliButik?.ad}" qeydiyyatı qəbul edildi!`}
+                  {t('kayit.tamam.tebrik', { butik: kayitliButik?.ad ?? '' })}
                 </h4>
                 <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-200 text-xs leading-relaxed space-y-1">
                   <div className="font-bold flex items-center justify-center gap-1.5 text-indigo-300">
                     <Mail className="w-4 h-4 text-indigo-400" />
                     <span>
                       {emailGonderildi
-                        ? isEn
-                          ? 'Check your email to set your password'
-                          : isRu
-                            ? 'Проверьте почту для создания пароля'
-                            : 'Şifrə təyini üçün e-poçtunuzu yoxlayın'
-                        : isEn
-                          ? 'Registration saved; email delivery failed'
-                          : isRu
-                            ? 'Заявка сохранена; письмо не отправлено'
-                            : 'Qeydiyyat saxlanıldı; e-poçt göndərilmədi'}
+                        ? t('kayit.tamam.epostaGonderildi')
+                        : t('kayit.tamam.epostaGonderilmedi')}
                     </span>
                   </div>
                   <p>
                     {emailGonderildi
-                      ? isEn
-                        ? `Use the link sent to ${sahipEmail} to set your password, then sign in.`
-                        : isRu
-                          ? `Создайте пароль по ссылке в письме на ${sahipEmail}, затем войдите.`
-                          : `${sahipEmail} ünvanına göndərilən linklə şifrənizi təyin edin, sonra daxil olun.`
-                      : isEn
-                        ? 'Your application is pending. Contact support to receive your password setup email.'
-                        : isRu
-                          ? 'Заявка ожидает подтверждения. Свяжитесь с поддержкой для получения письма.'
-                          : 'Müraciətiniz gözləmədədir. Şifrə təyini e-poçtu üçün dəstək komandası ilə əlaqə saxlayın.'}
+                      ? t('kayit.tamam.epostaYonerge', { email: sahipEmail })
+                      : t('kayit.tamam.destekYonerge')}
                   </p>
                 </div>
               </div>
 
               {/* Seçilmiş Paket Xülasəsi */}
-              <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 text-left space-y-2.5 max-w-md mx-auto text-xs">
+              <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 text-start space-y-2.5 max-w-md mx-auto text-xs">
                 <div className="flex justify-between items-center text-slate-300">
-                  <span className="font-semibold text-white">
-                    {isEn ? 'Selected Plan:' : isRu ? 'Выбранный тариф:' : 'Seçilmiş Abunəlik:'}
-                  </span>
+                  <span className="font-semibold text-white">{t('kayit.tamam.seciliPaket')}</span>
                   <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
                     {kayitliButik?.paket === 'PRO'
-                      ? isEn
-                        ? 'Pro Network ($99/mo)'
-                        : 'Pro Şəbəkə (99 AZN)'
+                      ? t('kayit.tamam.paketPro')
                       : kayitliButik?.paket === 'BASLANGIC'
-                        ? isEn
-                          ? 'Starter Boutique ($49/mo)'
-                          : 'Başlanğıc Butik (49 AZN)'
-                        : 'Enterprise'}
+                        ? t('kayit.tamam.paketBaslangic')
+                        : t('kayit.paket.enterprise')}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 pt-2 border-t border-slate-700/50">
-                  <div>• 1 {isEn ? 'Owner' : 'Patron'}</div>
-                  <div>
-                    •{' '}
-                    {kayitliButik?.rolLimitleri?.KANADA_SATINALMA ||
-                      PAKET_ROL_LIMITLERI.PRO.KANADA_SATINALMA}{' '}
-                    {isEn ? 'Purchasing Agents' : 'Kanada Kargo'}
-                  </div>
-                  <div>
-                    •{' '}
-                    {kayitliButik?.rolLimitleri?.SATIS_SORUMLUSU ||
-                      PAKET_ROL_LIMITLERI.PRO.SATIS_SORUMLUSU}{' '}
-                    {isEn ? 'Sales Reps' : 'Satış / AI Masası'}
-                  </div>
-                  <div>
-                    • {kayitliButik?.rolLimitleri?.BAKU_KURYE || PAKET_ROL_LIMITLERI.PRO.BAKU_KURYE}{' '}
-                    {isEn ? 'Field Couriers' : 'Sahə Kuryesi'}
-                  </div>
+                  <div>• {t('kayit.ozet.patron', { count: 1 })}</div>
+                  <div>• {t('kayit.ozet.kanada', { count: limit('KANADA_SATINALMA') })}</div>
+                  <div>• {t('kayit.ozet.satis', { count: limit('SATIS_SORUMLUSU') })}</div>
+                  <div>• {t('kayit.ozet.kurye', { count: limit('BAKU_KURYE') })}</div>
                 </div>
               </div>
 
@@ -240,9 +182,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                       className="flex-1 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-all border border-slate-700"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>
-                        {isEn ? 'Try Demo Sandbox' : isRu ? 'Демо-Среда' : 'Canlı Demo Sınaq'}
-                      </span>
+                      <span>{t('kayit.tamam.demo')}</span>
                     </button>
                   )}
                   <button
@@ -250,7 +190,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                     onClick={onKapat}
                     className="flex-1 px-4 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-medium cursor-pointer transition-all border border-slate-800"
                   >
-                    {isEn ? 'Close' : isRu ? 'Закрыть' : 'Bağla'}
+                    {t('ortak:bagla')}
                   </button>
                 </div>
               </div>
@@ -258,7 +198,10 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {hata && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+                <div
+                  role="alert"
+                  className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2"
+                >
                   <span className="shrink-0 font-bold">⚠️</span>
                   <span>{hata}</span>
                 </div>
@@ -266,153 +209,104 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
 
               {/* Butik və Sahib Məlumatları */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    {isEn
-                      ? 'Boutique / Brand Name *'
-                      : isRu
-                        ? 'Название бутика / Бренда *'
-                        : 'Butik / Mağaza Adı *'}
-                  </label>
-                  <div className="relative">
-                    <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <label className="block text-xs font-semibold text-slate-300">
+                  <span className="block mb-1">{t('kayit.form.butikAdi')}</span>
+                  <span className="relative block">
+                    <Building2 className="w-4 h-4 text-slate-400 absolute start-3 top-2.5" />
                     <input
                       type="text"
                       required
-                      placeholder={isEn ? 'e.g. Canadian Brand Boutique' : 'Məs: Ayla Fashion Baku'}
+                      placeholder={t('kayit.form.butikOrnek')}
                       value={butikAdi}
                       onChange={(e) => setButikAdi(e.target.value)}
-                      className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      className={GIRDI}
                     />
-                  </div>
-                </div>
+                  </span>
+                </label>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    {isEn
-                      ? "Owner's Full Name *"
-                      : isRu
-                        ? 'ФИО Владельца *'
-                        : 'Sahibin Adı və Soyadı *'}
-                  </label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <label className="block text-xs font-semibold text-slate-300">
+                  <span className="block mb-1">{t('kayit.form.sahipAdi')}</span>
+                  <span className="relative block">
+                    <User className="w-4 h-4 text-slate-400 absolute start-3 top-2.5" />
                     <input
                       type="text"
                       required
-                      placeholder={isEn ? 'e.g. Sarah Jenkins' : 'Məs: Aysel Məmmədova'}
+                      placeholder={t('kayit.form.sahipOrnek')}
                       value={sahipAdi}
                       onChange={(e) => setSahipAdi(e.target.value)}
-                      className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      className={GIRDI}
                     />
-                  </div>
-                </div>
+                  </span>
+                </label>
               </div>
 
               {/* Əlaqə: Telefon və Email */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    {isEn
-                      ? 'WhatsApp / Phone Number *'
-                      : isRu
-                        ? 'WhatsApp / Телефон *'
-                        : 'WhatsApp / Əlaqə Nömrəsi *'}
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <label className="block text-xs font-semibold text-slate-300">
+                  <span className="block mb-1">{t('kayit.form.telefon')}</span>
+                  <span className="relative block">
+                    <Phone className="w-4 h-4 text-slate-400 absolute start-3 top-2.5" />
                     <input
                       type="text"
                       required
                       placeholder="+994 50 123 45 67"
                       value={sahipTelefon}
                       onChange={(e) => setSahipTelefon(e.target.value)}
-                      className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      className={GIRDI}
                     />
-                  </div>
-                </div>
+                  </span>
+                </label>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    {isEn
-                      ? 'Email Address *'
-                      : isRu
-                        ? 'Email адрес *'
-                        : 'E-poçt Ünvanı * (Şifrə Təyini üçün)'}
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <label className="block text-xs font-semibold text-slate-300">
+                  <span className="block mb-1">{t('kayit.form.eposta')}</span>
+                  <span className="relative block">
+                    <Mail className="w-4 h-4 text-slate-400 absolute start-3 top-2.5" />
                     <input
                       type="email"
                       required
-                      placeholder="boutique@example.com"
+                      placeholder={t('kayit.form.epostaOrnek')}
                       value={sahipEmail}
                       onChange={(e) => setSahipEmail(e.target.value)}
-                      className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      className={GIRDI}
                     />
-                  </div>
-                </div>
+                  </span>
+                </label>
               </div>
 
               {/* Çıxış Ölkəsi və Şəhər */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    {isEn
-                      ? 'Primary Origin Country'
-                      : isRu
-                        ? 'Основная Страна Закупок'
-                        : 'Əsas Alış / Çıxış Ölkəsi'}
-                  </label>
+                <label className="block text-xs font-semibold text-slate-300">
+                  <span className="block mb-1">{t('kayit.form.ulke')}</span>
                   <select
                     value={menseiUlke}
                     onChange={(e) => setMenseiUlke(e.target.value)}
                     className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-indigo-500"
                   >
-                    <option value="CA">
-                      🇨🇦 {isEn ? 'Canada (Toronto Pearson YYZ)' : 'Kanada (Toronto Pearson YYZ)'}
-                    </option>
-                    <option value="US">
-                      🇺🇸 {isEn ? 'United States (JFK/ORD)' : 'ABŞ (Amerika JFK/ORD)'}
-                    </option>
-                    <option value="TR">
-                      🇹🇷 {isEn ? 'Turkey (Istanbul IST)' : 'Türkiyə (İstanbul IST)'}
-                    </option>
-                    <option value="JP">
-                      🇯🇵 {isEn ? 'Japan (Tokyo NRT)' : 'Yaponiya (Tokyo NRT)'}
-                    </option>
-                    <option value="GB">
-                      🇬🇧 {isEn ? 'United Kingdom (London LHR)' : 'Böyük Britaniya (London LHR)'}
-                    </option>
-                    <option value="DE">
-                      🇩🇪 {isEn ? 'Germany (Frankfurt FRA)' : 'Almaniya (Frankfurt FRA)'}
-                    </option>
+                    {ULKELER.map((u) => (
+                      <option key={u.kod} value={u.kod}>
+                        {u.bayrak} {t(`kayit.ulke.${u.kod}`)}
+                      </option>
+                    ))}
                   </select>
-                </div>
+                </label>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    {isEn ? 'Destination Delivery City' : isRu ? 'Город Доставки' : 'Təhvil Şəhəri'}
-                  </label>
+                <label className="block text-xs font-semibold text-slate-300">
+                  <span className="block mb-1">{t('kayit.form.sehir')}</span>
                   <input
                     type="text"
                     value={sehir}
                     onChange={(e) => setSehir(e.target.value)}
-                    placeholder={isEn ? 'Baku' : 'Bakı'}
+                    placeholder={t('kayit.form.sehirVarsayilan')}
                     className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-indigo-500"
                   />
-                </div>
+                </label>
               </div>
 
               {/* Paket Seçimi və Rol Limitləri */}
               <div className="space-y-2 pt-2">
-                <label className="block text-xs font-semibold text-slate-300">
-                  {isEn
-                    ? 'Select Subscription Tier'
-                    : isRu
-                      ? 'Выберите Тариф'
-                      : 'Abunəlik Paketi Seçin'}
-                </label>
+                <span className="block text-xs font-semibold text-slate-300">
+                  {t('kayit.form.paketSec')}
+                </span>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   {/* Başlanğıc Butik */}
                   <div
@@ -425,18 +319,18 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                   >
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-xs font-bold text-white">
-                        {isEn ? 'Starter' : isRu ? 'Старт' : 'Başlanğıc'}
+                        {t('kayit.paket.baslangic')}
                       </span>
                       <span className="text-[10px] text-blue-300 font-black">
-                        $49 / {isEn ? 'mo' : 'ay'}
+                        {t('kayit.paket.aylik', { fiyat: '$49' })}
                       </span>
                     </div>
                     <ul className="text-[10px] text-slate-400 space-y-0.5">
-                      <li>• 1 {isEn ? 'Owner' : 'Patron'}</li>
-                      <li>• 1 {isEn ? 'Canada Cargo' : 'Kanada Kargo'}</li>
-                      <li>• 1 {isEn ? 'Sales Rep' : 'Satış Girişi'}</li>
-                      <li>• 1 {isEn ? 'Finance Desk' : 'Bakı Kassa'}</li>
-                      <li>• 1 {isEn ? 'Field Courier' : 'Sahə Kuryesi'}</li>
+                      <li>• {t('kayit.paket.patron', { count: 1 })}</li>
+                      <li>• {t('kayit.paket.kanadaKargo', { count: 1 })}</li>
+                      <li>• {t('kayit.paket.satis', { count: 1 })}</li>
+                      <li>• {t('kayit.paket.kassa', { count: 1 })}</li>
+                      <li>• {t('kayit.paket.kurye', { count: 1 })}</li>
                     </ul>
                   </div>
 
@@ -449,26 +343,22 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                         : 'bg-slate-800/40 border-slate-700/60 hover:bg-slate-800'
                     }`}
                   >
-                    <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded-full bg-indigo-500 text-[8px] font-black text-white uppercase tracking-wider">
-                      {isEn ? 'Recommended' : isRu ? 'Рекомендуем' : 'Tövsiyə'}
+                    <span className="absolute -top-2 end-2 px-1.5 py-0.2 rounded-full bg-indigo-500 text-[8px] font-black text-white uppercase tracking-wider">
+                      {t('kayit.paket.tavsiye')}
                     </span>
                     <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-bold text-white">
-                        {isEn ? 'Pro Network' : isRu ? 'Сеть Pro' : 'Pro Şəbəkə'}
-                      </span>
+                      <span className="text-xs font-bold text-white">{t('kayit.paket.pro')}</span>
                       <span className="text-[10px] text-indigo-300 font-black">
-                        $99 / {isEn ? 'mo' : 'ay'}
+                        {t('kayit.paket.aylik', { fiyat: '$99' })}
                       </span>
                     </div>
                     <ul className="text-[10px] text-slate-300 space-y-0.5 font-medium">
-                      <li>• 1 {isEn ? 'Owner' : 'Patron'}</li>
-                      <li>• 2 {isEn ? 'Canada Cargo' : 'Kanada Kargo'}</li>
-                      <li>• 2 {isEn ? 'Sales Reps' : 'Satış Girişi'}</li>
-                      <li>• 2 {isEn ? 'Finance Desk' : 'Bakı Kassa'}</li>
-                      <li>• 5 {isEn ? 'Field Couriers' : 'Sahə Kuryesi'}</li>
-                      <li className="text-emerald-400 font-bold">
-                        • {isEn ? 'Aramex API + Unlimited AI' : 'Aramex API + Limitsiz AI'}
-                      </li>
+                      <li>• {t('kayit.paket.patron', { count: 1 })}</li>
+                      <li>• {t('kayit.paket.kanadaKargo', { count: 2 })}</li>
+                      <li>• {t('kayit.paket.satis', { count: 2 })}</li>
+                      <li>• {t('kayit.paket.kassa', { count: 2 })}</li>
+                      <li>• {t('kayit.paket.kurye', { count: 5 })}</li>
+                      <li className="text-emerald-400 font-bold">• {t('kayit.paket.aramexAi')}</li>
                     </ul>
                   </div>
 
@@ -482,17 +372,19 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                     }`}
                   >
                     <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-bold text-white">Enterprise</span>
+                      <span className="text-xs font-bold text-white">
+                        {t('kayit.paket.enterprise')}
+                      </span>
                       <span className="text-[10px] text-purple-300 font-black">
-                        {isEn ? 'Custom' : 'Fərdi'}
+                        {t('kayit.paket.ozel')}
                       </span>
                     </div>
                     <ul className="text-[10px] text-slate-400 space-y-0.5">
-                      <li>• 2 {isEn ? 'Admins' : 'Patron İdarəçi'}</li>
-                      <li>• 5 {isEn ? 'Global Cargo' : 'Kanada / Xarici Kargo'}</li>
-                      <li>• 10 {isEn ? 'Sales Reps' : 'Satış Məsuliyyətli'}</li>
-                      <li>• 25 {isEn ? 'Couriers' : 'Sahə Kuryesi'}</li>
-                      <li>• {isEn ? 'Custom Domain CNAME' : 'Xüsusi Domain CNAME'}</li>
+                      <li>• {t('kayit.paket.idareci', { count: 2 })}</li>
+                      <li>• {t('kayit.paket.xariciKargo', { count: 5 })}</li>
+                      <li>• {t('kayit.paket.satisMesul', { count: 10 })}</li>
+                      <li>• {t('kayit.paket.kurye', { count: 25 })}</li>
+                      <li>• {t('kayit.paket.domain')}</li>
                     </ul>
                   </div>
                 </div>
@@ -508,24 +400,12 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
                   {yukleniyor ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>
-                        {isEn
-                          ? 'Submitting Registration...'
-                          : isRu
-                            ? 'Отправка заявки...'
-                            : 'Qeydiyyat Göndərilir...'}
-                      </span>
+                      <span>{t('kayit.form.gonderiliyor')}</span>
                     </>
                   ) : (
                     <>
-                      <span>
-                        {isEn
-                          ? 'Submit Boutique Registration'
-                          : isRu
-                            ? 'Подтвердить Заявку'
-                            : 'Qeydiyyat Müraciətini Təsdiqlə'}
-                      </span>
-                      <ArrowRight className="w-4 h-4" />
+                      <span>{t('kayit.form.gonder')}</span>
+                      <ArrowRight className="w-4 h-4 rtl:rotate-180" />
                     </>
                   )}
                 </button>
@@ -533,13 +413,7 @@ export const ButikQeydiyyatModal: React.FC<ButikQeydiyyatModalProps> = ({
 
               <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 text-center pt-1">
                 <Mail className="w-3.5 h-3.5 text-emerald-400" />
-                <span>
-                  {isEn
-                    ? 'Use an email address you can access to set your password.'
-                    : isRu
-                      ? 'Укажите доступный вам адрес почты для создания пароля.'
-                      : 'Şifrənizi təyin etmək üçün istifadə edə bildiyiniz e-poçt ünvanını daxil edin.'}
-                </span>
+                <span>{t('kayit.form.epostaNotu')}</span>
               </div>
             </form>
           )}

@@ -5,6 +5,7 @@ import { apiFetch, fetchWithRetry, setApiSession, setApiTenant } from '../../src
 import { useAppStore } from '../../src/store/appStore';
 import { RolSecici } from '../../src/components/RolSecici';
 import { AccessGateModal } from '../../src/components/AccessGateModal';
+import { dilHazirla } from '../helpers/i18n';
 
 const response = (data: any, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -297,7 +298,9 @@ describe('Login and role UI', () => {
     expect(html).not.toContain('<select');
   });
 
-  it('requires personal login and explains that public demo is disabled', () => {
+  it('requires personal login and explains that public demo is disabled', async () => {
+    // The login page is translated (docs/i18n.md): load its strings, then render in az.
+    await dilHazirla('az', ['giris']);
     const html = renderToString(
       React.createElement(AccessGateModal, {
         acik: true,
