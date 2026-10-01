@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { ayarDegisiklikleri, ayarFormu } from '../../src/components/v2/ayarFormu';
+import { beforeAll } from 'vitest';
+import i18n from '../../src/i18n';
+import {
+  ayarDegisiklikleri as hamDegisiklikler,
+  ayarFormu,
+} from '../../src/components/v2/ayarFormu';
+import { dilHazirla } from '../helpers/i18n';
+
+// The form returns a translation key (docs/i18n.md); the checks read its az text.
+beforeAll(() => dilHazirla('az', ['v2']));
+const ayarDegisiklikleri = (...a: Parameters<typeof hamDegisiklikler>) => {
+  const sonuc = hamDegisiklikler(...a);
+  return sonuc.hata === undefined ? sonuc : { hata: i18n.t(sonuc.hata, { ns: 'v2', lng: 'az' }) };
+};
 
 // Codex R3 F11: the settings form turned any text in the kg price into NaN, which JSON
 // sends as null, so a typo silently cleared the stored price. Empty clears; invalid is

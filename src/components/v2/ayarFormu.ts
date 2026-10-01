@@ -17,6 +17,7 @@ export interface AyarFormu {
 }
 export type AyarFormuSonucu =
   | { degisiklik: Record<string, number | null>; hata?: undefined }
+  /** `hata` is a translation key in the `v2` namespace (docs/i18n.md). */
   | { hata: string; degisiklik?: undefined };
 
 /** Plain decimal with at most `ondalik` digits after the separator; otherwise null. */
@@ -48,16 +49,14 @@ export function ayarFormu(ayarlar: AyarDegerleri): AyarFormu {
 export function ayarDegisiklikleri(ayarlar: AyarDegerleri, form: AyarFormu): AyarFormuSonucu {
   const degisiklik: Record<string, number | null> = {};
   const beyan = sinirli(form.beyan, AYAR_SINIRLARI.aylikBeyanSinirUsd);
-  if (beyan === null)
-    return { hata: 'Aylıq bəyan limiti 0-dan böyük, ən çox 100.000 USD olmalıdır.' };
+  if (beyan === null) return { hata: 'ayarlar.beyanHata' };
   if (beyan !== ayarlar.aylikBeyanSinirUsd) degisiklik.aylik_beyan_sinir_usd = beyan;
 
   // Empty clears the price (null); anything else must be a number in range.
   let kg: number | null = null;
   if (form.kg.trim() !== '') {
     kg = sinirli(form.kg, AYAR_SINIRLARI.varsayilanKgFiyatiAzn);
-    if (kg === null)
-      return { hata: 'Kq qiyməti 0–10.000 AZN arası rəqəm olmalıdır (boş: təyin edilməyib).' };
+    if (kg === null) return { hata: 'ayarlar.kqHata' };
   }
   if (kg !== ayarlar.varsayilanKgFiyatiAzn) degisiklik.varsayilan_kg_fiyati_azn = kg;
 
@@ -65,7 +64,7 @@ export function ayarDegisiklikleri(ayarlar: AyarDegerleri, form: AyarFormu): Aya
     const faiz = ondalik(form.prim, 2);
     const prim = faiz === null ? null : Math.round(faiz * 100) / 10000;
     if (prim === null || !sinirIcinde(prim, AYAR_SINIRLARI.primOraniVarsayilan))
-      return { hata: 'Prim faizi 0–100 arası rəqəm olmalıdır.' };
+      return { hata: 'ayarlar.primHata' };
     if (prim !== ayarlar.primOraniVarsayilan) degisiklik.prim_orani_varsayilan = prim;
   }
   return { degisiklik };

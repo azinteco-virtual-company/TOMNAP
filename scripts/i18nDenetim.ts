@@ -79,6 +79,7 @@ function teknik(metin: string) {
   if (/^[A-Z0-9]+(?:-[A-Z0-9]+)+$/.test(m)) return true; // code sample: TOR-ZARA-9821
   if (/^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+$/.test(m)) return true; // file or frame name: Kargo_Etiketleri
   if (/^![a-z]+$/.test(m)) return true; // spreadsheet keys: !cols
+  if (/^\^/.test(m) || /\\[dDwWsSb]/.test(m)) return true; // regular expression source
   if (/^[A-Z][a-z]+(?:[A-Z][a-z0-9]+)+$/.test(m)) return true; // PascalCase name: NotoSans
   if (/^[a-z][a-zA-Z0-9_.\-]*$/.test(m)) return true; // identifier, key, kebab, locale
   if (/^[/#.?&=:@]/.test(m) || /^https?:/.test(m) || /^[\w.+-]+\/[\w.+*-]+$/.test(m)) return true;
