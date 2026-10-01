@@ -29,9 +29,13 @@ const router = Router();
 function hata(res: Response, error: unknown) {
   if (error instanceof PublicResourceError) {
     const code = [400, 401, 403, 404, 409, 413, 503].includes(error.status) ? error.status : 500;
-    return res.status(code).json({ basarili: false, hata: error.message });
+    return res
+      .status(code)
+      .json({ basarili: false, hata: error.message, ...(error.kod ? { kod: error.kod } : {}) });
   }
-  return res.status(500).json({ basarili: false, hata: 'İşlem tamamlanamadı.' });
+  return res
+    .status(500)
+    .json({ basarili: false, hata: 'İşlem tamamlanamadı.', kod: 'ISLEM_TAMAMLANAMADI' });
 }
 
 const kullanici = (req: Request) => req.auth?.userId ?? '';
@@ -71,7 +75,8 @@ router.post('/kurlar', async (req, res) => {
 });
 
 // v2 tenant ayarları (K8, K11): yalnız sahipler (allowlist: OWNERS). Prim oranını yalnız
-// patron görür ve değiştirir; SUPER_ADMIN ayarların geri kalanını görür (K15).
+// patron görür ve değiştirir; SUPER_ADMIN ayarların geri kalanını görür (K15). Butiğin
+// varsayılan dilini de yalnız patron değiştirir (docs/i18n.md); SUPER_ADMIN görür.
 const primGorur = (req: Request) => rolGrubunda(req.auth?.role, 'PAYROLL');
 function gorunur(req: Request, ayarlar: V2Ayarlari) {
   if (primGorur(req)) return ayarlar;
@@ -90,7 +95,17 @@ router.get('/ayarlar', async (req, res) => {
 router.patch('/ayarlar', async (req, res) => {
   try {
     if (!primGorur(req) && Object.hasOwn(Object(req.body), 'prim_orani_varsayilan'))
-      throw new PublicResourceError('Prim oranını yalnız patron değiştirebilir.', 403);
+      throw new PublicResourceError(
+        'Prim oranını yalnız patron değiştirebilir.',
+        403,
+        'AYAR_PRIM_YALNIZ_PATRON'
+      );
+    if (!primGorur(req) && Object.hasOwn(Object(req.body), 'varsayilan_dil'))
+      throw new PublicResourceError(
+        'Butik dilini yalnız patron değiştirebilir.',
+        403,
+        'AYAR_DIL_YALNIZ_PATRON'
+      );
     const degisiklik = ayarGuncellemesiniDogrula(req.body);
     res.json({
       basarili: true,
