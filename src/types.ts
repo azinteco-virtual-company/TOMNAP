@@ -193,6 +193,8 @@ export interface FirmaTenant {
   menseiUlke?: string;
   rolLimitleri?: Partial<RolLimitleri>;
   aktifKullaniciSayilari?: Partial<RolLimitleri>;
+  /** The boutique's default language (docs/i18n.md); the administrator's documents use it. */
+  butikDili?: string;
 }
 
 export interface DavetLinkiItem {

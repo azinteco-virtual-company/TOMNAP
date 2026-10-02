@@ -15,6 +15,7 @@ import {
   buildInviteEmail,
   getApplicationUrl,
 } from '../services/emailService';
+import { butikDilleriniOku } from '../services/v2/ayarlar';
 import { registerBoutique, createInvite, OnboardingError } from '../services/onboarding';
 import { createEmailJob, tryDeliverOnboardingEmail } from '../services/onboardingOutbox';
 import { FirmaTenantItem, KullaniciKaydi } from '../types';
@@ -64,10 +65,11 @@ router.get('/firmalar', async (req, res) => {
           aktifKullaniciSayilari: d.aktif_kullanici_sayilari || ilkKullaniciSayilari(),
           kayitTarihi: d.kayit_tarihi || new Date().toISOString(),
         }));
+        const diller = await butikDilleriniOku(sbFirmalar.map((f) => f.id));
         return res.json({
           basarili: true,
           kaynak: 'supabase',
-          firmalar: sbFirmalar,
+          firmalar: sbFirmalar.map((f) => ({ ...f, butikDili: diller.get(f.id) })),
           siparis_sayilari: sayilar,
         });
       }
@@ -76,12 +78,14 @@ router.get('/firmalar', async (req, res) => {
     }
   }
 
+  const gorunenler = firmalarVeritabani.filter(
+    (f) => req.auth?.role === 'SUPER_ADMIN' || f.id === req.tenantId
+  );
+  const bellekDilleri = await butikDilleriniOku(gorunenler.map((f) => f.id));
   res.json({
     basarili: true,
     kaynak: 'bellek',
-    firmalar: firmalarVeritabani.filter(
-      (f) => req.auth?.role === 'SUPER_ADMIN' || f.id === req.tenantId
-    ),
+    firmalar: gorunenler.map((f) => ({ ...f, butikDili: bellekDilleri.get(f.id) })),
     siparis_sayilari: sayilar,
   });
 });

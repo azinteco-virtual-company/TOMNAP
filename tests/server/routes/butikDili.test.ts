@@ -70,6 +70,29 @@ describe('boutique default language', () => {
     expect(listed.body.ayarlar.varsayilanDil).toBe('az');
   });
 
+  it('the company list carries each boutique language; a boutique never sees another one', async () => {
+    await a.PATRON.patch('/api/v2/ayarlar').send({ varsayilan_dil: 'en' });
+    await b.PATRON.patch('/api/v2/ayarlar').send({ varsayilan_dil: 'az' });
+    // The administrator selects boutiques from this list: documents follow the metadata.
+    const all = await admin.get('/api/firmalar');
+    const dil = (id: string) =>
+      (all.body.firmalar as Array<{ id: string; butikDili?: string }>).find((f) => f.id === id)
+        ?.butikDili;
+    expect([dil(A), dil(B)]).toEqual(['en', 'az']);
+    for (const f of all.body.firmalar as Array<{ butikDili?: string }>)
+      expect(['az', 'en']).toContain(f.butikDili);
+    // Tenant isolation: a boutique's list holds only itself.
+    for (const [agent, own, other] of [
+      [a.PATRON, A, B],
+      [b.PATRON, B, A],
+    ] as const) {
+      const mine = await agent.get('/api/firmalar');
+      expect(mine.status).toBe(200);
+      expect((mine.body.firmalar as Array<{ id: string }>).map((f) => f.id)).toEqual([own]);
+      expect(JSON.stringify(mine.body)).not.toContain(other);
+    }
+  });
+
   it('only the owner sets it; only supported languages are accepted', async () => {
     const scoped = `/api/v2/ayarlar?tenant_id=${A}`;
     const denied = await admin.patch(scoped).send({ varsayilan_dil: 'az' });
