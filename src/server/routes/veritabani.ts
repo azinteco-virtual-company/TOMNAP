@@ -29,7 +29,31 @@ const tenantOf = (row: any) => row.tenant_id || formatlaSiparis(row).tenant_id;
 const localRows = (tenant: string) =>
   tenant === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani;
 const dbActive = (tenant: string) => !!supabase && tenant !== 'demo_sandbox';
-function fail(res: any, error: any) {
+// Codex R5-B01: a v1 backup (merge or clear-and-load) never touches a boutique with v2
+// orders. The incoming row would overwrite a v2 order's money header apart from its
+// ledger; clear-and-load would delete v2 orders missing from the backup. Checked here
+// (early), in the memory path and in the restore RPC (migration 21, PT409).
+const V2_YEDEK_REDDI =
+  'Bu firmada v2 siparişleri var; v1 yedeği yüklenemez. Mevcut kayıtlar değiştirilmedi.';
+const bellekteV2Var = (tenant: string) =>
+  localRows(tenant).some((r) => tenantOf(r) === tenant && Number(r.model_surumu) === 2);
+async function v2SiparisiVar(tenant: string) {
+  if (!dbActive(tenant)) return bellekteV2Var(tenant);
+  const { data, error } = await supabase
+    .from('siparisler')
+    .select('id')
+    .eq('tenant_id', tenant)
+    .eq('model_surumu', 2)
+    .limit(1);
+  if (error || !Array.isArray(data)) throw new Error('v2 order lookup failed');
+  return data.length > 0;
+}
+function fail(res: any, cause: any) {
+  // The restore RPC's refusal (migration 21) answers exactly like the route's.
+  const error =
+    cause?.code === 'PT409'
+      ? new PublicResourceError(V2_YEDEK_REDDI, 409, 'YEDEK_V2_SIPARIS_VAR')
+      : cause;
   const status =
     error instanceof PublicResourceError
       ? error.status
@@ -54,6 +78,7 @@ function fail(res: any, error: any) {
             : status === 413
               ? 'Yedek sınırı 5000 sipariş / 10 MiB. Daha büyük veri için veritabanı yedeği kullanın.'
               : 'Veritabanı işlemi doğrulanamadı. Aynı işlem kimliğiyle yeniden deneyin.',
+    ...(error instanceof PublicResourceError && error.kod ? { kod: error.kod } : {}),
   });
 }
 function concreteTenant(req: Request) {
@@ -264,6 +289,9 @@ async function maintain(
       throw new PublicResourceError('İşlem kimliği başka bir istek için kullanılmış.', 409);
     return { ...receipt.result, tekrar: true };
   }
+  // R5-B01, as in the RPC: after the retry receipt, before anything changes.
+  if (mode !== 'clear' && bellekteV2Var(tenant))
+    throw new PublicResourceError(V2_YEDEK_REDDI, 409, 'YEDEK_V2_SIPARIS_VAR');
   // Orders with payments keep their money trail, as in the database (A10).
   const kalanlar = new Set(rows.map((r) => r.id));
   if (
@@ -413,6 +441,9 @@ router.post('/veritabani/yedek-yukle', async (req, res) => {
     const replace = req.body.temizleVeYukle === true;
     if (replace && req.body.onay_kodu !== `DEGISTIR:${tenant}`)
       throw new PublicResourceError(`Değiştirmek için DEGISTIR:${tenant} onayı gerekiyor.`, 403);
+    // R5-B01: refused before the backup is read or anything is written.
+    if (await v2SiparisiVar(tenant))
+      throw new PublicResourceError(V2_YEDEK_REDDI, 409, 'YEDEK_V2_SIPARIS_VAR');
     const rows = prepareRows(req.body.siparisler, tenant);
     for (const row of rows) {
       const customerId = row.ek_veriler?.musteri_id;

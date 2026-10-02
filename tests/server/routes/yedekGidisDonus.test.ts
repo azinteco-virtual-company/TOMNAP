@@ -60,6 +60,8 @@ function fakeDb() {
         select: () => chain,
         eq: (key: string, value: unknown) => (query.filters.push([key, value]), chain),
         in: (key: string, values: unknown) => (query.filters.push([`${key}:in`, values]), chain),
+        // The R5-B01 v2 lookup: no siparisler rows here, so no v2 order.
+        limit: () => chain,
         then: (resolve: (value: unknown) => unknown) =>
           Promise.resolve({ data: rows(), error: null }).then(resolve),
       };

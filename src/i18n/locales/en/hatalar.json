@@ -42,5 +42,6 @@
   "AYAR_KAYDEDILEMEDI": "The settings were not saved.",
   "AYAR_PRIM_YALNIZ_PATRON": "Only the boutique owner can change the bonus rate.",
   "AYAR_DIL_YALNIZ_PATRON": "Only the boutique owner can change the boutique language.",
-  "AYAR_DIL_DESTEKLENMIYOR": "This language is not supported."
+  "AYAR_DIL_DESTEKLENMIYOR": "This language is not supported.",
+  "YEDEK_V2_SIPARIS_VAR": "This boutique has v2 orders; a v1 backup cannot be loaded. Existing records were not changed."
 }
