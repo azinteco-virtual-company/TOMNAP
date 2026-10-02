@@ -42,7 +42,8 @@ Yalnız SUPER_ADMIN yetkisi korunur. `all` kapsamı salt okunur durum/yedek içi
 
 - `GET /api/veritabani/yedek-al`: yalnız siparişlerin JSON dışa aktarımıdır. Kullanıcılar, bağımsız CRM kayıtları, davetler, oturumlar, kargo ayarları ve görsel dosyaları dahil değildir. Tam veritabanı/medya yedeğinin yerine geçmez.
 - `POST /api/veritabani/yedek-yukle`: varsayılan ekleme modudur. Var olan kimlikle çakışma 409 döner. Değiştirme için `temizleVeYukle: true` ve `onay_kodu: DEGISTIR:<tenant>` gerekir. Arayüz değiştirme etkisini açıkça gösterir.
-- `POST /api/veritabani/temizle`: `onay_kodu: SIL:<tenant>` gerekir. Sabit genel onay kodu ve `ALLOW_GLOBAL_RESET` atlaması kaldırıldı.
+  - **v2 siparişi olan butik (Codex R5-B01, migration 21):** Ekleme de değiştirme de tamamen reddedilir: 409, `kod: YEDEK_V2_SIPARIS_VAR`. v1 satırı bir v2 siparişinin para başlığını defterden bağımsız ezemez; değiştirme yedekte olmayan v2 siparişlerini silemez. Kural üç yerde uygulanır: rota (erken), bellek yolu ve `tomnap_restore_orders` (tablo kilidinden sonra, her silme ve yazmadan önce).
+- `POST /api/veritabani/temizle`: `onay_kodu: SIL:<tenant>` gerekir. Sabit genel onay kodu ve `ALLOW_GLOBAL_RESET` atlaması kaldırıldı. v2 siparişi olan butikte reddedilir (409, `kod: YEDEK_V2_SIPARIS_VAR`; OPEN_QUESTIONS 42): v1 bakım işlemleri v2 verisine dokunmaz.
 - Her bakım isteği UUID biçiminde `islem_id` taşır. Aynı kimlik/aynı içerik tekrarında önceki sonuç döner; arada oluşturulan siparişler tekrar silinmez. Aynı kimliğin farklı içerikle kullanımı 409'dur.
 
 Arayüz yanıtı kesinleşene kadar işlem kimliğini sekme depolamasında tutar; yalnız payload özeti ve rastgele kimlik kaydedilir. Ağ hatası/yenileme sonrası aynı sekmedeki aynı işlem tekrarında kimlik korunur. Sekme depolaması silinirse veya başka sekmeden yeni işlem başlatılırsa yeni bir istek olur; bu nedenle belirsiz sonucun ardından yeni işlem oluşturmak yerine mevcut kimliği kullanmak gerekir.

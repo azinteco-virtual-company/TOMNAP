@@ -31,6 +31,15 @@ const row = (tenant = 'restore_a', id = randomUUID()) => ({
   alinan_tutar: 30,
   olusturma_tarihi: '2020-01-01T00:00:00Z',
 });
+// The R5-B01 v2 lookup (yedekV2Korumasi.test.ts) finds no v2 order in these boutiques.
+const v2Yok = () => {
+  const chain = {
+    select: () => chain,
+    eq: () => chain,
+    limit: async () => ({ data: [], error: null }),
+  };
+  return { from: () => chain };
+};
 const restore = (rows: any[], extra = {}) => ({
   siparisler: rows,
   islem_id: randomUUID(),
@@ -248,7 +257,10 @@ describe('order maintenance integrity', () => {
   });
   it('database failures never mutate local state or claim success', async () => {
     const before = structuredClone(state.siparislerVeritabani);
-    env.db = { rpc: vi.fn().mockResolvedValue({ error: { message: 'sensitive backend detail' } }) };
+    env.db = {
+      ...v2Yok(),
+      rpc: vi.fn().mockResolvedValue({ error: { message: 'sensitive backend detail' } }),
+    };
     const response = await request(app())
       .post('/api/veritabani/yedek-yukle')
       .send(restore([row()]));
@@ -261,6 +273,7 @@ describe('order maintenance integrity', () => {
   it('uses one atomic RPC and does not publish DB data to local cache', async () => {
     const before = structuredClone(state.siparislerVeritabani);
     env.db = {
+      ...v2Yok(),
       rpc: vi
         .fn()
         .mockResolvedValue({ data: { toplam: 1, hedef_tenant: 'restore_a', tekrar: false } }),

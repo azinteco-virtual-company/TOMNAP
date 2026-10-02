@@ -42,5 +42,6 @@
   "AYAR_KAYDEDILEMEDI": "Ayarlar saxlanılmadı.",
   "AYAR_PRIM_YALNIZ_PATRON": "Prim faizini yalnız butik sahibi dəyişə bilər.",
   "AYAR_DIL_YALNIZ_PATRON": "Butikin dilini yalnız butik sahibi dəyişə bilər.",
-  "AYAR_DIL_DESTEKLENMIYOR": "Bu dil dəstəklənmir."
+  "AYAR_DIL_DESTEKLENMIYOR": "Bu dil dəstəklənmir.",
+  "YEDEK_V2_SIPARIS_VAR": "Bu butikdə v2 sifarişləri var; v1 baxım əməliyyatı (ehtiyat nüsxənin yüklənməsi və ya təmizləmə) aparıla bilməz. Mövcud qeydlər dəyişmədi."
 }

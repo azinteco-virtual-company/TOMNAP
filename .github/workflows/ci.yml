@@ -164,6 +164,9 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/v2-asama-koprusu.sql
           # Boutique default language (docs/i18n.md): default az, format CHECK, access; down -> up.
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/butik-varsayilan-dili.sql
+          # v1 backup and reversal guards (Codex R5 B01/B03, migration 21): refusals, the old
+          # bodies corrupt the data (red), signatures and grants unchanged; down -> down -> up.
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/yedek-ve-ters-kayit-korumasi.sql
           node tests/sql/siparis-satirlari-concurrency.mjs
           node tests/sql/odemeler-concurrency.mjs
           node tests/sql/kasa-concurrency.mjs

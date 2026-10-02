@@ -614,3 +614,20 @@ yazılmamış maddeler **Kod yok** olarak işaretlidir.
     - Elle dil seçmemiş kullanıcı giriş sonrasında artık butiğin dilini (varsayılan `az`) görür;
       eskiden eski sözlüğün varsayılanı İngilizceydi.
 
+42. **v1 "temizle" (clear) v2 siparişi olan butikte (Codex R5 B01; KARAR VERİLDİ, 2 Ekim 2026).**
+    - **Karar (Tural):** Evet. v2 siparişi olan butikte yalnız temizleme (`clear`) de
+      reddedilir; v1 bakım işlemleri v2 verisine hiç dokunmaz.
+    - **Uygulama (#49):** Yedek yükleme ve temizle-yükle ile aynı 409 ve
+      `kod: YEDEK_V2_SIPARIS_VAR`. Kontrol rotada (`POST /api/veritabani/temizle`, silmeden
+      önce), bellek yolunda ve `tomnap_restore_orders` içinde (migration 21; mod koşulu yok).
+    - **Önce:** Ödemesi olan v2 siparişini yabancı anahtar koruyordu (409); ödemesiz v2
+      siparişleri satırlarıyla birlikte (CASCADE) siliniyordu.
+
+43. **"İlk gerçek butikten önce" kapısı (Codex R5; 2 Ekim 2026).** Demo veride bozulma
+    görülmedi; bu maddeler gerçek bir butik açılmadan önce kapanmalı:
+    - **R5-B02:** `kasa_teslim_id` güncellemesinde kasa teslim kaydının tutarı ve adedi ile
+      bağlanan tahsilatların toplamı denetlenmiyor (servis rolü yolu). Tasarım gerekiyor:
+      bütünlük kuralı ya da kolon yetkisinin dar bir RPC'ye taşınması.
+    - **OQ 36:** Sayfa yenilenince işlem anahtarı kaybolur; cevabı kaybolmuş bir ödeme
+      yenilemeden sonra yeniden gönderilirse ikinci kez yazılabilir.
+    - R5-B03 (ters kayıtta kurye, kaynak ve yöntem eşitliği) migration 21 ile kapandı.
