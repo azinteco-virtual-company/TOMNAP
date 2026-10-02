@@ -9663,7 +9663,7 @@ var KURYE_KOLONLARI = ["kurye_atama_surumu", "kurye_teslim_kullanici_id", "kurye
 var tenantOf = (row) => row.tenant_id || formatlaSiparis(row).tenant_id;
 var localRows = (tenant2) => tenant2 === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
 var dbActive3 = (tenant2) => !!supabase && tenant2 !== "demo_sandbox";
-var V2_YEDEK_REDDI = "Bu firmada v2 sipari\u015Fleri var; v1 yede\u011Fi y\xFCklenemez. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi.";
+var V2_YEDEK_REDDI = "Bu firmada v2 sipari\u015Fleri var; v1 bak\u0131m i\u015Flemi (yedek y\xFCkleme ya da temizleme) yap\u0131lamaz. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi.";
 var bellekteV2Var = (tenant2) => localRows(tenant2).some((r) => tenantOf(r) === tenant2 && Number(r.model_surumu) === 2);
 async function v2SiparisiVar(tenant2) {
   if (!dbActive3(tenant2)) return bellekteV2Var(tenant2);
@@ -9815,7 +9815,7 @@ async function maintain(tenant2, key, mode, rows) {
       throw new PublicResourceError("\u0130\u015Flem kimli\u011Fi ba\u015Fka bir istek i\xE7in kullan\u0131lm\u0131\u015F.", 409);
     return { ...receipt.result, tekrar: true };
   }
-  if (mode !== "clear" && bellekteV2Var(tenant2))
+  if (bellekteV2Var(tenant2))
     throw new PublicResourceError(V2_YEDEK_REDDI, 409, "YEDEK_V2_SIPARIS_VAR");
   const kalanlar = new Set(rows.map((r) => r.id));
   if (mode !== "merge" && bellekteOdemesiVar(
@@ -9889,6 +9889,8 @@ router8.post("/veritabani/temizle", async (req, res) => {
     const tenant2 = concreteTenant(req);
     if (req.body.onay_kodu !== `SIL:${tenant2}`)
       throw new PublicResourceError(`Silmek i\xE7in SIL:${tenant2} onay\u0131 gerekiyor.`, 403);
+    if (await v2SiparisiVar(tenant2))
+      throw new PublicResourceError(V2_YEDEK_REDDI, 409, "YEDEK_V2_SIPARIS_VAR");
     const result2 = await maintain(tenant2, operationKey(req), "clear", []);
     res.json({ basarili: true, ...result2, mesaj: "Se\xE7ili firman\u0131n sipari\u015Fleri temizlendi." });
   } catch (error2) {
