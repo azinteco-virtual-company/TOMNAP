@@ -20,7 +20,8 @@
     "test:e2e": "node scripts/test-e2e.mjs",
     "test:e2e:install": "node scripts/test-e2e.mjs --install",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
-    "check:v2-bundle": "node --import tsx scripts/check-v2-bundle.ts"
+    "check:v2-bundle": "node --import tsx scripts/check-v2-bundle.ts",
+    "i18n:csv": "tsx scripts/ceviriCsv.ts"
   },
   "dependencies": {
     "@expo-google-fonts/noto-sans": "^0.4.2",

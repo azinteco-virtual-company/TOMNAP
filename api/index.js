@@ -8689,7 +8689,7 @@ function sinirIcinde(deger, sinir) {
 
 // src/i18n/diller.json
 var diller_default = {
-  desteklenen: ["az", "en"]
+  desteklenen: ["az", "en", "ru"]
 };
 
 // src/shared/diller.ts

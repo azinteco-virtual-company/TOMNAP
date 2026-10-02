@@ -1,0 +1,24 @@
+{
+  "dil": {
+    "sec": "Сменить язык",
+    "baslik": "Язык"
+  },
+  "bagla": "Закрыть",
+  "baglantiHatasi": "Не удалось подключиться к серверу.",
+  "xetaBasVerdi": "Что-то пошло не так.",
+  "anaSehifeyeQayit": "Вернуться на главную страницу",
+  "marka": {
+    "ad": "TOMNAP",
+    "harf": "T"
+  },
+  "kopyala": "Копировать",
+  "kopyalandi": "Скопировано",
+  "yukleniyor": "Загрузка…",
+  "lojistik": {
+    "KANADA_SATINALIM_BEKLIYOR": "Ожидает покупки в Канаде",
+    "KANADA_DEPO": "На складе в Канаде",
+    "ULUSLARARASI_KARGO": "В международной доставке",
+    "BAKU_DAGITIM_ARKADAS": "Доставляется по Баку",
+    "TESLIM_EDILDI": "Доставлен"
+  }
+}
