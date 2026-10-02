@@ -35,13 +35,29 @@ const tembelYukleyici: BackendModule = {
 const ELLE_SECIM_ANAHTARI = 'tomnap_dil';
 const ESKI_ELLE_SECIM_ANAHTARI = 'knb_dil';
 
+// The choice lives in memory first; localStorage is only the persistence layer, so a
+// blocked or failing storage (private mode, quota) never loses it within this page.
+let bellekElleSecim: string | null = null;
+
 export function elleSecimOku(): string | null {
+  if (bellekElleSecim) return bellekElleSecim;
   try {
     return (
       localStorage.getItem(ELLE_SECIM_ANAHTARI) ?? localStorage.getItem(ESKI_ELLE_SECIM_ANAHTARI)
     );
   } catch {
     return null;
+  }
+}
+
+/** Forgets the manual choice, in memory and on this device (also lets tests start clean). */
+export function elleSecimiSifirla() {
+  bellekElleSecim = null;
+  try {
+    localStorage.removeItem(ELLE_SECIM_ANAHTARI);
+    localStorage.removeItem(ESKI_ELLE_SECIM_ANAHTARI);
+  } catch {
+    // Storage unavailable: nothing persisted to forget.
   }
 }
 
@@ -107,12 +123,11 @@ export function dilDurumunuGuncelle(girisYapildi: boolean, butikDili: string | n
 /** The language selector: remembered on this device only (karar 1 Ekim 2026). */
 export function elleDilSec(dil: string) {
   if (!dilDestekleniyor(dil)) return;
+  bellekElleSecim = dil;
   try {
     localStorage.setItem(ELLE_SECIM_ANAHTARI, dil);
   } catch {
-    // Private mode or blocked storage: the choice lasts for this page only.
-    void i18n.changeLanguage(dil);
-    return;
+    // Private mode or blocked storage: the choice lasts for this page, not the next visit.
   }
   uygula();
 }

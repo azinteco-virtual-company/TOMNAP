@@ -2,7 +2,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setApiSession } from '../../src/lib/apiClient';
-import i18n, { htmlDiliniAyarla, seciliDil } from '../../src/i18n';
+import i18n, { elleSecimiSifirla, htmlDiliniAyarla, seciliDil } from '../../src/i18n';
 import { AccessGateModal } from '../../src/components/AccessGateModal';
 import { buttonByText, click, render, stubApi, typeInto, waitFor } from '../helpers/dom';
 import { dilHazirla } from '../helpers/i18n';
@@ -19,6 +19,7 @@ const giris = () =>
   });
 
 beforeEach(async () => {
+  elleSecimiSifirla();
   localStorage.clear();
   setApiSession(null);
   await dilHazirla(seciliDil(), ['giris']);
