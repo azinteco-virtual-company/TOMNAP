@@ -115,6 +115,21 @@ function acceptSession(data: SessionPayload) {
   });
 }
 
+/**
+ * The language of the boutique being worked in (docs/i18n.md). A boutique session carries
+ * it; the administrator has no boutique of their own, so it comes from the selected
+ * boutique's metadata (a stale company list was dropped when the selection changed).
+ */
+export function etkinButikDili(
+  state: Pick<AppState, 'session' | 'seciliFirmaId' | 'firmalar' | 'butikDili'>
+): string | null {
+  if (state.session?.rol !== 'SUPER_ADMIN' || !state.seciliFirmaId || state.seciliFirmaId === 'all')
+    return state.butikDili;
+  return (
+    state.firmalar.find((firma) => firma.id === state.seciliFirmaId)?.butikDili ?? state.butikDili
+  );
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   ...privateData(),
   session: null,

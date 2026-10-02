@@ -8676,6 +8676,188 @@ TOMNAP D\u0259st\u0259k Komandas\u0131
   return { payload: { from: EMAIL_FROM, to: params.email, subject, html, text: text3 }, link };
 }
 
+// src/shared/v2AyarSinirlari.ts
+var AYAR_SINIRLARI = {
+  aylikBeyanSinirUsd: { alt: 0, ust: 1e5, ondalik: 2, altDahil: false },
+  varsayilanKgFiyatiAzn: { alt: 0, ust: 1e4, ondalik: 2, altDahil: true },
+  /** Oran (0,05 = %5); formda yüzde olarak girilir. */
+  primOraniVarsayilan: { alt: 0, ust: 1, ondalik: 4, altDahil: true }
+};
+function sinirIcinde(deger, sinir) {
+  return Number.isFinite(deger) && (sinir.altDahil ? deger >= sinir.alt : deger > sinir.alt) && deger <= sinir.ust;
+}
+
+// src/i18n/diller.json
+var diller_default = {
+  desteklenen: ["az", "en"]
+};
+
+// src/shared/diller.ts
+var DESTEKLENEN_DILLER = Object.freeze([...diller_default.desteklenen]);
+var BUTIK_VARSAYILAN_DILI = "az";
+function dilDestekleniyor(kod, desteklenen = DESTEKLENEN_DILLER) {
+  return typeof kod === "string" && desteklenen.includes(kod);
+}
+
+// src/server/services/v2/ayarlar.ts
+var VARSAYILAN_V2_AYARLARI = {
+  aylikBeyanSinirUsd: 300,
+  varsayilanKgFiyatiAzn: null,
+  primOraniVarsayilan: 0.05,
+  varsayilanDil: BUTIK_VARSAYILAN_DILI
+};
+var COLUMNS = "tenant_id,aylik_beyan_sinir_usd,varsayilan_kg_fiyati_azn,prim_orani_varsayilan,varsayilan_dil,guncelleyen_kullanici_id,guncellenme_zamani";
+var ALANLAR2 = [
+  "aylik_beyan_sinir_usd",
+  "varsayilan_kg_fiyati_azn",
+  "prim_orani_varsayilan",
+  "varsayilan_dil"
+];
+var bellek = /* @__PURE__ */ new Map();
+function sayi(value, sinir) {
+  const kat = 10 ** sinir.ondalik;
+  if (typeof value !== "number" || !sinirIcinde(value, sinir) || Math.round(value * kat) / kat !== value)
+    throw new PublicResourceError("Ge\xE7ersiz ayar de\u011Feri.", 400, "AYAR_GECERSIZ_DEGER");
+  return value;
+}
+function ayarGuncellemesiniDogrula(body2) {
+  const alanlar = v2GovdesiniAyikla(body2, ALANLAR2);
+  const sonuc = {};
+  if ("aylik_beyan_sinir_usd" in alanlar)
+    sonuc.aylikBeyanSinirUsd = sayi(
+      alanlar.aylik_beyan_sinir_usd,
+      AYAR_SINIRLARI.aylikBeyanSinirUsd
+    );
+  if ("varsayilan_kg_fiyati_azn" in alanlar)
+    sonuc.varsayilanKgFiyatiAzn = alanlar.varsayilan_kg_fiyati_azn === null ? null : sayi(alanlar.varsayilan_kg_fiyati_azn, AYAR_SINIRLARI.varsayilanKgFiyatiAzn);
+  if ("prim_orani_varsayilan" in alanlar)
+    sonuc.primOraniVarsayilan = sayi(
+      alanlar.prim_orani_varsayilan,
+      AYAR_SINIRLARI.primOraniVarsayilan
+    );
+  if ("varsayilan_dil" in alanlar) {
+    if (!dilDestekleniyor(alanlar.varsayilan_dil))
+      throw new PublicResourceError("Bu dil desteklenmiyor.", 400, "AYAR_DIL_DESTEKLENMIYOR");
+    sonuc.varsayilanDil = alanlar.varsayilan_dil;
+  }
+  if (Object.keys(sonuc).length === 0)
+    throw new PublicResourceError("G\xFCncellenecek bir ayar g\xF6nderilmelidir.", 400, "AYAR_ALAN_YOK");
+  return sonuc;
+}
+function satirdan(row, tenantId) {
+  if (!row || typeof row !== "object" || Array.isArray(row))
+    throw new PublicResourceError("Ayarlar okunamad\u0131.", 503, "AYAR_OKUNAMADI");
+  const r = row;
+  const beyan = Number(r.aylik_beyan_sinir_usd);
+  const prim = Number(r.prim_orani_varsayilan);
+  const kg = r.varsayilan_kg_fiyati_azn === null ? null : Number(r.varsayilan_kg_fiyati_azn);
+  if (r.tenant_id !== tenantId || !Number.isFinite(beyan) || !Number.isFinite(prim) || kg !== null && !Number.isFinite(kg))
+    throw new PublicResourceError("Ayarlar okunamad\u0131.", 503, "AYAR_OKUNAMADI");
+  return {
+    aylikBeyanSinirUsd: beyan,
+    varsayilanKgFiyatiAzn: kg,
+    primOraniVarsayilan: prim,
+    // A language no longer in the list reads as the default; the stored value stays.
+    varsayilanDil: dilDestekleniyor(r.varsayilan_dil) ? r.varsayilan_dil : BUTIK_VARSAYILAN_DILI,
+    kayitli: true,
+    guncelleyenKullaniciId: typeof r.guncelleyen_kullanici_id === "string" ? r.guncelleyen_kullanici_id : null,
+    guncellenmeZamani: typeof r.guncellenme_zamani === "string" ? r.guncellenme_zamani : null
+  };
+}
+var varsayilanlar = () => ({
+  ...VARSAYILAN_V2_AYARLARI,
+  kayitli: false,
+  guncelleyenKullaniciId: null,
+  guncellenmeZamani: null
+});
+async function ayarlariOku(tenant2) {
+  const tenantId = v2Tenant(tenant2);
+  const client2 = supabase;
+  if (!client2) return { ...bellek.get(tenantId) ?? varsayilanlar() };
+  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").select(COLUMNS).eq("tenant_id", tenantId).maybeSingle();
+  if (error2) throw new PublicResourceError("Ayarlar okunamad\u0131.", 503, "AYAR_OKUNAMADI");
+  return data ? satirdan(data, tenantId) : varsayilanlar();
+}
+async function ayarlariGuncelle(tenant2, userId, degisiklik) {
+  const tenantId = v2Tenant(tenant2);
+  if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
+  const zaman = (/* @__PURE__ */ new Date()).toISOString();
+  const client2 = supabase;
+  if (!client2) {
+    const guncel = {
+      ...bellek.get(tenantId) ?? varsayilanlar(),
+      ...degisiklik,
+      kayitli: true,
+      guncelleyenKullaniciId: userId,
+      guncellenmeZamani: zaman
+    };
+    bellek.set(tenantId, guncel);
+    return { ...guncel };
+  }
+  const satir = {
+    tenant_id: tenantId,
+    guncelleyen_kullanici_id: userId,
+    guncellenme_zamani: zaman
+  };
+  if (degisiklik.aylikBeyanSinirUsd !== void 0)
+    satir.aylik_beyan_sinir_usd = degisiklik.aylikBeyanSinirUsd;
+  if (degisiklik.varsayilanKgFiyatiAzn !== void 0)
+    satir.varsayilan_kg_fiyati_azn = degisiklik.varsayilanKgFiyatiAzn;
+  if (degisiklik.primOraniVarsayilan !== void 0)
+    satir.prim_orani_varsayilan = degisiklik.primOraniVarsayilan;
+  if (degisiklik.varsayilanDil !== void 0) satir.varsayilan_dil = degisiklik.varsayilanDil;
+  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").upsert(satir, { onConflict: "tenant_id" }).select(COLUMNS).single();
+  if (error2 || !data)
+    throw new PublicResourceError("Ayarlar kaydedilemedi.", 503, "AYAR_KAYDEDILEMEDI");
+  return satirdan(data, tenantId);
+}
+async function butikDiliniOku(tenant2) {
+  let tenantId;
+  try {
+    tenantId = v2Tenant(tenant2);
+  } catch {
+    return BUTIK_VARSAYILAN_DILI;
+  }
+  const client2 = supabase;
+  if (!client2) return bellek.get(tenantId)?.varsayilanDil ?? BUTIK_VARSAYILAN_DILI;
+  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").select("varsayilan_dil").eq("tenant_id", tenantId).maybeSingle();
+  if (error2) {
+    console.warn("Butik dili okunamad\u0131; varsay\u0131lan kullan\u0131l\u0131yor.", error2.code ?? "");
+    return BUTIK_VARSAYILAN_DILI;
+  }
+  const dil = data?.varsayilan_dil;
+  return dilDestekleniyor(dil) ? dil : BUTIK_VARSAYILAN_DILI;
+}
+async function butikDilleriniOku(tenantlar) {
+  const sonuc = /* @__PURE__ */ new Map();
+  const idler = [...new Set(tenantlar)].filter((id) => {
+    try {
+      return v2Tenant(id) === id;
+    } catch {
+      return false;
+    }
+  });
+  for (const id of idler) sonuc.set(id, BUTIK_VARSAYILAN_DILI);
+  if (idler.length === 0) return sonuc;
+  const client2 = supabase;
+  if (!client2) {
+    for (const id of idler) sonuc.set(id, bellek.get(id)?.varsayilanDil ?? BUTIK_VARSAYILAN_DILI);
+    return sonuc;
+  }
+  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").select("tenant_id,varsayilan_dil").in("tenant_id", idler);
+  if (error2) {
+    console.warn("Butik dilleri okunamad\u0131; varsay\u0131lan kullan\u0131l\u0131yor.", error2.code ?? "");
+    return sonuc;
+  }
+  for (const satir of data ?? [])
+    if (typeof satir.tenant_id === "string" && sonuc.has(satir.tenant_id))
+      sonuc.set(
+        satir.tenant_id,
+        dilDestekleniyor(satir.varsayilan_dil) ? satir.varsayilan_dil : BUTIK_VARSAYILAN_DILI
+      );
+  return sonuc;
+}
+
 // src/server/services/onboarding.ts
 var OnboardingError = class extends Error {
   constructor(status2, message, kod) {
@@ -8975,10 +9157,11 @@ router6.get("/firmalar", async (req, res) => {
           aktifKullaniciSayilari: d.aktif_kullanici_sayilari || ilkKullaniciSayilari(),
           kayitTarihi: d.kayit_tarihi || (/* @__PURE__ */ new Date()).toISOString()
         }));
+        const diller = await butikDilleriniOku(sbFirmalar.map((f) => f.id));
         return res.json({
           basarili: true,
           kaynak: "supabase",
-          firmalar: sbFirmalar,
+          firmalar: sbFirmalar.map((f) => ({ ...f, butikDili: diller.get(f.id) })),
           siparis_sayilari: sayilar
         });
       }
@@ -8986,12 +9169,14 @@ router6.get("/firmalar", async (req, res) => {
       return res.status(503).json({ basarili: false, hata: "Firma bilgileri okunamad\u0131." });
     }
   }
+  const gorunenler = firmalarVeritabani.filter(
+    (f) => req.auth?.role === "SUPER_ADMIN" || f.id === req.tenantId
+  );
+  const bellekDilleri = await butikDilleriniOku(gorunenler.map((f) => f.id));
   res.json({
     basarili: true,
     kaynak: "bellek",
-    firmalar: firmalarVeritabani.filter(
-      (f) => req.auth?.role === "SUPER_ADMIN" || f.id === req.tenantId
-    ),
+    firmalar: gorunenler.map((f) => ({ ...f, butikDili: bellekDilleri.get(f.id) })),
     siparis_sayilari: sayilar
   });
 });
@@ -11254,161 +11439,6 @@ var kargoEntegrasyon_default = router9;
 // src/server/routes/auth.ts
 import { Router as Router10 } from "express";
 import { randomUUID as randomUUID9 } from "node:crypto";
-
-// src/shared/v2AyarSinirlari.ts
-var AYAR_SINIRLARI = {
-  aylikBeyanSinirUsd: { alt: 0, ust: 1e5, ondalik: 2, altDahil: false },
-  varsayilanKgFiyatiAzn: { alt: 0, ust: 1e4, ondalik: 2, altDahil: true },
-  /** Oran (0,05 = %5); formda yüzde olarak girilir. */
-  primOraniVarsayilan: { alt: 0, ust: 1, ondalik: 4, altDahil: true }
-};
-function sinirIcinde(deger, sinir) {
-  return Number.isFinite(deger) && (sinir.altDahil ? deger >= sinir.alt : deger > sinir.alt) && deger <= sinir.ust;
-}
-
-// src/i18n/diller.json
-var diller_default = {
-  desteklenen: ["az", "en"]
-};
-
-// src/shared/diller.ts
-var DESTEKLENEN_DILLER = Object.freeze([...diller_default.desteklenen]);
-var BUTIK_VARSAYILAN_DILI = "az";
-function dilDestekleniyor(kod, desteklenen = DESTEKLENEN_DILLER) {
-  return typeof kod === "string" && desteklenen.includes(kod);
-}
-
-// src/server/services/v2/ayarlar.ts
-var VARSAYILAN_V2_AYARLARI = {
-  aylikBeyanSinirUsd: 300,
-  varsayilanKgFiyatiAzn: null,
-  primOraniVarsayilan: 0.05,
-  varsayilanDil: BUTIK_VARSAYILAN_DILI
-};
-var COLUMNS = "tenant_id,aylik_beyan_sinir_usd,varsayilan_kg_fiyati_azn,prim_orani_varsayilan,varsayilan_dil,guncelleyen_kullanici_id,guncellenme_zamani";
-var ALANLAR2 = [
-  "aylik_beyan_sinir_usd",
-  "varsayilan_kg_fiyati_azn",
-  "prim_orani_varsayilan",
-  "varsayilan_dil"
-];
-var bellek = /* @__PURE__ */ new Map();
-function sayi(value, sinir) {
-  const kat = 10 ** sinir.ondalik;
-  if (typeof value !== "number" || !sinirIcinde(value, sinir) || Math.round(value * kat) / kat !== value)
-    throw new PublicResourceError("Ge\xE7ersiz ayar de\u011Feri.", 400, "AYAR_GECERSIZ_DEGER");
-  return value;
-}
-function ayarGuncellemesiniDogrula(body2) {
-  const alanlar = v2GovdesiniAyikla(body2, ALANLAR2);
-  const sonuc = {};
-  if ("aylik_beyan_sinir_usd" in alanlar)
-    sonuc.aylikBeyanSinirUsd = sayi(
-      alanlar.aylik_beyan_sinir_usd,
-      AYAR_SINIRLARI.aylikBeyanSinirUsd
-    );
-  if ("varsayilan_kg_fiyati_azn" in alanlar)
-    sonuc.varsayilanKgFiyatiAzn = alanlar.varsayilan_kg_fiyati_azn === null ? null : sayi(alanlar.varsayilan_kg_fiyati_azn, AYAR_SINIRLARI.varsayilanKgFiyatiAzn);
-  if ("prim_orani_varsayilan" in alanlar)
-    sonuc.primOraniVarsayilan = sayi(
-      alanlar.prim_orani_varsayilan,
-      AYAR_SINIRLARI.primOraniVarsayilan
-    );
-  if ("varsayilan_dil" in alanlar) {
-    if (!dilDestekleniyor(alanlar.varsayilan_dil))
-      throw new PublicResourceError("Bu dil desteklenmiyor.", 400, "AYAR_DIL_DESTEKLENMIYOR");
-    sonuc.varsayilanDil = alanlar.varsayilan_dil;
-  }
-  if (Object.keys(sonuc).length === 0)
-    throw new PublicResourceError("G\xFCncellenecek bir ayar g\xF6nderilmelidir.", 400, "AYAR_ALAN_YOK");
-  return sonuc;
-}
-function satirdan(row, tenantId) {
-  if (!row || typeof row !== "object" || Array.isArray(row))
-    throw new PublicResourceError("Ayarlar okunamad\u0131.", 503, "AYAR_OKUNAMADI");
-  const r = row;
-  const beyan = Number(r.aylik_beyan_sinir_usd);
-  const prim = Number(r.prim_orani_varsayilan);
-  const kg = r.varsayilan_kg_fiyati_azn === null ? null : Number(r.varsayilan_kg_fiyati_azn);
-  if (r.tenant_id !== tenantId || !Number.isFinite(beyan) || !Number.isFinite(prim) || kg !== null && !Number.isFinite(kg))
-    throw new PublicResourceError("Ayarlar okunamad\u0131.", 503, "AYAR_OKUNAMADI");
-  return {
-    aylikBeyanSinirUsd: beyan,
-    varsayilanKgFiyatiAzn: kg,
-    primOraniVarsayilan: prim,
-    // A language no longer in the list reads as the default; the stored value stays.
-    varsayilanDil: dilDestekleniyor(r.varsayilan_dil) ? r.varsayilan_dil : BUTIK_VARSAYILAN_DILI,
-    kayitli: true,
-    guncelleyenKullaniciId: typeof r.guncelleyen_kullanici_id === "string" ? r.guncelleyen_kullanici_id : null,
-    guncellenmeZamani: typeof r.guncellenme_zamani === "string" ? r.guncellenme_zamani : null
-  };
-}
-var varsayilanlar = () => ({
-  ...VARSAYILAN_V2_AYARLARI,
-  kayitli: false,
-  guncelleyenKullaniciId: null,
-  guncellenmeZamani: null
-});
-async function ayarlariOku(tenant2) {
-  const tenantId = v2Tenant(tenant2);
-  const client2 = supabase;
-  if (!client2) return { ...bellek.get(tenantId) ?? varsayilanlar() };
-  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").select(COLUMNS).eq("tenant_id", tenantId).maybeSingle();
-  if (error2) throw new PublicResourceError("Ayarlar okunamad\u0131.", 503, "AYAR_OKUNAMADI");
-  return data ? satirdan(data, tenantId) : varsayilanlar();
-}
-async function ayarlariGuncelle(tenant2, userId, degisiklik) {
-  const tenantId = v2Tenant(tenant2);
-  if (!userId) throw new PublicResourceError("Oturum gerekli.", 401);
-  const zaman = (/* @__PURE__ */ new Date()).toISOString();
-  const client2 = supabase;
-  if (!client2) {
-    const guncel = {
-      ...bellek.get(tenantId) ?? varsayilanlar(),
-      ...degisiklik,
-      kayitli: true,
-      guncelleyenKullaniciId: userId,
-      guncellenmeZamani: zaman
-    };
-    bellek.set(tenantId, guncel);
-    return { ...guncel };
-  }
-  const satir = {
-    tenant_id: tenantId,
-    guncelleyen_kullanici_id: userId,
-    guncellenme_zamani: zaman
-  };
-  if (degisiklik.aylikBeyanSinirUsd !== void 0)
-    satir.aylik_beyan_sinir_usd = degisiklik.aylikBeyanSinirUsd;
-  if (degisiklik.varsayilanKgFiyatiAzn !== void 0)
-    satir.varsayilan_kg_fiyati_azn = degisiklik.varsayilanKgFiyatiAzn;
-  if (degisiklik.primOraniVarsayilan !== void 0)
-    satir.prim_orani_varsayilan = degisiklik.primOraniVarsayilan;
-  if (degisiklik.varsayilanDil !== void 0) satir.varsayilan_dil = degisiklik.varsayilanDil;
-  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").upsert(satir, { onConflict: "tenant_id" }).select(COLUMNS).single();
-  if (error2 || !data)
-    throw new PublicResourceError("Ayarlar kaydedilemedi.", 503, "AYAR_KAYDEDILEMEDI");
-  return satirdan(data, tenantId);
-}
-async function butikDiliniOku(tenant2) {
-  let tenantId;
-  try {
-    tenantId = v2Tenant(tenant2);
-  } catch {
-    return BUTIK_VARSAYILAN_DILI;
-  }
-  const client2 = supabase;
-  if (!client2) return bellek.get(tenantId)?.varsayilanDil ?? BUTIK_VARSAYILAN_DILI;
-  const { data, error: error2 } = await client2.from("tenant_v2_ayarlari").select("varsayilan_dil").eq("tenant_id", tenantId).maybeSingle();
-  if (error2) {
-    console.warn("Butik dili okunamad\u0131; varsay\u0131lan kullan\u0131l\u0131yor.", error2.code ?? "");
-    return BUTIK_VARSAYILAN_DILI;
-  }
-  const dil = data?.varsayilan_dil;
-  return dilDestekleniyor(dil) ? dil : BUTIK_VARSAYILAN_DILI;
-}
-
-// src/server/routes/auth.ts
 var router10 = Router10();
 function isUnexpired(value) {
   return typeof value === "string" && Date.parse(value) > Date.now();

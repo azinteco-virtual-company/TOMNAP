@@ -204,6 +204,46 @@ export async function butikDiliniOku(tenant: unknown): Promise<string> {
   return dilDestekleniyor(dil) ? dil : BUTIK_VARSAYILAN_DILI;
 }
 
+/**
+ * Default languages of the given boutiques, for the company list (docs/i18n.md). Only the
+ * ids the caller was already allowed to list are passed in; every id gets a supported
+ * language (an unreadable or missing value reads as the default, like `butikDiliniOku`).
+ */
+export async function butikDilleriniOku(
+  tenantlar: readonly string[]
+): Promise<Map<string, string>> {
+  const sonuc = new Map<string, string>();
+  const idler = [...new Set(tenantlar)].filter((id) => {
+    try {
+      return v2Tenant(id) === id;
+    } catch {
+      return false;
+    }
+  });
+  for (const id of idler) sonuc.set(id, BUTIK_VARSAYILAN_DILI);
+  if (idler.length === 0) return sonuc;
+  const client = supabase;
+  if (!client) {
+    for (const id of idler) sonuc.set(id, bellek.get(id)?.varsayilanDil ?? BUTIK_VARSAYILAN_DILI);
+    return sonuc;
+  }
+  const { data, error } = await client
+    .from('tenant_v2_ayarlari')
+    .select('tenant_id,varsayilan_dil')
+    .in('tenant_id', idler);
+  if (error) {
+    console.warn('Butik dilleri okunamadı; varsayılan kullanılıyor.', error.code ?? '');
+    return sonuc;
+  }
+  for (const satir of (data ?? []) as Array<{ tenant_id?: unknown; varsayilan_dil?: unknown }>)
+    if (typeof satir.tenant_id === 'string' && sonuc.has(satir.tenant_id))
+      sonuc.set(
+        satir.tenant_id,
+        dilDestekleniyor(satir.varsayilan_dil) ? satir.varsayilan_dil : BUTIK_VARSAYILAN_DILI
+      );
+  return sonuc;
+}
+
 /** Copy of a tenant's in-memory settings (development and demo only). */
 export function bellektekiAyarlar(tenant: unknown): V2Ayarlari | null {
   const kayit = bellek.get(v2Tenant(tenant));

@@ -108,8 +108,8 @@ export default function V2Kurlar() {
             onChange={(event) => setPara(event.target.value as ParaBirimi)}
             className="mt-1 w-full rounded-lg bg-slate-800 p-2 text-sm text-white"
           >
-            <option value="CAD">CAD</option>
-            <option value="USD">USD</option>
+            <option value="CAD">{'CAD'}</option>
+            <option value="USD">{'USD'}</option>
           </select>
         </label>
         <label className="text-xs text-slate-400">
@@ -159,7 +159,7 @@ export default function V2Kurlar() {
           <tr>
             <th className="py-2">{t('kurlar.tarix')}</th>
             <th>{t('kurlar.valyuta')}</th>
-            <th>AZN</th>
+            <th>{'AZN'}</th>
             <th>{t('kurlar.menbe')}</th>
             <th>{t('kurlar.daxilEdilib')}</th>
           </tr>

@@ -18,7 +18,7 @@ export default function SatirTablosu({ satirlar, onChange }: SatirTablosuProps) 
 
   return (
     <div className="space-y-2">
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-start text-sm">
         <thead className="text-xs text-slate-400">
           <tr>
             <th className="py-2">{t('satir.mehsul')}</th>
@@ -36,7 +36,7 @@ export default function SatirTablosu({ satirlar, onChange }: SatirTablosuProps) 
             const tutar = satirTutari(satir);
             return (
               <tr key={index} className="border-t border-slate-800 align-top">
-                <td className="py-2 pr-2">
+                <td className="py-2 pe-2">
                   <input
                     aria-label={t('satir.etiket.mehsul', { sira: index + 1 })}
                     value={satir.urunAciklamasi}
@@ -45,7 +45,7 @@ export default function SatirTablosu({ satirlar, onChange }: SatirTablosuProps) 
                     className={girdi}
                   />
                 </td>
-                <td className="pr-2">
+                <td className="pe-2">
                   <input
                     aria-label={t('satir.etiket.olcu', { sira: index + 1 })}
                     value={satir.beden}
@@ -54,7 +54,7 @@ export default function SatirTablosu({ satirlar, onChange }: SatirTablosuProps) 
                     className={girdi}
                   />
                 </td>
-                <td className="pr-2">
+                <td className="pe-2">
                   <input
                     aria-label={t('satir.etiket.reng', { sira: index + 1 })}
                     value={satir.renk}
@@ -63,7 +63,7 @@ export default function SatirTablosu({ satirlar, onChange }: SatirTablosuProps) 
                     className={girdi}
                   />
                 </td>
-                <td className="pr-2">
+                <td className="pe-2">
                   <input
                     aria-label={t('satir.etiket.say', { sira: index + 1 })}
                     inputMode="numeric"
@@ -72,7 +72,7 @@ export default function SatirTablosu({ satirlar, onChange }: SatirTablosuProps) 
                     className={girdi}
                   />
                 </td>
-                <td className="pr-2">
+                <td className="pe-2">
                   <input
                     aria-label={t('satir.etiket.qiymet', { sira: index + 1 })}
                     inputMode="decimal"
@@ -82,7 +82,7 @@ export default function SatirTablosu({ satirlar, onChange }: SatirTablosuProps) 
                     className={girdi}
                   />
                 </td>
-                <td className="pr-2">
+                <td className="pe-2">
                   <select
                     aria-label={t('satir.etiket.olke', { sira: index + 1 })}
                     value={satir.kaynakUlke}
@@ -91,8 +91,8 @@ export default function SatirTablosu({ satirlar, onChange }: SatirTablosuProps) 
                     }
                     className={girdi}
                   >
-                    <option value="CA">CA</option>
-                    <option value="US">US</option>
+                    <option value="CA">{'CA'}</option>
+                    <option value="US">{'US'}</option>
                   </select>
                 </td>
                 <td className="py-2 text-end text-slate-300">

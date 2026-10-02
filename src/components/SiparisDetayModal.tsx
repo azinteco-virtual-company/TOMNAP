@@ -418,7 +418,7 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
                   type="text"
                   value={kanadaTakip}
                   onChange={(e) => setKanadaTakip(e.target.value)}
-                  placeholder="TOR-ZARA-9821"
+                  placeholder="TOR-ZARA-9821" // i18n-teknik
                   className="w-full text-xs p-2.5 border border-slate-300 rounded-lg bg-white font-mono"
                 />
               </div>
@@ -446,7 +446,7 @@ export const SiparisDetayModal: React.FC<SiparisDetayModalProps> = ({
                   type="text"
                   value={kargoKodu}
                   onChange={(e) => setKargoKodu(e.target.value)}
-                  placeholder="AZ-CARGO-7749-YYZ"
+                  placeholder="AZ-CARGO-7749-YYZ" // i18n-teknik
                   className="w-full text-xs p-2.5 border border-slate-300 rounded-lg bg-white font-mono"
                 />
               </div>

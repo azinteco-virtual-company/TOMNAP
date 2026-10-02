@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useAppStore } from '../store/appStore';
+import { etkinButikDili, useAppStore } from '../store/appStore';
 import { BUTIK_VARSAYILAN_DILI, dilDestekleniyor } from '../shared/diller';
 
 /** The document language for a boutique language (docs/i18n.md). */
@@ -9,7 +9,7 @@ export function belgeDiliIcin(butikDili: string | null | undefined): string {
 
 /** The session boutique's document language. */
 export function useBelgeDili(): string {
-  return belgeDiliIcin(useAppStore((state) => state.butikDili));
+  return belgeDiliIcin(useAppStore(etkinButikDili));
 }
 
 /**

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asamaIlerletebilir, sonrakiAsama, V2_ASAMA_SIRASI } from '../../src/shared/v2Asama';
 import { asamaIstegi, asamaOnayMetni } from '../../src/components/v2/asamaFormu';
+import { asamaAdi } from '../../src/components/v2/v2Ceviri';
 import { dilHazirla } from '../helpers/i18n';
 
 // TEMPORARY v2 stage bridge (OPEN_QUESTIONS 38): one rule for the server's memory store
@@ -50,7 +51,35 @@ describe('v2 stage bridge rule (O-38)', () => {
     const siparis = { musteriAdi: 'Aytən', lojistikDurumu: 'KANADA_DEPO' };
     expect(asamaIstegi(siparis)).toEqual({ beklenen_asama: 'KANADA_DEPO' });
     expect(asamaOnayMetni(siparis)).toContain('Aytən');
-    expect(asamaOnayMetni(siparis)).toContain('KANADA_DEPO → ULUSLARARASI_KARGO');
+    // What the person reads is translated; the request keeps the DB code (above).
+    expect(asamaOnayMetni(siparis)).toContain('Kanada anbarında → Beynəlxalq kargoda');
+    expect(asamaOnayMetni(siparis)).not.toContain('KANADA_DEPO');
     expect(asamaIstegi({ musteriAdi: 'X', lojistikDurumu: 'TESLIM_EDILDI' })).toBeNull();
+  });
+});
+
+describe('v2 stage names follow the interface language (R5 A06)', () => {
+  const AD = {
+    az: ['Kanada alışı gözlənilir', 'Kanada anbarında', 'Beynəlxalq kargoda', 'Bakıda paylanmada'],
+    en: [
+      'Awaiting purchase in Canada',
+      'In the Canada warehouse',
+      'In international cargo',
+      'Out for delivery in Baku',
+    ],
+  };
+  it.each(['az', 'en'] as const)('%s: the question names stages, never raw codes', async (dil) => {
+    await dilHazirla(dil, ['v2']);
+    const metin = asamaOnayMetni({ musteriAdi: 'Aytən', lojistikDurumu: 'KANADA_DEPO' });
+    expect(metin).toContain(`${AD[dil][1]} → ${AD[dil][2]}`);
+    expect(metin).not.toMatch(/[A-Z]{3,}_[A-Z_]+/);
+    await dilHazirla('az', ['v2']);
+  });
+  it.each(['az', 'en'] as const)('%s: every bridge stage has a name in both files', async (dil) => {
+    await dilHazirla(dil, ['v2']);
+    expect(V2_ASAMA_SIRASI.map((kod) => asamaAdi(kod))).toEqual(AD[dil]);
+    expect(asamaAdi('TESLIM_EDILDI')).not.toBe('TESLIM_EDILDI');
+    expect(asamaAdi('BILINMEYEN_KOD')).toBe('BILINMEYEN_KOD');
+    await dilHazirla('az', ['v2']);
   });
 });

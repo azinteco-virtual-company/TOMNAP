@@ -92,7 +92,9 @@ export default function KacaklarPanosu() {
                       <td className="py-2">
                         {r.musteriAdi}
                         {r.modelSurumu === 2 && (
-                          <span className="ms-2 rounded bg-indigo-900 px-1 text-[10px]">v2</span>
+                          <span className="ms-2 rounded bg-indigo-900 px-1 text-[10px]">
+                            {'v2'}
+                          </span>
                         )}
                       </td>
                       <td className="text-slate-400">{r.bakuKuryeAdi ?? '—'}</td>

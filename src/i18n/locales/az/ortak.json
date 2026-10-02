@@ -13,5 +13,12 @@
   },
   "kopyala": "Kopyala",
   "kopyalandi": "Kopyalandı",
-  "yukleniyor": "Yüklənir…"
+  "yukleniyor": "Yüklənir…",
+  "lojistik": {
+    "KANADA_SATINALIM_BEKLIYOR": "Kanada alışı gözlənilir",
+    "KANADA_DEPO": "Kanada anbarında",
+    "ULUSLARARASI_KARGO": "Beynəlxalq kargoda",
+    "BAKU_DAGITIM_ARKADAS": "Bakıda paylanmada",
+    "TESLIM_EDILDI": "Təhvil verilib"
+  }
 }

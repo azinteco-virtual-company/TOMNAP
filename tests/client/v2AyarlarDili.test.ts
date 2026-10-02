@@ -2,6 +2,7 @@
 import React, { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setApiSession } from '../../src/lib/apiClient';
+import { DESTEKLENEN_DILLER } from '../../src/shared/diller';
 import { useAppStore } from '../../src/store/appStore';
 import V2Ayarlar from '../../src/components/v2/V2Ayarlar';
 import { render, settle, stubApi, waitFor } from '../helpers/dom';
@@ -47,7 +48,7 @@ describe('boutique language in the v2 settings', () => {
     const { container } = await render(React.createElement(V2Ayarlar));
     const secim = await waitFor(() => container.querySelector('select'));
     expect(secim.disabled).toBe(false);
-    expect([...secim.options].map((o) => o.value)).toEqual(['az', 'en']);
+    expect([...secim.options].map((o) => o.value)).toEqual([...DESTEKLENEN_DILLER]);
     await act(async () => {
       secim.value = 'en';
       secim.dispatchEvent(new Event('change', { bubbles: true }));
