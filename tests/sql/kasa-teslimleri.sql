@@ -226,6 +226,7 @@ ROLLBACK;
 -- hand-overs exist is checked in kasa-concurrency.mjs.
 -- Newer migrations built on the cash desk roll back first and are re-applied last.
 BEGIN;
+\ir ../../supabase/rollbacks/20261002100000_yedek_ve_ters_kayit_korumasi.down.sql
 \ir ../../supabase/rollbacks/20260926100000_odeme_islem_anahtari.down.sql
 \ir ../../supabase/rollbacks/20260925140000_para_yazma_yetkisi.down.sql
 \ir ../../supabase/rollbacks/20260925120000_kasa_teslimleri.down.sql
@@ -261,3 +262,5 @@ DO $$ BEGIN
 END $$;
 \ir ../../supabase/migrations/20260925140000_para_yazma_yetkisi.sql
 \ir ../../supabase/migrations/20260926100000_odeme_islem_anahtari.sql
+-- 21 (Codex R5) replaces a function of 13 and reads 10's model_surumu: down first, up last.
+\ir ../../supabase/migrations/20261002100000_yedek_ve_ters_kayit_korumasi.sql
