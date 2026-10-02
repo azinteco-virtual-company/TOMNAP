@@ -42,6 +42,9 @@ GUARDRAIL — bu projedeki her görev için geçerli:
   Listede olmayan rota zaten reddedilir; bunu bilerek yaz.
 - Çok adımlı yazma işlemleri (eşleştirme, ödeme, teslim) transactional RPC fonksiyonu olsun.
 - Her migration için geri alma (down) dosyası ve tests/sql altında SQL testi yaz.
+- Canlı DB'ye `supabase db push` / `migration up` YASAK: resmî migration geçmişinde yalnız
+  1–4 kayıtlı, 5–19 elle uygulandı. Migration'lar yalnız DEPLOY_1 yöntemiyle, Tural
+  tarafından uygulanır.
 - Yeni ekranları feature flag arkasına al: istemcide VITE_FF_V2_FLOW, sunucuda FF_V2_FLOW.
   Mevcut bir özelliği değiştiren HATA DÜZELTMELERİ bu genel bayrağa bağlanmaz; gerekiyorsa
   kendi bayrağı olsun. Bayrak kapalıyken mevcut bir özellik ortadan kalkıyorsa bunu
@@ -55,6 +58,9 @@ GUARDRAIL — bu projedeki her görev için geçerli:
   ile girer (squash yok). Merge öncesi dal main'in gerisindeyse main'i dala merge et ve
   api/ paketini yeniden derle. Merge yayın değildir (vercel.json'da main deploy kapalı);
   yayını yalnız ben yaparım. git çalışmıyorsa dur ve bana söyle.
+- İKİNCİ DENETİM: Para, yetki/RLS, migration, sunucu güvenliği veya yayın adımına dokunan
+  PR'ı onu yazan ajan merge etmez; başlığa [İKİNCİ DENETİM] yazar ve açık bırakır. İkinci
+  ajanın onayı ve Tural'ın "onaylı" demesinden sonra merge edilir.
 - Yeni ya da dokunulan ekranda kullanıcıya görünen metin yalnız çeviri anahtarıyla yazılır; az ve en
   dosyaları birlikte güncellenir (docs/i18n.md).
 - Yeni kod TypeScript strict kurallarına uygun yazılsın (any ve ts-ignore yok).
