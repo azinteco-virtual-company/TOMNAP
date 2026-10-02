@@ -265,8 +265,8 @@ Vercel'de değişkenler yalnız **yeni bir deployment** ile etkili olur. `VITE_`
 | `LOG_LEVEL`                      | sunucu, çalışma zamanı      | isteğe bağlı (varsayılan `info`)                                                                                                                                                            |
 | `FF_AWB_REVIEW`                  | sunucu, çalışma zamanı      | **Bu yayında KAPALI** (karar 26 Eylül 2026). v1 siparişleri açılışta yapay AWB aldığı için (Codex R3 F3) inceleme gerçek eşleşmeleri zaten engelliyor. F3, F4, F5 ve F7 durak 4 işine kaldı |
 | `VITE_FF_AWB_REVIEW`             | **istemci, derleme zamanı** | **Bu yayında KAPALI**; `FF_AWB_REVIEW` ile aynı değer                                                                                                                                       |
-| `FF_V2_FLOW`                     | sunucu, çalışma zamanı      | **Karar: önce yalnız Preview'da `true`**; Production'da boş, açma kararı proje sahibinde. Yalnız tam olarak `true` açar; kapalıyken `/api/v2` her istekte 404                               |
-| `VITE_FF_V2_FLOW`                | **istemci, derleme zamanı** | `FF_V2_FLOW` ile aynı: yalnız Preview; Production'da boş. Açıkken `/v2` kabuğu ve kurye nakdi bölümü ayrı parça olarak derlenir                                                             |
+| `FF_V2_FLOW`                     | sunucu, çalışma zamanı      | **Karar: önce yalnız Preview'da `true`**; Production'da Deploy 4 ile `true` (d3). Yalnız tam olarak `true` açar; kapalıyken `/api/v2` her istekte 404                                       |
+| `VITE_FF_V2_FLOW`                | **istemci, derleme zamanı** | `FF_V2_FLOW` ile aynı: Preview, Deploy 4'ten sonra Production. Açıkken `/v2` kabuğu ve kurye nakdi bölümü ayrı parça olarak derlenir                                                        |
 
 **Yeni kodun kullanmadığı değişkenler:**
 
@@ -361,7 +361,54 @@ Ayrı bir staging yok. Preview'a verilen veritabanı değişkenleri **aynı Supa
    - **SUPER_ADMIN parayı ve aşamayı yazmaz:** Üstteki "Butik" seçicisinden bir butik seçer (#39). Defteri, kurye bakiyelerini ve kaçakları görür. Ödeme formu, "Geri qaytar", "Təhvil al" ve "Növbəti mərhələ" görünmez; `POST /api/v2/odemeler` ve `POST /api/v2/kasa/teslimler` → 403. Sipariş açabilir ama sahibi seçmek zorunda (OQ 24).
    - **Kayıtlar:** Vercel → Logs, Preview: 5xx olmamalı.
 6. **Bayrağı kapatarak geri çekme:** Preview'da `FF_V2_FLOW` boşaltılıp yeniden deploy edilince `/api/v2` 404 döner ve `/v2` "aktiv deyil" gösterir. `VITE_FF_V2_FLOW` yeniden derlemeyle kalkar. Yazılmış v2 verisi yerinde kalır; mevcut ekranlar v2 siparişini rozetle göstermeye devam eder.
-7. **Production'a açma (karar 25 Eylül 2026):** v2 yayında önce **yalnız Preview**'da açılır. Production'da açma kararını proje sahibi sonra verir; o zamana kadar iki değişken Production'da boş kalır. Açılacağı zaman aynı iki değişken Production'a girilir ve `main` yeniden deploy edilir.
+7. **Production'a açma (karar 25 Eylül 2026):** v2 yayında önce **yalnız Preview**'da açılır. Production'da açma kararını proje sahibi sonra verir; o zamana kadar iki değişken Production'da boş kalır. Açılacağı zaman aynı iki değişken Production'a girilir ve `main` yeniden deploy edilir. Plan: (d3).
+
+## d3) Deploy 4 — v2'yi Production'da açma
+
+Karar 1 Ekim 2026: v2 Production'da açılır. Aynı yayında çok dillilik (#45, migration 20) ve v2 ekranlarının çevirisi (#46) gider. Ayrı staging yok; Production'daki her deneme canlı demo verisine yazar (CLAUDE.md → ORTAM). Veritabanı ve Vercel panelindeki işlemleri proje sahibi yapar. **DUR** yazan her noktada durulur, sonuç bildirilir, onaydan sonra devam edilir (Deploy 3'teki gibi).
+
+**Ön koşullar:**
+
+- `main`'de #45 ve #46 var, CI yeşil.
+- Vercel CLI 62.1.0 (1 Ekim'de güncellendi); `vercel whoami` doğru hesabı gösteriyor. CLI girişini proje sahibi yapar.
+- Canlı: `tomnap-7ia325m4u` (`57c5b95`). Geri dönüş hedefi değildir (aşağıda).
+
+**Adımlar:**
+
+1. **Yedek:** Deploy 2'deki yolla; SHA256 doğrulanır. **DUR.**
+2. **Durum sorgusu (önce):** (b)'deki salt okunur sorgu, 20 migration satırıyla. Pano `LANG=en_US.UTF-8 pbcopy` ile, bayt karşılaştırmasıyla doğrulanır. Beklenen: migration **19/20** (yalnız 20 `false`), gerekli kolonlar ve kodlama kalkanı satırları `true`. Başka bir sonuç çıkarsa **DUR** ve raporla.
+3. **Migration 20** (`20261001100000_butik_varsayilan_dili.sql`): SQL Editor'da tek transaction, kod deploy'undan **önce**. Canlı kod (`57c5b95`) bu kolonu kullanmaz. Durum sorgusu yeniden çalıştırılır: **20/20**, diğer satırlar aynı. **DUR.**
+4. **Değişkenler, yalnız Production:** Vercel → Settings → Environment Variables → Production: `FF_V2_FLOW=true`, `VITE_FF_V2_FLOW=true`. `VITE_` olan sensitive olamaz.
+   - **Preview değişkenlerine dokunulmaz:** `v2-deneme` dalının 7 değişkeni yerinde kalır.
+   - Kontrol: `vercel env ls production` iki adı Production hedefiyle gösterir; `vercel env ls preview` öncekiyle aynıdır.
+   - **DUR.**
+5. **Yayın:** `main`'in temiz bir worktree'sinden (içinde `.env` yok) `vercel deploy --prod`. Değişkenler yalnız yeni bir deployment ile etkili olur; `VITE_FF_V2_FLOW` derlemede okunur.
+   - Derleme günlüğünde iki satır görünmeli: "v2 kabuğu ayrı parçada; ilk yük paketinde değil." ve "Çeviri dosyaları ve PDF fontu ayrı parçalarda; ilk yük paketinde değil."
+   - `tomnap.com` ve `www.tomnap.com` yeni deployment'a bağlı olmalı.
+   - **DUR.**
+6. **Smoke test:** (d)'deki 1–6 ve 8. adım. 7. adımda AWB paneli yine görünmez; değişen kısım `/api/v2/durum`: oturumsuz `401` döner (bayrak kapalıyken 404'tü), oturumlu tarayıcıda `200`.
+7. **Production'da kısa denemeler** (demo hesaplarla):
+   - **v2 girişi ve sekmeler:** PATRON ile v1 menüsündeki "TOMNAP v2" → `/v2`: "Sifarişlər", "Kassa", "Qaçaqlar", "Kurlar", "Ayarlar". BAKU_FINANS: "Sifarişlər", "Kassa", "Qaçaqlar", "Kurlar". "Ayarlar"da butiğin dili Azərbaycan.
+   - **Bir aşama adımı:** Son aşamada olmayan bir DENEME v2 siparişinde "Növbəti mərhələ →" düğmesi. Onay penceresi açılır, sonra liste yenilenir. Yazılanlar: bir aşama geçişi ve bir geçmiş kaydı. Uygun DENEME siparişi yoksa **DUR**; yeni sipariş açmak ayrı bir karardır.
+   - **SUPER_ADMIN salt okuma:** Butik seçiciden bir butik seçilir. Defter, kurye bakiyesi ve Q4 okunur. Ödeme formu, "Geri qaytar", "Təhvil al" ve "Növbəti mərhələ" görünmez. Sipariş formu görünür (OQ 24); kaydetme denenmez.
+   - **Dil:**
+     - İngilizce cihazda (ya da tarayıcı dili İngilizce olan gizli pencerede) giriş sayfası İngilizce açılır.
+     - Elle seçim yapmadan giriş yapılınca arayüz butiğin dilindedir (Azərbaycan).
+     - Dil seçiciden (menüde ya da v2 başlığında) English seçilince v2 ekranları İngilizce olur. Sonra Azərbaycan'a dönülür; seçim yalnız o cihazda saklanır.
+     - **PDF:** Kargo manifestosunda "PDF yüklə". PDF'te "Bakı" ve "Ə" doğru görünür; başlık arayüz İngilizceyken de butiğin dilindedir. Bu adım veriye yazmaz.
+     - Bilinen durum (OQ 41): İngilizce seçiliyken taşınmamış v1 ekranları eski dilinde kalır.
+   - **Kayıtlar:** Vercel → Logs, deneme süresince: 5xx ve error olmamalı.
+   - **Denenmeyecekler:** (d)'dekiler. Butiğin dili de değiştirilmez: o butiğin bütün kullanıcılarının arayüzünü ve belgelerini değiştirir.
+
+**Geri dönüş (karar 1 Ekim 2026):**
+
+- **Bayrakları kapat:**
+  - Production'da `FF_V2_FLOW` ve `VITE_FF_V2_FLOW` silinir.
+  - Aynı temiz `main`'den, derleme önbelleği olmadan yeniden deploy edilir: `vercel deploy --prod --force`.
+  - `/api/v2/durum` 404 dönmeli, `/v2` "aktiv deyil" göstermeli. Yazılmış v2 verisi yerinde kalır.
+- **Eski koda dönüş yok:** v2 verisi zaten var ((e) 2). Çok dillilik bayrak arkasında değil; ondaki bir hata ileri düzeltmeyle çözülür.
+- **Migration 20 geri alınmaz:** Eski sürüm kolonu kullanmaz. Down dosyası yalnız dilin kendisi geri alınırken kullanılır.
+- Preview değişkenleri her durumda olduğu gibi kalır.
 
 ## e) Geri alma
 
