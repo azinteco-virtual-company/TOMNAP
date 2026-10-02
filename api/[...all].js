@@ -9663,11 +9663,21 @@ var KURYE_KOLONLARI = ["kurye_atama_surumu", "kurye_teslim_kullanici_id", "kurye
 var tenantOf = (row) => row.tenant_id || formatlaSiparis(row).tenant_id;
 var localRows = (tenant2) => tenant2 === "demo_sandbox" ? demoSiparislerVeritabani : siparislerVeritabani;
 var dbActive3 = (tenant2) => !!supabase && tenant2 !== "demo_sandbox";
-function fail2(res, error2) {
+var V2_YEDEK_REDDI = "Bu firmada v2 sipari\u015Fleri var; v1 yede\u011Fi y\xFCklenemez. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi.";
+var bellekteV2Var = (tenant2) => localRows(tenant2).some((r) => tenantOf(r) === tenant2 && Number(r.model_surumu) === 2);
+async function v2SiparisiVar(tenant2) {
+  if (!dbActive3(tenant2)) return bellekteV2Var(tenant2);
+  const { data, error: error2 } = await supabase.from("siparisler").select("id").eq("tenant_id", tenant2).eq("model_surumu", 2).limit(1);
+  if (error2 || !Array.isArray(data)) throw new Error("v2 order lookup failed");
+  return data.length > 0;
+}
+function fail2(res, cause) {
+  const error2 = cause?.code === "PT409" ? new PublicResourceError(V2_YEDEK_REDDI, 409, "YEDEK_V2_SIPARIS_VAR") : cause;
   const status2 = error2 instanceof PublicResourceError ? error2.status : error2?.code === "23505" || error2?.code === "23503" ? 409 : ["22023", "22P02", "23514", "23502"].includes(error2?.code) ? 400 : error2?.code === "54000" ? 413 : 503;
   res.status(status2).json({
     basarili: false,
-    hata: error2 instanceof PublicResourceError ? error2.message : status2 === 409 ? error2?.code === "23503" ? "\xD6demesi olan v2 sipari\u015Fleri silinemez. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : "\u0130\u015Flem kimli\u011Fi veya sipari\u015F kimli\u011Fi \xE7ak\u0131\u015F\u0131yor. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : status2 === 400 ? "Yedek verisi ge\xE7ersiz. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : status2 === 413 ? "Yedek s\u0131n\u0131r\u0131 5000 sipari\u015F / 10 MiB. Daha b\xFCy\xFCk veri i\xE7in veritaban\u0131 yede\u011Fi kullan\u0131n." : "Veritaban\u0131 i\u015Flemi do\u011Frulanamad\u0131. Ayn\u0131 i\u015Flem kimli\u011Fiyle yeniden deneyin."
+    hata: error2 instanceof PublicResourceError ? error2.message : status2 === 409 ? error2?.code === "23503" ? "\xD6demesi olan v2 sipari\u015Fleri silinemez. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : "\u0130\u015Flem kimli\u011Fi veya sipari\u015F kimli\u011Fi \xE7ak\u0131\u015F\u0131yor. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : status2 === 400 ? "Yedek verisi ge\xE7ersiz. Mevcut kay\u0131tlar de\u011Fi\u015Ftirilmedi." : status2 === 413 ? "Yedek s\u0131n\u0131r\u0131 5000 sipari\u015F / 10 MiB. Daha b\xFCy\xFCk veri i\xE7in veritaban\u0131 yede\u011Fi kullan\u0131n." : "Veritaban\u0131 i\u015Flemi do\u011Frulanamad\u0131. Ayn\u0131 i\u015Flem kimli\u011Fiyle yeniden deneyin.",
+    ...error2 instanceof PublicResourceError && error2.kod ? { kod: error2.kod } : {}
   });
 }
 function concreteTenant(req) {
@@ -9805,6 +9815,8 @@ async function maintain(tenant2, key, mode, rows) {
       throw new PublicResourceError("\u0130\u015Flem kimli\u011Fi ba\u015Fka bir istek i\xE7in kullan\u0131lm\u0131\u015F.", 409);
     return { ...receipt.result, tekrar: true };
   }
+  if (mode !== "clear" && bellekteV2Var(tenant2))
+    throw new PublicResourceError(V2_YEDEK_REDDI, 409, "YEDEK_V2_SIPARIS_VAR");
   const kalanlar = new Set(rows.map((r) => r.id));
   if (mode !== "merge" && bellekteOdemesiVar(
     tenant2,
@@ -9935,6 +9947,8 @@ router8.post("/veritabani/yedek-yukle", async (req, res) => {
     const replace = req.body.temizleVeYukle === true;
     if (replace && req.body.onay_kodu !== `DEGISTIR:${tenant2}`)
       throw new PublicResourceError(`De\u011Fi\u015Ftirmek i\xE7in DEGISTIR:${tenant2} onay\u0131 gerekiyor.`, 403);
+    if (await v2SiparisiVar(tenant2))
+      throw new PublicResourceError(V2_YEDEK_REDDI, 409, "YEDEK_V2_SIPARIS_VAR");
     const rows = prepareRows(req.body.siparisler, tenant2);
     for (const row of rows) {
       const customerId = row.ek_veriler?.musteri_id;
