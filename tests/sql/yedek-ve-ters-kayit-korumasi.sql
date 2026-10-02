@@ -1,5 +1,5 @@
--- Migration 21 (Codex R5): B01 — a v1 backup (merge or replace) is refused in a tenant
--- with v2 orders; B03 — a reversal keeps the receiver, source and method of its payment.
+-- Migration 21 (Codex R5): B01 — v1 maintenance (merge, replace, and clear: OQ 42) is
+-- refused in a tenant with v2 orders; B03 — a reversal keeps the receiver, source and method of its payment.
 -- Signatures and grants unchanged; the R5 counterexamples corrupt the data without 21
 -- (checked after the down) and are refused with it; down -> down -> up.
 -- Run after baseline + all migrations, in ONE psql session, before the concurrency
@@ -84,8 +84,8 @@ CREATE FUNCTION pg_temp.yk_header(p_order uuid) RETURNS text LANGUAGE sql AS $$
     FROM public.siparisler s WHERE s.id = p_order
 $$;
 
--- 2. B01 with 21: the R5 counterexample (ledger 40, v1 row with alinan_tutar 0) and a
--- plain merge are refused in yk-a; yk-b keeps the old restore flow. Rolled back.
+-- 2. B01 with 21: the R5 counterexample (ledger 40, v1 row with alinan_tutar 0), a plain
+-- merge and a clear are refused in yk-a; yk-b keeps the old flow. Rolled back.
 BEGIN;
 SELECT pg_temp.yk_fixture();
 SET LOCAL ROLE service_role;
@@ -98,6 +98,8 @@ BEGIN
   SELECT count(*) INTO lines FROM public.siparis_satirlari WHERE siparis_id = s;
   PERFORM pg_temp.yk_expect(pg_temp.yk_restore('yk-a', 'replace', pg_temp.yk_v1_row(s, 'yk-a')), 'PT409', 'R5 counterexample (replace)');
   PERFORM pg_temp.yk_expect(pg_temp.yk_restore('yk-a', 'merge', pg_temp.yk_v1_row(gen_random_uuid(), 'yk-a')), 'PT409', 'merge into a v2 tenant');
+  -- PT409 before the delete (the payment's foreign key would answer 23503).
+  PERFORM pg_temp.yk_expect(pg_temp.yk_restore('yk-a', 'clear', '[]'), 'PT409', 'clear of a v2 tenant');
   PERFORM pg_temp.yk_expect(pg_temp.yk_header(s), '40.00/40.00/2', 'header after the refusals');
   IF (SELECT count(*) FROM public.siparis_satirlari WHERE siparis_id = s) <> lines
      OR (SELECT count(*) FROM public.siparisler WHERE tenant_id = 'yk-a') <> 1
@@ -109,6 +111,19 @@ BEGIN
   IF (SELECT array_agg(id::text) FROM public.siparisler WHERE tenant_id = 'yk-b') IS DISTINCT FROM ARRAY['7b000000-0000-4000-8000-000000000002']
      OR pg_temp.yk_header(s) <> '40.00/40.00/2' THEN
     RAISE EXCEPTION 'The v1 tenant restore did not run as before';
+  END IF;
+  PERFORM pg_temp.yk_expect(pg_temp.yk_restore('yk-b', 'clear', '[]'), 'ok:0', 'v1 tenant clear');
+  IF EXISTS (SELECT 1 FROM public.siparisler WHERE tenant_id = 'yk-b') THEN RAISE EXCEPTION 'v1 clear did not clear'; END IF;
+END $$;
+ROLLBACK;
+-- A v2 order without payments is not cleared either (no foreign key would stop it).
+BEGIN;
+SELECT pg_temp.yk_fixture();
+SET LOCAL ROLE service_role;
+DO $$ BEGIN
+  PERFORM pg_temp.yk_expect(pg_temp.yk_restore('yk-a', 'clear', '[]'), 'PT409', 'clear of an unpaid v2 order');
+  IF pg_temp.yk_order() IS NULL OR NOT EXISTS (SELECT 1 FROM public.siparis_satirlari WHERE siparis_id = pg_temp.yk_order()) THEN
+    RAISE EXCEPTION 'A refused clear deleted the v2 order or its lines';
   END IF;
 END $$;
 ROLLBACK;
@@ -176,6 +191,16 @@ BEGIN
   PERFORM pg_temp.yk_expect(pg_temp.yk_reverse_direct(p10, 'yk-kurye2', 'TESLIMAT', 'NAKIT'), 'ok', 'old body: reversal with another courier');
 END $$;
 ROLLBACK;
+BEGIN;
+SELECT pg_temp.yk_fixture();
+SET LOCAL ROLE service_role;
+DO $$ BEGIN
+  PERFORM pg_temp.yk_expect(pg_temp.yk_restore('yk-a', 'clear', '[]'), 'ok:0', 'old body clears a v2 tenant');
+  IF EXISTS (SELECT 1 FROM public.siparisler WHERE tenant_id = 'yk-a') THEN
+    RAISE EXCEPTION 'Expected the old body to delete the unpaid v2 order';
+  END IF;
+END $$;
+ROLLBACK;
 
 -- 5. Up again: markers back, the counterexample refused once more.
 \ir ../../supabase/migrations/20261002100000_yedek_ve_ters_kayit_korumasi.sql
@@ -192,6 +217,7 @@ BEGIN
   PERFORM public.tomnap_v2_odeme_kaydet('yk-a', 'yk-patron-a',
     jsonb_build_object('siparis_id', s, 'tutar_azn', 40, 'yontem', 'NAKIT', 'kaynak', 'BUTIK'));
   PERFORM pg_temp.yk_expect(pg_temp.yk_restore('yk-a', 'replace', pg_temp.yk_v1_row(s, 'yk-a')), 'PT409', 'after re-apply');
+  PERFORM pg_temp.yk_expect(pg_temp.yk_restore('yk-a', 'clear', '[]'), 'PT409', 'clear after re-apply');
   PERFORM pg_temp.yk_expect(pg_temp.yk_header(s), '40.00/40.00/2', 'header after re-apply');
 END $$;
 ROLLBACK;

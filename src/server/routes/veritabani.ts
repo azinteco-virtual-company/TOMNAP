@@ -29,12 +29,13 @@ const tenantOf = (row: any) => row.tenant_id || formatlaSiparis(row).tenant_id;
 const localRows = (tenant: string) =>
   tenant === 'demo_sandbox' ? demoSiparislerVeritabani : siparislerVeritabani;
 const dbActive = (tenant: string) => !!supabase && tenant !== 'demo_sandbox';
-// Codex R5-B01: a v1 backup (merge or clear-and-load) never touches a boutique with v2
-// orders. The incoming row would overwrite a v2 order's money header apart from its
-// ledger; clear-and-load would delete v2 orders missing from the backup. Checked here
-// (early), in the memory path and in the restore RPC (migration 21, PT409).
+// Codex R5-B01 (+ OQ 42): v1 maintenance never touches a boutique with v2 orders: no
+// backup load (merge), no clear-and-load (replace), no clear. The incoming row would
+// overwrite a v2 order's money header apart from its ledger; replace and clear would
+// delete v2 orders. Checked here (early), in the memory path and in the restore RPC
+// (migration 21, PT409).
 const V2_YEDEK_REDDI =
-  'Bu firmada v2 siparişleri var; v1 yedeği yüklenemez. Mevcut kayıtlar değiştirilmedi.';
+  'Bu firmada v2 siparişleri var; v1 bakım işlemi (yedek yükleme ya da temizleme) yapılamaz. Mevcut kayıtlar değiştirilmedi.';
 const bellekteV2Var = (tenant: string) =>
   localRows(tenant).some((r) => tenantOf(r) === tenant && Number(r.model_surumu) === 2);
 async function v2SiparisiVar(tenant: string) {
@@ -260,7 +261,8 @@ async function assertTenantCouriers(
   if (ids.some((id) => !found.includes(id)))
     throw new PublicResourceError('Yedekteki kurye kullanıcısı seçili firmada bulunamadı.', 404);
 }
-async function maintain(
+/** Exported for the R5-B01 layer test: the memory path checks on its own. */
+export async function maintain(
   tenant: string,
   key: string,
   mode: 'merge' | 'replace' | 'clear',
@@ -290,7 +292,7 @@ async function maintain(
     return { ...receipt.result, tekrar: true };
   }
   // R5-B01, as in the RPC: after the retry receipt, before anything changes.
-  if (mode !== 'clear' && bellekteV2Var(tenant))
+  if (bellekteV2Var(tenant))
     throw new PublicResourceError(V2_YEDEK_REDDI, 409, 'YEDEK_V2_SIPARIS_VAR');
   // Orders with payments keep their money trail, as in the database (A10).
   const kalanlar = new Set(rows.map((r) => r.id));
@@ -382,6 +384,9 @@ router.post('/veritabani/temizle', async (req, res) => {
     const tenant = concreteTenant(req);
     if (req.body.onay_kodu !== `SIL:${tenant}`)
       throw new PublicResourceError(`Silmek için SIL:${tenant} onayı gerekiyor.`, 403);
+    // R5-B01 (OQ 42): refused before anything is deleted.
+    if (await v2SiparisiVar(tenant))
+      throw new PublicResourceError(V2_YEDEK_REDDI, 409, 'YEDEK_V2_SIPARIS_VAR');
     const result = await maintain(tenant, operationKey(req), 'clear', []);
     res.json({ basarili: true, ...result, mesaj: 'Seçili firmanın siparişleri temizlendi.' });
   } catch (error) {

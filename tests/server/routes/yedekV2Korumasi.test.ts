@@ -5,9 +5,9 @@ import request from 'supertest';
 import type { AuthContext } from '../../../src/server/services/sessions';
 import type { FirmaTenantItem, KullaniciKaydi } from '../../../src/server/types';
 
-// Codex R5-B01: a v1 backup (merge or clear-and-load) must never touch a boutique that
-// has v2 orders. The incoming v1 row would overwrite a v2 order's money header apart
-// from its ledger, and clear-and-load would delete v2 orders missing from the backup.
+// Codex R5-B01 (+ OQ 42): v1 maintenance (merge, clear-and-load, clear) must never touch
+// a boutique that has v2 orders. The incoming v1 row would overwrite a v2 order's money
+// header apart from its ledger; clear-and-load and clear would delete v2 orders.
 // The rule is checked in the route (early), in the memory path and in the restore RPC
 // (migration 21, tests/sql/yedek-ve-ters-kayit-korumasi.sql).
 const env = vi.hoisted(() => ({ db: null as unknown }));
@@ -16,7 +16,7 @@ vi.mock('../../../src/server/services/supabase', () => ({
     return env.db;
   },
 }));
-import router from '../../../src/server/routes/veritabani';
+import router, { maintain } from '../../../src/server/routes/veritabani';
 import * as state from '../../../src/server/services/state';
 import { v2OdemeKaydet, v2SiparisOdemeleri } from '../../../src/server/services/v2/odemeStore';
 
@@ -149,6 +149,41 @@ describe('v1 backup over a boutique with v2 orders (R5-B01, memory)', () => {
     expect(response.body.kod).toBe(KOD);
     expect(state.demoSiparislerVeritabani).toEqual([v2]);
   });
+
+  // OQ 42: plain clear is v1 maintenance too; it never deletes v2 orders.
+  const temizle = (tenant: string) => ({ islem_id: randomUUID(), onay_kodu: `SIL:${tenant}` });
+  it('clear is refused in a boutique with v2 orders; nothing is deleted', async () => {
+    const id = await v2SiparisiOdemeli();
+    const before = structuredClone(state.siparislerVeritabani);
+    const response = await request(app(V2)).post('/api/veritabani/temizle').send(temizle(V2));
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ basarili: false, kod: KOD });
+    expect(state.siparislerVeritabani).toEqual(before);
+    expect((await v2SiparisOdemeleri(V2, id))?.ozet.odenenTutar).toBe(40);
+  });
+
+  it('the memory path refuses every mode on its own, clear included', async () => {
+    const id = await v2SiparisiOdemeli();
+    const before = structuredClone(state.siparislerVeritabani);
+    for (const [mode, rows] of [
+      ['clear', []],
+      ['replace', [{ ...v1Satiri(V2, id), alinan_tutar: 0 }]],
+      ['merge', [v1Satiri(V2)]],
+    ] as const)
+      await expect(maintain(V2, randomUUID(), mode, [...rows])).rejects.toMatchObject({
+        status: 409,
+        kod: KOD,
+      });
+    expect(state.siparislerVeritabani).toEqual(before);
+  });
+
+  it('clear in a boutique without v2 orders works as before', async () => {
+    const id = await v2SiparisiOdemeli();
+    const response = await request(app(V1)).post('/api/veritabani/temizle').send(temizle(V1));
+    expect(response.status).toBe(200);
+    expect(state.siparislerVeritabani.filter((r) => r.tenant_id === V1)).toEqual([]);
+    expect(kayit(id)).toMatchObject({ alinan_tutar: 40, model_surumu: 2 });
+  });
 });
 
 /** A database stub: the route's v2 lookup and the restore RPC. */
@@ -231,5 +266,31 @@ describe('v1 backup over a boutique with v2 orders (R5-B01, database)', () => {
     expect(response.status).toBe(503);
     expect(response.text).not.toContain('backend detail');
     expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it('clear: the route refuses before the RPC with the boutique-filtered lookup', async () => {
+    const db = veritabani({ data: [{ id: randomUUID() }] }, fisi(V2));
+    env.db = db;
+    const response = await request(app(V2))
+      .post('/api/veritabani/temizle')
+      .send({ islem_id: randomUUID(), onay_kodu: `SIL:${V2}` });
+    expect(response.status).toBe(409);
+    expect(response.body.kod).toBe(KOD);
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(db.sorgu).toContain(`tenant_id=${V2}`);
+  });
+
+  it('clear: a v2 order that appears after the lookup is refused by the RPC (PT409)', async () => {
+    const db = veritabani({ data: [] }, { error: { code: 'PT409', message: 'v2' } });
+    env.db = db;
+    const response = await request(app(V2))
+      .post('/api/veritabani/temizle')
+      .send({ islem_id: randomUUID(), onay_kodu: `SIL:${V2}` });
+    expect(response.status).toBe(409);
+    expect(response.body.kod).toBe(KOD);
+    expect(db.rpc).toHaveBeenCalledWith(
+      'tomnap_restore_orders',
+      expect.objectContaining({ p_tenant_id: V2, p_mode: 'clear' })
+    );
   });
 });

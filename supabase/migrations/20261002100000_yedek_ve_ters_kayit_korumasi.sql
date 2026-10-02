@@ -2,19 +2,19 @@
 -- gövdesi değişir (CREATE OR REPLACE; ad, argümanlar, dönüş türü, SECURITY INVOKER,
 -- search_path ve yetkiler aynı). Tablo, kolon, yetki değişmez; veri yazılmaz.
 --
--- B01 — tomnap_restore_orders (2): v1 yedek yükleme (merge) ve temizle-yükle (replace),
---   yükleme kapsamındaki butikte en az bir v2 siparişi (model_surumu = 2) varsa tamamen
---   reddedilir (PT409 → HTTP 409, kod YEDEK_V2_SIPARIS_VAR). Gelen v1 satırı bir v2
---   siparişinin para başlığını defterden bağımsız ezemez; temizle-yükle yedekte olmayan
---   v2 siparişlerini silemez. Kontrol tablo kilidinden sonra, yeniden deneme fişinden
---   sonra, hiçbir silme ya da yazmadan önce. v2'siz butikte davranış aynıdır. 'clear'
---   modu değişmedi (OPEN_QUESTIONS 42). Aynı kural rotada ve bellek yolunda da var
---   (src/server/routes/veritabani.ts).
+-- B01 — tomnap_restore_orders (2): v1 bakım işlemleri v2 verisine hiç dokunmaz. Butikte
+--   en az bir v2 siparişi (model_surumu = 2) varsa yedek yükleme (merge), temizle-yükle
+--   (replace) ve temizleme (clear, OPEN_QUESTIONS 42 kararı) tamamen reddedilir (PT409 →
+--   HTTP 409, kod YEDEK_V2_SIPARIS_VAR). Gelen v1 satırı bir v2 siparişinin para
+--   başlığını defterden bağımsız ezemez; replace ve clear v2 siparişlerini silemez.
+--   Kontrol tablo kilidinden sonra, yeniden deneme fişinden sonra, hiçbir silme ya da
+--   yazmadan önce. v2'siz butikte davranış aynıdır. Aynı kural rotada ve bellek yolunda
+--   da var (src/server/routes/veritabani.ts).
 -- B03 — tomnap_odeme_kontrol (13): ters kayıt, asıl ödemenin alan kullanıcısını,
 --   kaynağını ve yöntemini aynen taşır; farklıysa reddedilir (23514). Normal ters kayıt
 --   RPC'si (tomnap_v2_odeme_ters_kayit) bu üç alanı zaten kopyalar.
 -- Eski kod (57c5b95) aynı imzaları çağırır: v2'siz butikte sonuç aynı; v2'li butikte
---   v1 yükleme reddedilir (eski kodda 503 yanıtıyla, veri değişmeden).
+--   v1 yükleme ve temizleme reddedilir (eski kodda 503 yanıtıyla, veri değişmeden).
 -- Gövdeler yalnız ASCII: SQL Editor'a yapıştırırken kodlama bozulamaz.
 -- 2, 10, 12 ya da 13 yeniden uygulanırsa 21 de ardından yeniden uygulanır.
 -- Geri alma: supabase/rollbacks/20261002100000_yedek_ve_ters_kayit_korumasi.down.sql
@@ -70,12 +70,12 @@ BEGIN
   END IF;
   LOCK TABLE public.inbox_mesajlar IN EXCLUSIVE MODE;
   LOCK TABLE public.siparisler IN SHARE ROW EXCLUSIVE MODE;
-  -- Codex R5 B01: a v1 backup (merge, or replace = clear-and-load) never touches a tenant
-  -- with v2 orders. The incoming row would overwrite a v2 order's money header apart
-  -- from its ledger, and replace would delete v2 orders missing from the backup. Checked
-  -- under the table lock (a concurrent order insert waits or is seen), after the retry
-  -- receipt and before any delete or write. 'clear' is unchanged.
-  IF p_mode IN ('merge','replace') AND EXISTS (
+  -- Codex R5 B01: v1 maintenance (merge, replace = clear-and-load, clear) never touches
+  -- a tenant with v2 orders. The incoming row would overwrite a v2 order's money header
+  -- apart from its ledger; replace and clear would delete v2 orders. Checked under the
+  -- table lock (a concurrent order insert waits or is seen), after the retry receipt
+  -- and before any delete or write.
+  IF EXISTS (
        SELECT 1 FROM public.siparisler WHERE tenant_id=p_tenant_id AND model_surumu=2) THEN
     RAISE EXCEPTION USING ERRCODE='PT409', MESSAGE='v1 restore refused: the tenant has v2 orders';
   END IF;
