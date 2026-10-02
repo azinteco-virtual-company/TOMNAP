@@ -1,0 +1,748 @@
+﻿anahtar,az,en,ru
+belge:whatsapp.eksikBilgi,"Salam hörmətli {{musteri}}, sifarişiniz ({{urun}}) qeydə alındı. Lakin çatdırılmanı tamamlamaq üçün aşağıdakı məlumatlar lazımdır: {{eksikler}}. Zəhmət olmasa qeyd edərdiniz.","Hello {{musteri}}, your order ({{urun}}) has been registered. To complete the delivery we still need: {{eksikler}}. Please send them to us.","Здравствуйте, {{musteri}}! Ваш заказ ({{urun}}) зарегистрирован. Чтобы завершить доставку, нам ещё нужно: {{eksikler}}. Пожалуйста, отправьте нам эти данные."
+belge:whatsapp.varsayilanEksikler,ünvan və əlaqə nömrəsi,your address and phone number,ваш адрес и номер телефона
+belge:whatsapp.teslimat,"Salam hörmətli {{musteri}}, Kanadadan sifariş etdiyiniz ""{{urun}}"" artıq Bakıdadır! Dostumuz vasitəsilə təhvil ala bilərsiniz. Qalan borcunuz: {{kalan}}. Əlaqə üçün yazın.","Hello {{musteri}}, your order ""{{urun}}"" from Canada is now in Baku! Our contact can hand it over to you. Balance due: {{kalan}}. Write to us to arrange it.","Здравствуйте, {{musteri}}! Ваш заказ «{{urun}}» из Канады уже в Баку! Наш представитель может передать его вам. Остаток к оплате: {{kalan}}. Напишите нам, чтобы договориться о встрече."
+belge:ortak.adsiz,Adsız,No name,Без имени
+belge:ortak.varsayilanSehir,Bakı,Baku,Баку
+belge:ortak.varsayilanUnvan,Bakı daxili,Within Baku,В пределах Баку
+belge:ortak.bolgeMerkezi,Bölgə üzrə mərkəz,Regional hub,Региональный центр
+belge:ortak.nomreYoxdur,Nömrə yoxdur,No number,Номера нет
+belge:ortak.bagla_one,{{count}} bağlama,{{count}} parcel,{{count}} посылка
+belge:ortak.bagla_other,{{count}} bağlama,{{count}} parcels,{{count}} посылки
+belge:ortak.eded_one,{{count}} əd,{{count}} pc,{{count}} шт.
+belge:ortak.eded_other,{{count}} əd,{{count}} pcs,{{count}} шт.
+belge:durum.KANADA_SATINALIM_BEKLIYOR,Kanada alışı,Canada purchase,Покупка в Канаде
+belge:durum.KANADA_DEPO,Kanada anbarı,Canada warehouse,Склад в Канаде
+belge:durum.ULUSLARARASI_KARGO,Uçuşda / kargo,In flight / cargo,В полёте / карго
+belge:durum.BAKU_DAGITIM_ARKADAS,Bakıda paylanma,Baku delivery,Доставка по Баку
+belge:durum.TESLIM_EDILDI,Təhvil verildi,Delivered,Доставлен
+belge:manifesto.baslik,{{butik}} — Kanada ➔ Bakı kargo manifesti,{{butik}} — Canada ➔ Baku cargo manifest,{{butik}} — карго-манифест Канада ➔ Баку
+belge:manifesto.sayfaBasligi,Kargo manifesti — {{butik}},Cargo manifest — {{butik}},Карго-манифест — {{butik}}
+belge:manifesto.marsrut,Marşrut: Toronto / Vancouver ➔ Heydər Əliyev Beynəlxalq Hava Limanı (GYD),Route: Toronto / Vancouver ➔ Heydar Aliyev International Airport (GYD),Маршрут: Торонто / Ванкувер ➔ Международный аэропорт имени Гейдара Алиева (GYD)
+belge:manifesto.tarix,Tarix:,Date:,Дата:
+belge:manifesto.toplamPaket,Cəmi bağlama: {{bagla}} ({{adet}} ədəd),Total parcels: {{bagla}} ({{adet}} items),Всего посылок: {{bagla}} (товаров: {{adet}})
+belge:manifesto.sutun.musteriTel,Müştəri və tel,Customer and phone,Клиент и телефон
+belge:manifesto.sutun.sehirUnvan,Şəhər / ünvan,City / address,Город / адрес
+belge:manifesto.sutun.mehsul,Məhsul və xüsusiyyət,Item and details,Товар и детали
+belge:manifesto.sutun.say,Say,Qty,Кол-во
+belge:manifesto.sutun.mebleg,Məbləğ,Amount,Сумма
+belge:manifesto.sutun.qaliq,Qalıq borc,Balance due,Остаток долга
+belge:manifesto.sutun.statusKod,Status / kod,Status / code,Статус / код
+belge:manifesto.sutun.qeyd,Qeyd və təlimat,Notes and instructions,Заметки и указания
+belge:manifesto.alinacaq,ALINACAQ,TO COLLECT,К ПОЛУЧЕНИЮ
+belge:manifesto.odenilib,ÖDƏNİLİB,PAID,ОПЛАЧЕНО
+belge:manifesto.beyanname,Bəyannamə: bu manifestdəki bağlamalar təhlükəsizlik və gömrük qaydalarına uyğun Toronto anbarında təhvil verilmişdir.,Declaration: the parcels in this manifest were handed over at the Toronto warehouse in line with security and customs rules.,Декларация: посылки в этом манифесте переданы на складе в Торонто в соответствии с правилами безопасности и таможни.
+belge:manifesto.toplam,Cəmi: {{mebleg}},Total: {{mebleg}},Итого: {{mebleg}}
+belge:manifesto.bakidaAlinacaq,Bakıda alınacaq: {{mebleg}},To collect in Baku: {{mebleg}},К получению в Баку: {{mebleg}}
+belge:etiket.sayfaBasligi,Kargo paket etiketləri — {{butik}},Cargo parcel labels — {{butik}},Этикетки карго-посылок — {{butik}}
+belge:etiket.yon,KANADA ➔ BAKI / AZƏRBAYCAN,CANADA ➔ BAKU / AZERBAIJAN,КАНАДА ➔ БАКУ / АЗЕРБАЙДЖАН
+belge:etiket.alici,Alıcı (gömrük):,Recipient (customs):,Получатель (таможня):
+belge:etiket.fin,FİN kodu / ş.v.:,FIN code / ID:,FIN-код / ID:
+belge:etiket.qeydEdilmeyib,QEYD EDİLMƏYİB,NOT GIVEN,НЕ УКАЗАН
+belge:etiket.tel,Tel:,Tel:,Тел.:
+belge:etiket.sehirUnvan,Şəhər və ünvan:,City and address:,Город и адрес:
+belge:etiket.merkeziTehvil,Mərkəzi təhvil,Central pick-up,Самовывоз из центра
+belge:etiket.kurye,Bakı təhvil / sahə kuryeri:,Baku delivery / field courier:,Доставка по Баку / выездной курьер:
+belge:etiket.tehvilde,Bakıda təhvildə:,On delivery in Baku:,При доставке в Баку:
+belge:etiket.borc,{{mebleg}} (ALINACAQ),{{mebleg}} (TO COLLECT),{{mebleg}} (К ПОЛУЧЕНИЮ)
+belge:etiket.tamOdenilib,TAM ÖDƏNİLİB,FULLY PAID,ОПЛАЧЕНО ПОЛНОСТЬЮ
+belge:etiket.mehsul,Məhsul:,Item:,Товар:
+belge:etiket.not,Qeyd:,Note:,Заметка:
+belge:excel.sutun.sira,Sıra,No.,№
+belge:excel.sutun.musteriAdi,Müştəri adı,Customer name,Имя клиента
+belge:excel.sutun.telefon,Əlaqə nömrəsi,Contact number,Контактный номер
+belge:excel.sutun.sehir,Şəhər,City,Город
+belge:excel.sutun.unvan,Çatdırılma ünvanı,Delivery address,Адрес доставки
+belge:excel.sutun.mehsul,Məhsul təsviri,Item description,Описание товара
+belge:excel.sutun.olcuReng,Ölçü / rəng,Size / colour,Размер / цвет
+belge:excel.sutun.say,Say (ədəd),Qty,Кол-во
+belge:excel.sutun.mebleg,Məbləğ (AZN),Amount (AZN),Сумма (AZN)
+belge:excel.sutun.odenilen,Ödənilən (AZN),Paid (AZN),Оплачено (AZN)
+belge:excel.sutun.qaliq,Qalıq borc (AZN),Balance due (AZN),Остаток долга (AZN)
+belge:excel.sutun.fin,Gömrük FİN kodu,Customs FIN code,FIN-код для таможни
+belge:excel.sutun.kurye,Bakı təhvil kuryeri,Baku delivery courier,Курьер доставки по Баку
+belge:excel.sutun.status,Logistika statusu,Logistics status,Статус логистики
+belge:excel.sutun.kanadaKodu,Kanada izləmə kodu,Canada tracking code,Трек-код Канады
+belge:excel.sutun.kargoKodu,Beynəlxalq kargo kodu,International cargo code,Код международного карго
+belge:excel.sutun.xususiQeyd,Xüsusi qeyd,Special note,Особая заметка
+belge:excel.sutun.bakiNotu,Bakı təhvil qeydi,Baku delivery note,Заметка о доставке по Баку
+belge:excel.yekun,YEKUN CƏMİ:,GRAND TOTAL:,ОБЩИЙ ИТОГ:
+belge:excel.sayfa,Kargo manifesti,Cargo manifest,Карго-манифест
+belge:excel.dosya,Kargo_Manifesti,Cargo_Manifest,Карго_манифест
+belge:kurye.tarix,📅 Tarix: {{tarih}},📅 Date: {{tarih}},📅 Дата: {{tarih}}
+belge:kurye.toplamBagla,📦 Cəmi bağlama: {{bagla}} ədəd ({{adet}} ədəd məhsul),📦 Total parcels: {{bagla}} ({{adet}} items),📦 Всего посылок: {{bagla}} (товаров: {{adet}})
+belge:kurye.toplamDeger,💰 Cəmi dəyər: {{mebleg}},💰 Total value: {{mebleg}},💰 Общая стоимость: {{mebleg}}
+belge:kurye.bakidaBorc,🔴 Bakıda alınacaq borc: {{mebleg}},🔴 To collect in Baku: {{mebleg}},🔴 К получению в Баку: {{mebleg}}
+belge:kurye.musteri,{{sira}}. *{{musteri}}* ({{tel}}),{{sira}}. *{{musteri}}* ({{tel}}),{{sira}}. *{{musteri}}* ({{tel}})
+belge:kurye.sehir,   📍 Şəhər: {{sehir}} - {{unvan}},   📍 City: {{sehir}} - {{unvan}},   📍 Город: {{sehir}} - {{unvan}}
+belge:kurye.mehsul_one,   🛍️ Məhsul: {{urun}} ({{count}} əd),   🛍️ Item: {{urun}} ({{count}} pc),   🛍️ Товар: {{urun}} ({{count}} шт.)
+belge:kurye.mehsul_other,   🛍️ Məhsul: {{urun}} ({{count}} əd),   🛍️ Item: {{urun}} ({{count}} pcs),   🛍️ Товар: {{urun}} ({{count}} шт.)
+belge:kurye.ozellik,   🏷️ Xüsusiyyət: {{ozellik}},   🏷️ Details: {{ozellik}},   🏷️ Детали: {{ozellik}}
+belge:kurye.borc,   ⚠️ *ALINACAQ BORC: {{mebleg}}*,   ⚠️ *TO COLLECT: {{mebleg}}*,   ⚠️ *К ПОЛУЧЕНИЮ: {{mebleg}}*
+belge:kurye.odenib,   ✅ *ÖDƏNİLİB (0 AZN)*,   ✅ *PAID (0 AZN)*,   ✅ *ОПЛАЧЕНО (0 AZN)*
+belge:kurye.fin,   🪪 FİN: {{fin}},   🪪 FIN: {{fin}},   🪪 FIN: {{fin}}
+belge:kurye.kurye,   🛵 Kuryer: {{kurye}},   🛵 Courier: {{kurye}},   🛵 Курьер: {{kurye}}
+belge:kurye.kargo,   📦 Kargo kodu: {{kod}},   📦 Cargo code: {{kod}},   📦 Код карго: {{kod}}
+belge:kurye.not,   💬 Bakı qeydi: {{not}},   💬 Baku note: {{not}},   💬 Заметка по Баку: {{not}}
+belge:pdf.ozet1,Tarix: {{tarih}} | Cəmi bağlama: {{bagla}} | Cəmi məhsul: {{adet}},Date: {{tarih}} | Total parcels: {{bagla}} | Total items: {{adet}},Дата: {{tarih}} | Всего посылок: {{bagla}} | Всего товаров: {{adet}}
+belge:pdf.ozet2,Cəmi dəyər: {{deger}} | Bakıda alınacaq qalıq borc: {{kalan}},Total value: {{deger}} | Balance to collect in Baku: {{kalan}},Общая стоимость: {{deger}} | Остаток к получению в Баку: {{kalan}}
+belge:pdf.sutun.musteri,Müştəri və əlaqə,Customer and contact,Клиент и контакты
+belge:pdf.sutun.sehirUnvan,Şəhər / ünvan,City / address,Город / адрес
+belge:pdf.sutun.mehsul,Məhsul və xüsusiyyət,Item and details,Товар и детали
+belge:pdf.sutun.say,Say,Qty,Кол-во
+belge:pdf.sutun.deyer,Dəyər,Value,Стоимость
+belge:pdf.sutun.qaliq,Qalıq borc,Balance due,Остаток долга
+belge:pdf.sutun.statusKod,Status / kargo kodu,Status / cargo code,Статус / код карго
+belge:pdf.sutun.qeyd,Xüsusi qeyd,Special note,Особая заметка
+belge:pdf.kod,Kod: {{kod}},Code: {{kod}},Код: {{kod}}
+belge:pdf.bakiNotu,[Bakı: {{not}}],[Baku: {{not}}],[Баку: {{not}}]
+belge:pdf.tel,Tel: {{tel}},Tel: {{tel}},Тел.: {{tel}}
+belge:pdf.borc,{{mebleg}} (BORC),{{mebleg}} (DUE),{{mebleg}} (ДОЛГ)
+belge:pdf.resmiSened,Rəsmi daşıma sənədi,Official shipping document,Официальный транспортный документ
+belge:pdf.altBilgi,{{butik}} — kargo manifesti — səhifə {{sayfa}} / {{toplam}},{{butik}} — cargo manifest — page {{sayfa}} / {{toplam}},{{butik}} — карго-манифест — стр. {{sayfa}} / {{toplam}}
+belge:pdf.dosya,Ceki_Siyahisi,Packing_List,Упаковочный_лист
+belge:tahsilat.baslik,Bakı tahsilat və qalıq borc hesabatı,Baku collection and balance report,Отчёт о сборе платежей и остатках в Баку
+belge:tahsilat.altBaslik,{{butik}} — təhvil və kassa cədvəli,{{butik}} — delivery and cash desk table,{{butik}} — таблица доставки и кассы
+belge:tahsilat.sayfaBasligi,Bakı tahsilat hesabatı — {{butik}},Baku collection report — {{butik}},Отчёт о сборе платежей в Баку — {{butik}}
+belge:tahsilat.toplamBagla_one,Cəmi bağlama: {{count}},Total parcels: {{count}},Всего посылок: {{count}}
+belge:tahsilat.toplamBagla_other,Cəmi bağlama: {{count}},Total parcels: {{count}},Всего посылок: {{count}}
+belge:tahsilat.sutun.mehsul,Məhsul,Item,Товар
+belge:tahsilat.sutun.odenilib,Ödənilib,Paid,Оплачено
+belge:tahsilat.sutun.qeyd,Təhvil qeydi,Delivery note,Заметка о доставке
+belge:tahsilat.aciklama,Bu cədvəl Bakıdakı nümayəndənin kassa və təhvil-təslim qeydləri üçündür.,This table is for the Baku representative's cash and hand-over records.,Эта таблица предназначена для учёта наличных и передачи посылок представителем в Баку.
+belge:tahsilat.toplanacaq,Toplanacaq cəmi borc: {{mebleg}},Total to collect: {{mebleg}},Всего к получению: {{mebleg}}
+belge:tahsilat.pdfOzet_one,Tarix: {{tarih}} | Borclu bağlama: {{count}} | Cəmi qalıq: {{mebleg}},Date: {{tarih}} | Parcels with a balance: {{count}} | Total balance: {{mebleg}},Дата: {{tarih}} | Посылок с остатком: {{count}} | Общий остаток: {{mebleg}}
+belge:tahsilat.pdfOzet_other,Tarix: {{tarih}} | Borclu bağlama: {{count}} | Cəmi qalıq: {{mebleg}},Date: {{tarih}} | Parcels with a balance: {{count}} | Total balance: {{mebleg}},Дата: {{tarih}} | Посылок с остатком: {{count}} | Общий остаток: {{mebleg}}
+belge:tahsilat.sened,Bakı kassa və təhvil sənədi,Baku cash desk and delivery document,Документ кассы и доставки в Баку
+belge:tahsilat.musteriSayi_one,{{count}} müştəri,{{count}} customer,{{count}} клиент
+belge:tahsilat.musteriSayi_other,{{count}} müştəri,{{count}} customers,{{count}} клиента
+belge:tahsilat.sayfa,Bakı tahsilat hesabatı,Baku collection report,Отчёт о сборе платежей в Баку
+belge:tahsilat.dosya,Baki_Tahsilat_Hesabati,Baku_Collection_Report,Отчёт_о_сборе_Баку
+belge:tahsilat.excel.sira,Sıra,No.,№
+belge:tahsilat.excel.musteriAdi,Müştəri adı,Customer name,Имя клиента
+belge:tahsilat.excel.telefon,Əlaqə telefonu,Contact phone,Контактный телефон
+belge:tahsilat.excel.sehir,Şəhər,City,Город
+belge:tahsilat.excel.unvan,Çatdırılma ünvanı,Delivery address,Адрес доставки
+belge:tahsilat.excel.mehsul,Məhsul,Item,Товар
+belge:tahsilat.excel.toplam,Ümumi məbləğ (AZN),Total (AZN),Итого (AZN)
+belge:tahsilat.excel.odenilen,Ödənilən (AZN),Paid (AZN),Оплачено (AZN)
+belge:tahsilat.excel.qaliq,Qalıq borc (AZN),Balance due (AZN),Остаток долга (AZN)
+belge:tahsilat.excel.status,Logistika vəziyyəti,Logistics status,Статус логистики
+belge:tahsilat.excel.bakiNotu,Bakı tahsilat qeydi,Baku collection note,Заметка о сборе платежа в Баку
+belge:tahsilat.excel.xususiQeyd,Xüsusi qeyd,Special note,Особая заметка
+belge:tahsilat.metin.tarix,📅 Tarix: {{tarih}},📅 Date: {{tarih}},📅 Дата: {{tarih}}
+belge:tahsilat.metin.toplam_one,💰 Toplanacaq qalıq: *{{mebleg}}* ({{count}} bağlama),💰 To collect: *{{mebleg}}* ({{count}} parcel),💰 К получению: *{{mebleg}}* ({{count}} посылка)
+belge:tahsilat.metin.toplam_other,💰 Toplanacaq qalıq: *{{mebleg}}* ({{count}} bağlama),💰 To collect: *{{mebleg}}* ({{count}} parcels),💰 К получению: *{{mebleg}}* ({{count}} посылки)
+belge:tahsilat.metin.musteri,{{sira}}. *{{musteri}}* ({{tel}}),{{sira}}. *{{musteri}}* ({{tel}}),{{sira}}. *{{musteri}}* ({{tel}})
+belge:tahsilat.metin.unvan,   📍 Ünvan: {{sehir}} - {{unvan}},   📍 Address: {{sehir}} - {{unvan}},   📍 Адрес: {{sehir}} - {{unvan}}
+belge:tahsilat.metin.mehsul_one,   🛍️ Məhsul: {{urun}} ({{count}} əd),   🛍️ Item: {{urun}} ({{count}} pc),   🛍️ Товар: {{urun}} ({{count}} шт.)
+belge:tahsilat.metin.mehsul_other,   🛍️ Məhsul: {{urun}} ({{count}} əd),   🛍️ Item: {{urun}} ({{count}} pcs),   🛍️ Товар: {{urun}} ({{count}} шт.)
+belge:tahsilat.metin.qaliq,   🔴 *ALINACAQ QALIQ: {{mebleg}}*,   🔴 *TO COLLECT: {{mebleg}}*,   🔴 *К ПОЛУЧЕНИЮ: {{mebleg}}*
+belge:tahsilat.metin.ozelNot,   📌 Xüsusi qeyd: {{not}},   📌 Special note: {{not}},   📌 Особая заметка: {{not}}
+belge:tahsilat.metin.bakiNotu,   💬 Bakı qeydi: {{not}},   💬 Baku note: {{not}},   💬 Заметка по Баку: {{not}}
+belge:ortak.bagla_few,,,{{count}} посылки
+belge:ortak.bagla_many,,,{{count}} посылок
+belge:ortak.eded_few,,,{{count}} шт.
+belge:ortak.eded_many,,,{{count}} шт.
+belge:kurye.mehsul_few,,,   🛍️ Товар: {{urun}} ({{count}} шт.)
+belge:kurye.mehsul_many,,,   🛍️ Товар: {{urun}} ({{count}} шт.)
+belge:tahsilat.toplamBagla_few,,,Всего посылок: {{count}}
+belge:tahsilat.toplamBagla_many,,,Всего посылок: {{count}}
+belge:tahsilat.pdfOzet_few,,,Дата: {{tarih}} | Посылок с остатком: {{count}} | Общий остаток: {{mebleg}}
+belge:tahsilat.pdfOzet_many,,,Дата: {{tarih}} | Посылок с остатком: {{count}} | Общий остаток: {{mebleg}}
+belge:tahsilat.musteriSayi_few,,,{{count}} клиента
+belge:tahsilat.musteriSayi_many,,,{{count}} клиентов
+belge:tahsilat.metin.toplam_few,,,💰 К получению: *{{mebleg}}* ({{count}} посылки)
+belge:tahsilat.metin.toplam_many,,,💰 К получению: *{{mebleg}}* ({{count}} посылок)
+belge:tahsilat.metin.mehsul_few,,,   🛍️ Товар: {{urun}} ({{count}} шт.)
+belge:tahsilat.metin.mehsul_many,,,   🛍️ Товар: {{urun}} ({{count}} шт.)
+giris:giris.baslik,TOMNAP Giriş Paneli,TOMNAP Sign-in,Вход в TOMNAP
+giris:giris.aciklama,Qeydiyyatlı e-poçt ünvanınız və ya telefonunuzla daxil olun.,Sign in with your registered email address or phone number.,Войдите с помощью зарегистрированного адреса электронной почты или номера телефона.
+giris:giris.demoKapali,İctimai demo hazırda bağlıdır. İş sahəsinə yalnız şəxsi hesabınızla daxil ola bilərsiniz.,The public demo is closed for now. You can enter the workspace only with your own account.,Публичная демо-версия пока закрыта. Войти в рабочее пространство можно только с собственной учётной записью.
+giris:giris.kimlik,E-poçt və ya telefon,Email or phone,Эл. почта или телефон
+giris:giris.sifre,Şifrə,Password,Пароль
+giris:giris.sifreGizle,Şifrəni gizlət,Hide password,Скрыть пароль
+giris:giris.sifreGoster,Şifrəni göstər,Show password,Показать пароль
+giris:giris.girisYap,Daxil ol,Sign in,Войти
+giris:giris.yeniButik,Yeni butik qeydiyyatı,Register a new boutique,Зарегистрировать новый бутик
+giris:giris.olmadi,Giriş mümkün olmadı.,Sign-in failed.,Не удалось войти.
+giris:kayit.baslik,TOMNAP Butik Qeydiyyatı,Register Your Boutique on TOMNAP,Зарегистрируйте свой бутик в TOMNAP
+giris:kayit.altBaslik,"Platformaya qoşulun, sifariş və kargo idarəetməsini avtomatlaşdırın",Automate cross-border order intake and parcel logistics,Автоматизируйте приём трансграничных заказов и логистику посылок
+giris:kayit.tamam.baslik,Müraciətiniz qeydə alındı!,Application submitted!,Заявка отправлена!
+giris:kayit.tamam.altBaslik,Hesabınızı qurmaq üçün e-poçt təsdiqi addımlarını tamamlayın,Follow the email verification steps to set up your account,"Выполните шаги подтверждения по электронной почте, чтобы настроить учётную запись"
+giris:kayit.tamam.tebrik,"Təbriklər, ""{{butik}}"" qeydiyyatı qəbul edildi!","Congratulations, ""{{butik}}"" has been registered!","Поздравляем, «{{butik}}» зарегистрирован!"
+giris:kayit.tamam.epostaGonderildi,Şifrə təyini üçün e-poçtunuzu yoxlayın,Check your email to set your password,"Проверьте почту, чтобы задать пароль"
+giris:kayit.tamam.epostaGonderilmedi,Qeydiyyat saxlanıldı; e-poçt göndərilmədi,Registration saved; the email was not sent,Регистрация сохранена; письмо не отправлено
+giris:kayit.tamam.epostaYonerge,"{{email}} ünvanına göndərilən linklə şifrənizi təyin edin, sonra daxil olun.","Use the link sent to {{email}} to set your password, then sign in.","Перейдите по ссылке из письма, отправленного на {{email}}, задайте пароль и войдите."
+giris:kayit.tamam.destekYonerge,Müraciətiniz gözləmədədir. Şifrə təyini e-poçtu üçün dəstək komandası ilə əlaqə saxlayın.,Your application is pending. Contact support to receive your password setup email.,"Ваша заявка ожидает обработки. Свяжитесь со службой поддержки, чтобы получить письмо для установки пароля."
+giris:kayit.tamam.seciliPaket,Seçilmiş abunəlik:,Selected plan:,Выбранный тариф:
+giris:kayit.tamam.paketPro,Pro Şəbəkə (99 AZN),Pro Network ($99/mo),Pro Network ($99/мес.)
+giris:kayit.tamam.paketBaslangic,Başlanğıc Butik (49 AZN),Starter Boutique ($49/mo),Starter Boutique ($49/мес.)
+giris:kayit.tamam.demo,Canlı demo sınaq,Try the demo sandbox,Попробовать демо-песочницу
+giris:kayit.ozet.patron_one,{{count}} Patron,{{count}} Owner,Владельцев: {{count}}
+giris:kayit.ozet.patron_other,{{count}} Patron,{{count}} Owners,Владельцев: {{count}}
+giris:kayit.ozet.kanada_one,{{count}} Kanada kargo,{{count}} Purchasing agent,Закупщиков: {{count}}
+giris:kayit.ozet.kanada_other,{{count}} Kanada kargo,{{count}} Purchasing agents,Закупщиков: {{count}}
+giris:kayit.ozet.satis_one,{{count}} Satış / AI masası,{{count}} Sales rep,Менеджеров по продажам: {{count}}
+giris:kayit.ozet.satis_other,{{count}} Satış / AI masası,{{count}} Sales reps,Менеджеров по продажам: {{count}}
+giris:kayit.ozet.kurye_one,{{count}} Sahə kuryeri,{{count}} Field courier,Выездных курьеров: {{count}}
+giris:kayit.ozet.kurye_other,{{count}} Sahə kuryeri,{{count}} Field couriers,Выездных курьеров: {{count}}
+giris:kayit.form.alanEksik,"Zəhmət olmasa butik adı, sahibin adı, düzgün e-poçt və əlaqə nömrəsini tam daxil edin.","Please enter the boutique name, owner name, a valid email and a contact number.","Укажите название бутика, имя владельца, действительный адрес электронной почты и контактный номер."
+giris:kayit.form.tamamlanmadi,Qeydiyyat tamamlanmadı. Zəhmət olmasa yenidən cəhd edin.,Registration could not be completed. Please try again.,Не удалось завершить регистрацию. Повторите попытку.
+giris:kayit.form.baglantiHatasi,Serverlə əlaqə qurularkən xəta baş verdi.,Could not connect to the server.,Не удалось подключиться к серверу.
+giris:kayit.form.butikAdi,Butik / mağaza adı *,Boutique / brand name *,Название бутика / бренда *
+giris:kayit.form.butikOrnek,Məs: Ayla Fashion Baku,e.g. Canadian Brand Boutique,напр. Canadian Brand Boutique
+giris:kayit.form.sahipAdi,Sahibin adı və soyadı *,Owner's full name *,Полное имя владельца *
+giris:kayit.form.sahipOrnek,Məs: Aysel Məmmədova,e.g. Sarah Jenkins,напр. Sarah Jenkins
+giris:kayit.form.telefon,WhatsApp / əlaqə nömrəsi *,WhatsApp / phone number *,Номер WhatsApp / телефона *
+giris:kayit.form.eposta,E-poçt ünvanı * (şifrə təyini üçün),Email address * (to set your password),Адрес электронной почты * (для установки пароля)
+giris:kayit.form.epostaOrnek,boutique@example.com,boutique@example.com,boutique@example.com
+giris:kayit.form.ulke,Əsas alış / çıxış ölkəsi,Main purchasing country,Основная страна закупок
+giris:kayit.form.sehir,Təhvil şəhəri,Delivery city,Город доставки
+giris:kayit.form.sehirVarsayilan,Bakı,Baku,Баку
+giris:kayit.form.paketSec,Abunəlik paketini seçin,Select a subscription plan,Выберите тарифный план
+giris:kayit.form.gonderiliyor,Qeydiyyat göndərilir...,Submitting registration...,Отправка регистрации...
+giris:kayit.form.gonder,Qeydiyyat müraciətini təsdiqlə,Submit boutique registration,Отправить регистрацию бутика
+giris:kayit.form.epostaNotu,Şifrənizi təyin etmək üçün istifadə edə bildiyiniz e-poçt ünvanını daxil edin.,Use an email address you can access to set your password.,"Укажите адрес электронной почты, к которому у вас есть доступ, — на него придёт ссылка для установки пароля."
+giris:kayit.ulke.CA,Kanada (Toronto Pearson YYZ),Canada (Toronto Pearson YYZ),Канада (Торонто Pearson YYZ)
+giris:kayit.ulke.US,ABŞ (JFK/ORD),United States (JFK/ORD),США (JFK/ORD)
+giris:kayit.ulke.TR,Türkiyə (İstanbul IST),Türkiye (Istanbul IST),Турция (Стамбул IST)
+giris:kayit.ulke.JP,Yaponiya (Tokio NRT),Japan (Tokyo NRT),Япония (Токио NRT)
+giris:kayit.ulke.GB,Böyük Britaniya (London LHR),United Kingdom (London LHR),Великобритания (Лондон LHR)
+giris:kayit.ulke.DE,Almaniya (Frankfurt FRA),Germany (Frankfurt FRA),Германия (Франкфурт FRA)
+giris:kayit.paket.baslangic,Başlanğıc,Starter,Starter
+giris:kayit.paket.pro,Pro Şəbəkə,Pro Network,Pro Network
+giris:kayit.paket.enterprise,Enterprise,Enterprise,Enterprise
+giris:kayit.paket.tavsiye,Tövsiyə,Recommended,Рекомендуем
+giris:kayit.paket.ozel,Fərdi,Custom,Индивидуально
+giris:kayit.paket.aylik,{{fiyat}} / ay,{{fiyat}} / mo,{{fiyat}} / мес.
+giris:kayit.paket.patron_one,{{count}} Patron,{{count}} Owner,Владельцев: {{count}}
+giris:kayit.paket.patron_other,{{count}} Patron,{{count}} Owners,Владельцев: {{count}}
+giris:kayit.paket.kanadaKargo_one,{{count}} Kanada kargo,{{count}} Canada cargo,Карго Канады: {{count}}
+giris:kayit.paket.kanadaKargo_other,{{count}} Kanada kargo,{{count}} Canada cargo,Карго Канады: {{count}}
+giris:kayit.paket.satis_one,{{count}} Satış girişi,{{count}} Sales rep,Менеджеров по продажам: {{count}}
+giris:kayit.paket.satis_other,{{count}} Satış girişi,{{count}} Sales reps,Менеджеров по продажам: {{count}}
+giris:kayit.paket.kassa_one,{{count}} Bakı kassa,{{count}} Finance desk,Финансовых касс: {{count}}
+giris:kayit.paket.kassa_other,{{count}} Bakı kassa,{{count}} Finance desks,Финансовых касс: {{count}}
+giris:kayit.paket.kurye_one,{{count}} Sahə kuryeri,{{count}} Field courier,Выездных курьеров: {{count}}
+giris:kayit.paket.kurye_other,{{count}} Sahə kuryeri,{{count}} Field couriers,Выездных курьеров: {{count}}
+giris:kayit.paket.aramexAi,Aramex API + limitsiz AI,Aramex API + unlimited AI,API Aramex + безлимитный ИИ
+giris:kayit.paket.idareci_one,{{count}} Patron idarəçi,{{count}} Admin,Администраторов: {{count}}
+giris:kayit.paket.idareci_other,{{count}} Patron idarəçi,{{count}} Admins,Администраторов: {{count}}
+giris:kayit.paket.xariciKargo_one,{{count}} Kanada / xarici kargo,{{count}} Global cargo,Глобальных карго: {{count}}
+giris:kayit.paket.xariciKargo_other,{{count}} Kanada / xarici kargo,{{count}} Global cargo,Глобальных карго: {{count}}
+giris:kayit.paket.satisMesul_one,{{count}} Satış məsulu,{{count}} Sales rep,Менеджеров по продажам: {{count}}
+giris:kayit.paket.satisMesul_other,{{count}} Satış məsulu,{{count}} Sales reps,Менеджеров по продажам: {{count}}
+giris:kayit.paket.domain,Xüsusi domen (CNAME),Custom domain (CNAME),Собственный домен (CNAME)
+giris:davet.etiket,Dəvət qəbulu,Invitation,Приглашение
+giris:davet.altBaslik,Komandaya qoşulma paneli,Join the team,Присоединяйтесь к команде
+giris:davet.kodYok,Dəvət kodu tapılmadı və ya etibarsızdır.,The invitation code is missing or invalid.,Код приглашения отсутствует или недействителен.
+giris:davet.bulunamadi,Dəvət tapılmadı və ya vaxtı bitmişdir.,The invitation was not found or has expired.,Приглашение не найдено или срок его действия истёк.
+giris:davet.yoxlanilir,Dəvət kodu yoxlanılır...,Checking the invitation...,Проверяем приглашение...
+giris:davet.etibarsiz,Dəvət linki etibarsızdır,The invitation link is invalid,Ссылка-приглашение недействительна
+giris:davet.qosuldunuz,Komandaya uğurla qoşuldunuz!,You have joined the team!,Вы присоединились к команде!
+giris:davet.aktivlesdirildi,{{butik}} komandasında {{rol}} vəzifəniz aktivləşdirildi.,Your role as {{rol}} at {{butik}} is now active.,Ваша роль «{{rol}}» в бутике «{{butik}}» теперь активна.
+giris:davet.davetEdenButik,Dəvət edən butik:,Inviting boutique:,Пригласивший бутик:
+giris:davet.vezife,Təyin edilən vəzifə:,Assigned role:,Назначенная роль:
+giris:davet.adSoyad,Adınız və soyadınız *,Your full name *,Ваше полное имя *
+giris:davet.adOrnek,Məs: Rəşad Quliyev,e.g. Rashad Guliyev,напр. Рашад Гулиев
+giris:davet.mobil,Mobil nömrəniz *,Your mobile number *,Ваш мобильный номер *
+giris:davet.adTelefonEksik,"Zəhmət olmasa ad, soyad və əlaqə nömrənizi daxil edin.",Please enter your full name and contact number.,Укажите своё полное имя и контактный номер.
+giris:davet.qosulmaXetasi,Komandaya qoşulmaq mümkün olmadı.,Could not join the team.,Не удалось присоединиться к команде.
+giris:davet.bildirim,Dəvət qəbul edildi. Şəxsi hesabınızla daxil olun.,Invitation accepted. Sign in with your own account.,Приглашение принято. Войдите в свою учётную запись.
+giris:davet.tesdiqlenir,Dəvət təsdiqlənir...,Confirming the invitation...,Подтверждаем приглашение...
+giris:davet.qebulEt,Dəvəti qəbul et və komandaya qoşul,Accept the invitation and join,Принять приглашение и присоединиться
+giris:davet.kvota,Hesabınız bu butikin rol kvotasına daxil ediləcək.,Your account counts towards this boutique's role quota.,Ваша учётная запись учитывается в квоте ролей этого бутика.
+giris:sifre.etiket,Təhlükəsizlik,Security,Безопасность
+giris:sifre.altBaslik,Şəxsi şifrə təyini və aktivasiya,Set your password and activate,Задайте пароль и активируйте учётную запись
+giris:sifre.kodYok,Təhlükəsizlik və aktivasiya kodu tapılmadı.,The security and activation code was not found.,Код безопасности и активации не найден.
+giris:sifre.linkEtibarsiz,Bu link etibarsızdır və ya vaxtı bitmişdir.,This link is invalid or has expired.,Эта ссылка недействительна или срок её действия истёк.
+giris:sifre.yoxlanilir,Təhlükəsizlik linki yoxlanılır...,Checking the security link...,Проверяем ссылку безопасности...
+giris:sifre.etibarsiz,Aktivasiya linki etibarsızdır,The activation link is invalid,Ссылка активации недействительна
+giris:sifre.teyinEdildi,Şifrəniz uğurla təyin edildi!,Your password has been set!,Пароль задан!
+giris:sifre.aktivlesdirildi,Hesabınız tam aktivləşdirildi. Artıq sistemə daxil ola bilərsiniz.,Your account is fully activated. You can sign in now.,Ваша учётная запись полностью активирована. Теперь можно войти.
+giris:sifre.hesabimlaDaxilOl,Şəxsi hesabımla daxil ol,Sign in with my account,Войти в мою учётную запись
+giris:sifre.butik,Butik:,Boutique:,Бутик:
+giris:sifre.istifadeci,İstifadəçi:,User:,Пользователь:
+giris:sifre.eposta,E-poçt:,Email:,Эл. почта:
+giris:sifre.vezife,Vəzifə / rol:,Role:,Роль:
+giris:sifre.girisEpostasi,Giriş üçün e-poçt ünvanınız *,Your email address for signing in *,Ваш адрес электронной почты для входа *
+giris:sifre.girisSifresi,Giriş şifrəniz (ən azı 6 simvol) *,Your password (at least 6 characters) *,Ваш пароль (не менее 6 символов) *
+giris:sifre.yeniSifre,Yeni şifrəniz (ən azı 6 simvol) *,New password (at least 6 characters) *,Новый пароль (не менее 6 символов) *
+giris:sifre.tekrar,Şifrənin təkrarı *,Repeat the password *,Повторите пароль *
+giris:sifre.uygun,Şifrələr uyğundur,Passwords match,Пароли совпадают
+giris:sifre.uygunDeyil,Şifrələr uyğun gəlmir,Passwords do not match,Пароли не совпадают
+giris:sifre.enAz6,Şifrə ən azı 6 simvoldan ibarət olmalıdır.,The password must be at least 6 characters long.,Пароль должен содержать не менее 6 символов.
+giris:sifre.eslesmiyor,Daxil edilən şifrələr eyni deyil.,The passwords do not match.,Пароли не совпадают.
+giris:sifre.teyinXetasi,Şifrə təyin edilərkən xəta baş verdi.,The password could not be set.,Не удалось задать пароль.
+giris:sifre.bildirim,Şifrəniz təyin edildi. Şəxsi hesabınızla daxil olun.,Your password is set. Sign in with your own account.,Пароль задан. Войдите в свою учётную запись.
+giris:sifre.teyinEdilir,Şifrə təyin edilir...,Setting the password...,Задаём пароль...
+giris:sifre.teyinEt,Şifrəni təyin et və daxil ol,Set the password and sign in,Задать пароль и войти
+giris:sifre.qorunur,Şifrəniz yüksək təhlükəsizlikli scrypt KDF ilə qorunur.,Your password is protected with the scrypt key derivation function.,Ваш пароль защищён функцией формирования ключа scrypt.
+giris:rol.PATRON,Butik patronu (baş idarəçi),Boutique owner (lead admin),Владелец бутика (главный администратор)
+giris:rol.KANADA_SATINALMA,Kanada satınalma və kargo məsulu,Canada purchasing and cargo,Закупки и карго в Канаде
+giris:rol.ABD_SATINALMA,ABŞ satınalma və anbar məsulu,US purchasing and warehouse,Закупки и склад в США
+giris:rol.SATIS_SORUMLUSU,Satış və AI sifariş girişi,Sales and AI order intake,Продажи и приём заказов через ИИ
+giris:rol.BAKU_FINANS,Bakı maliyyə və kassa məsulu,Baku finance and cash desk,Финансы и касса в Баку
+giris:rol.BAKU_KURYE,Bakı sahə kuryeri,Baku field courier,Выездной курьер в Баку
+giris:kayit.ozet.patron_few,,,Владельцев: {{count}}
+giris:kayit.ozet.patron_many,,,Владельцев: {{count}}
+giris:kayit.ozet.kanada_few,,,Закупщиков: {{count}}
+giris:kayit.ozet.kanada_many,,,Закупщиков: {{count}}
+giris:kayit.ozet.satis_few,,,Менеджеров по продажам: {{count}}
+giris:kayit.ozet.satis_many,,,Менеджеров по продажам: {{count}}
+giris:kayit.ozet.kurye_few,,,Выездных курьеров: {{count}}
+giris:kayit.ozet.kurye_many,,,Выездных курьеров: {{count}}
+giris:kayit.paket.patron_few,,,Владельцев: {{count}}
+giris:kayit.paket.patron_many,,,Владельцев: {{count}}
+giris:kayit.paket.kanadaKargo_few,,,Карго Канады: {{count}}
+giris:kayit.paket.kanadaKargo_many,,,Карго Канады: {{count}}
+giris:kayit.paket.satis_few,,,Менеджеров по продажам: {{count}}
+giris:kayit.paket.satis_many,,,Менеджеров по продажам: {{count}}
+giris:kayit.paket.kassa_few,,,Финансовых касс: {{count}}
+giris:kayit.paket.kassa_many,,,Финансовых касс: {{count}}
+giris:kayit.paket.kurye_few,,,Выездных курьеров: {{count}}
+giris:kayit.paket.kurye_many,,,Выездных курьеров: {{count}}
+giris:kayit.paket.idareci_few,,,Администраторов: {{count}}
+giris:kayit.paket.idareci_many,,,Администраторов: {{count}}
+giris:kayit.paket.xariciKargo_few,,,Глобальных карго: {{count}}
+giris:kayit.paket.xariciKargo_many,,,Глобальных карго: {{count}}
+giris:kayit.paket.satisMesul_few,,,Менеджеров по продажам: {{count}}
+giris:kayit.paket.satisMesul_many,,,Менеджеров по продажам: {{count}}
+hatalar:TOKEN_YOK,Təhlükəsizlik tokeni göstərilməyib.,No security token was provided.,Не указан токен безопасности.
+hatalar:AKTIVASIYA_LINKI_GECERSIZ,Bu aktivasiya linki etibarsızdır və ya vaxtı bitmişdir.,This activation link is invalid or has expired.,Эта ссылка активации недействительна или срок её действия истёк.
+hatalar:DAVET_LINKI_GECERSIZ,"Bu dəvət linki etibarsızdır, istifadə edilib və ya vaxtı bitmişdir.","This invitation link is invalid, already used or expired.","Эта ссылка-приглашение недействительна, уже использована или просрочена."
+hatalar:LINK_BULUNAMADI,Aktivasiya və ya dəvət linki etibarsızdır və ya tapılmadı.,The activation or invitation link is invalid or was not found.,Ссылка активации или приглашения недействительна или не найдена.
+hatalar:TOKEN_GECICI_HATA,Link hazırda yoxlanıla bilmir. Bir az sonra yenidən cəhd edin.,The link cannot be checked right now. Please try again shortly.,Сейчас не удаётся проверить ссылку. Повторите попытку чуть позже.
+hatalar:SIFRE_KISA,Şifrə ən azı 6 simvoldan ibarət olmalıdır.,The password must be at least 6 characters long.,Пароль должен содержать не менее 6 символов.
+hatalar:AD_TELEFON_GECERSIZ,Ad və telefon məlumatlarını yoxlayın.,Please check the name and phone number.,Проверьте имя и номер телефона.
+hatalar:BEKLEYEN_KAYIT_YOK,Bu linkə uyğun gözləyən qeydiyyat və ya dəvət tapılmadı.,No pending registration or invitation matches this link.,Для этой ссылки нет ожидающей регистрации или приглашения.
+hatalar:DAVET_GECERSIZ,"Bu dəvət etibarsızdır, istifadə edilib və ya vaxtı bitmişdir.","This invitation is invalid, already used or expired.","Это приглашение недействительно, уже использовано или просрочено."
+hatalar:EPOSTA_TELEFON_BICIMI,E-poçt və telefon mətn formatında olmalıdır.,Email and phone must be text.,Электронная почта и телефон должны быть текстом.
+hatalar:DAVET_EPOSTA_UYUSMUYOR,E-poçt ünvanı dəvətdəki ünvanla uyğun gəlmir.,The email address does not match the invitation.,Адрес электронной почты не совпадает с приглашением.
+hatalar:GIRIS_KIMLIGI_GECERSIZ,Sonradan giriş üçün etibarlı e-poçt ünvanı və ya telefon nömrəsi daxil edin.,Enter a valid email address or phone number to sign in later.,Укажите действительный адрес электронной почты или номер телефона для последующего входа.
+hatalar:BUTIK_BULUNAMADI,Əlaqəli butik tapılmadı.,The related boutique was not found.,Соответствующий бутик не найден.
+hatalar:DAVET_ARTIK_GECERSIZ,Bu dəvət artıq etibarlı deyil.,This invitation is no longer valid.,Это приглашение больше недействительно.
+hatalar:SIFRE_GECICI_HATA,Şifrə hazırda təyin edilə bilmir. Bir az sonra yenidən cəhd edin.,The password cannot be set right now. Please try again shortly.,Сейчас не удаётся задать пароль. Повторите попытку чуть позже.
+hatalar:GIRIS_KIMLIK_EKSIK,E-poçt ünvanınızı və ya telefon nömrənizi daxil edin.,Enter your email address or phone number.,Введите адрес электронной почты или номер телефона.
+hatalar:GIRIS_SIFRE_EKSIK,Zəhmət olmasa şifrənizi daxil edin.,Please enter your password.,Введите пароль.
+hatalar:GIRIS_KULLANICI_YOK,Bu məlumatlara uyğun aktiv istifadəçi tapılmadı.,No active user matches these details.,Активного пользователя с такими данными нет.
+hatalar:GIRIS_HESAP_AKTIF_DEGIL_SIFRE,Hesabınız hələ aktivləşdirilməyib. E-poçtunuza göndərilən linklə şifrənizi təyin edin.,Your account is not activated yet. Set your password with the link sent to your email.,"Ваша учётная запись ещё не активирована. Задайте пароль по ссылке, отправленной на вашу почту."
+hatalar:GIRIS_HESAP_PASIF,Hesabınız aktiv deyil.,Your account is not active.,Ваша учётная запись неактивна.
+hatalar:GIRIS_SIFRE_YANLIS,Daxil edilmiş şifrə yanlışdır.,The password is incorrect.,Неверный пароль.
+hatalar:GIRIS_GECICI_HATA,Giriş hazırda yoxlanıla bilmir. Bir az sonra yenidən cəhd edin.,Sign-in cannot be checked right now. Please try again shortly.,Сейчас не удаётся проверить вход. Повторите попытку чуть позже.
+hatalar:OTURUM_GEREKLI,Giriş tələb olunur.,Please sign in.,"Пожалуйста, войдите в систему."
+hatalar:OTURUM_GECICI_HATA,Sessiya hazırda yoxlanıla bilmir.,The session cannot be checked right now.,Сейчас не удаётся проверить сеанс.
+hatalar:CIKIS_GECICI_HATA,Sessiyanı bağlamaq mümkün olmadı. Yenidən cəhd edin.,The session could not be closed. Please try again.,Не удалось завершить сеанс. Повторите попытку.
+hatalar:KAYIT_KIMLIK_KULLANILIYOR,Bu e-poçt və ya telefon artıq qeydiyyatdadır.,This email or phone number is already registered.,Эта электронная почта или этот номер телефона уже зарегистрированы.
+hatalar:DAVET_GECERSIZ_VEYA_LIMIT,Link artıq etibarlı deyil və ya komanda limiti dolub.,The link is no longer valid or the team limit has been reached.,Ссылка больше недействительна или достигнут лимит команды.
+hatalar:FIRMA_AKTIF_DEGIL,Butik aktiv deyil.,The boutique is not active.,Бутик не активен.
+hatalar:KAYIT_GECICI_HATA,Qeydiyyat saxlanılmadı. Bir az sonra yenidən cəhd edin.,The registration was not saved. Please try again shortly.,Регистрация не сохранена. Повторите попытку чуть позже.
+hatalar:ISLEM_TAMAMLANMADI_LINK,Əməliyyat tamamlanmadı. Linki yenidən yoxlayın.,The action was not completed. Please check the link again.,Действие не выполнено. Проверьте ссылку ещё раз.
+hatalar:ROL_LIMITI_DOLU,Bu komanda rolu üzrə limit dolub.,The limit for this team role has been reached.,Достигнут лимит для этой роли в команде.
+hatalar:FIRMA_ZATEN_VAR,Bu butik artıq mövcuddur.,This boutique already exists.,Такой бутик уже существует.
+hatalar:KAYIT_ALAN_EKSIK,"Butik adı, sahibin adı, əlaqə telefonu və e-poçt ünvanı mütləqdir.","Boutique name, owner name, contact phone and email are required.","Необходимо указать название бутика, имя владельца, контактный телефон и электронную почту."
+hatalar:KAYIT_BICIM_GECERSIZ,Qeydiyyat məlumatlarının formatını yoxlayın.,Please check the format of the registration details.,Проверьте формат регистрационных данных.
+hatalar:KAYIT_EPOSTA_HAZIR_DEGIL,Aktivasiya məktubu xidməti hazır deyil. Bir az sonra yenidən cəhd edin.,The activation email service is not ready. Please try again shortly.,Сервис отправки писем активации пока не готов. Повторите попытку чуть позже.
+hatalar:ISLEM_GECICI_HATA,Əməliyyat saxlanılmadı. Bir az sonra yenidən cəhd edin.,The action was not saved. Please try again shortly.,Действие не сохранено. Повторите попытку чуть позже.
+hatalar:ISLEM_TAMAMLANAMADI,Əməliyyat tamamlanmadı.,The action could not be completed.,Не удалось выполнить действие.
+hatalar:AYAR_GECERSIZ_DEGER,Ayar dəyəri yanlışdır.,The setting value is invalid.,Недопустимое значение настройки.
+hatalar:AYAR_ALAN_YOK,Dəyişdiriləcək ayar göndərilməyib.,No setting to change was sent.,Не передано ни одной настройки для изменения.
+hatalar:AYAR_OKUNAMADI,Ayarlar oxuna bilmədi.,The settings could not be read.,Не удалось прочитать настройки.
+hatalar:AYAR_KAYDEDILEMEDI,Ayarlar saxlanılmadı.,The settings were not saved.,Настройки не сохранены.
+hatalar:AYAR_PRIM_YALNIZ_PATRON,Prim faizini yalnız butik sahibi dəyişə bilər.,Only the boutique owner can change the bonus rate.,Изменить ставку премии может только владелец бутика.
+hatalar:AYAR_DIL_YALNIZ_PATRON,Butikin dilini yalnız butik sahibi dəyişə bilər.,Only the boutique owner can change the boutique language.,Изменить язык бутика может только владелец бутика.
+hatalar:AYAR_DIL_DESTEKLENMIYOR,Bu dil dəstəklənmir.,This language is not supported.,Этот язык не поддерживается.
+hatalar:YEDEK_V2_SIPARIS_VAR,Bu butikdə v2 sifarişləri var; v1 baxım əməliyyatı (ehtiyat nüsxənin yüklənməsi və ya təmizləmə) aparıla bilməz. Mövcud qeydlər dəyişmədi.,This boutique has v2 orders; a v1 maintenance operation (loading a backup or clearing) cannot run. Existing records were not changed.,В этом бутике есть заказы v2: операция обслуживания v1 (загрузка резервной копии или очистка) невозможна. Существующие записи не изменены.
+kargo:baslik.ad,Kanada ➔ Bakı kargo manifesti və çəki siyahısı,Canada ➔ Baku cargo manifest and packing list,Карго-манифест Канада ➔ Баку и упаковочный лист
+kargo:baslik.etiket,Rəsmi göndəriş paneli,Official dispatch panel,Официальная панель отправки
+kargo:baslik.aciklama,"Hava kargo şirkəti, gömrük bəyannaməsi və Bakı paylanma anbarı üçün tam iş cədvəli","The full working table for the air cargo company, the customs declaration and the Baku distribution warehouse","Полная рабочая таблица для авиакарго-компании, таможенной декларации и склада распределения в Баку"
+kargo:baslik.butik,Butik: {{butik}},Boutique: {{butik}},Бутик: {{butik}}
+kargo:baslik.butunButikler,Bütün butiklər,All boutiques,Все бутики
+kargo:eylem.siparislereDon,Sifarişlərə qayıt,Back to orders,Назад к заказам
+kargo:eylem.aramex,Aramex canlı sinxron,Aramex live sync,Онлайн-синхронизация с Aramex
+kargo:eylem.aramexIpucu,Aramex və ya aktiv kargo API ilə yoldakı bağlamaları indi yoxla,Check parcels in transit with Aramex or the active carrier API now,Проверить посылки в пути через Aramex или API активного перевозчика прямо сейчас
+kargo:eylem.sinxronlanir,Sinxronlaşdırılır...,Syncing...,Синхронизация...
+kargo:eylem.dispatch,Daily Dispatch idxalı,Import Daily Dispatch,Импорт Daily Dispatch
+kargo:eylem.dispatchIpucu,Aramex-in hər axşam e-poçtla göndərdiyi Daily Dispatch Excel/CSV faylını daxil et,Import the Daily Dispatch Excel/CSV file Aramex emails every evening,"Импортировать файл Daily Dispatch (Excel/CSV), который Aramex присылает по почте каждый вечер"
+kargo:eylem.oxunur,Oxunur...,Reading...,Чтение...
+kargo:eylem.excel,Excel yüklə (.xlsx),Download Excel (.xlsx),Скачать Excel (.xlsx)
+kargo:eylem.hazirlanir,Hazırlanır...,Preparing...,Подготовка...
+kargo:eylem.pdf,PDF yüklə,Download PDF,Скачать PDF
+kargo:eylem.capEt,Manifesti çap et,Print manifest,Распечатать манифест
+kargo:eylem.etiketler,Paket etiketləri (barkod),Package labels (barcode),Этикетки посылок (штрихкод)
+kargo:eylem.ayarlar,"Kargo provayderi (Aramex, DHL, UPS) və API ayarları","Carrier (Aramex, DHL, UPS) and API settings","Настройки перевозчика (Aramex, DHL, UPS) и API"
+kargo:istatistik.bagla,Cəmi bağlama,Total parcels,Всего посылок
+kargo:istatistik.paketBirimi_one,paket,parcel,посылка
+kargo:istatistik.paketBirimi_other,paket,parcels,посылки
+kargo:istatistik.mehsul,Cəmi məhsul,Total items,Всего товаров
+kargo:istatistik.ededBirimi_one,ədəd,item,товар
+kargo:istatistik.ededBirimi_other,ədəd,items,товара
+kargo:istatistik.deger,Sifariş dəyəri,Order value,Стоимость заказов
+kargo:istatistik.borc,Bakıda alınacaq (borc),To collect in Baku (due),К получению в Баку (долг)
+kargo:filtre.merhele,Mərhələ:,Stage:,Этап:
+kargo:filtre.yoldaVeDepoda_one,✈️ Yolda və anbarda ({{count}}),✈️ In transit and in warehouse ({{count}}),✈️ В пути и на складе ({{count}})
+kargo:filtre.yoldaVeDepoda_other,✈️ Yolda və anbarda ({{count}}),✈️ In transit and in warehouse ({{count}}),✈️ В пути и на складе ({{count}})
+kargo:filtre.yalnizUcusda_one,Yalnız uçuşda ({{count}}),In flight only ({{count}}),Только в полёте ({{count}})
+kargo:filtre.yalnizUcusda_other,Yalnız uçuşda ({{count}}),In flight only ({{count}}),Только в полёте ({{count}})
+kargo:filtre.kanadaDepo_one,Kanada anbarı ({{count}}),Canada warehouse ({{count}}),Склад в Канаде ({{count}})
+kargo:filtre.kanadaDepo_other,Kanada anbarı ({{count}}),Canada warehouse ({{count}}),Склад в Канаде ({{count}})
+kargo:filtre.bakiPaylanma_one,Bakıda paylanma ({{count}}),Baku delivery ({{count}}),Доставка по Баку ({{count}})
+kargo:filtre.bakiPaylanma_other,Bakıda paylanma ({{count}}),Baku delivery ({{count}}),Доставка по Баку ({{count}})
+kargo:filtre.butunSifarisler_one,Bütün sifarişlər ({{count}}),All orders ({{count}}),Все заказы ({{count}})
+kargo:filtre.butunSifarisler_other,Bütün sifarişlər ({{count}}),All orders ({{count}}),Все заказы ({{count}})
+kargo:filtre.whatsappKurye,WhatsApp kuryer mətni,WhatsApp courier text,Текст для курьера в WhatsApp
+kargo:filtre.whatsappIpucu,WhatsApp kuryer/paylayıcı mesajı kimi kopyala,Copy as a WhatsApp courier/distributor message,Скопировать как сообщение курьеру/распространителю в WhatsApp
+kargo:filtre.tarix,Tarix:,Date:,Дата:
+kargo:filtre.butunVaxtlar,Bütün vaxtlar,All time,За всё время
+kargo:filtre.buGun,Bu gün,Today,Сегодня
+kargo:filtre.son7,Son 7 gün,Last 7 days,Последние 7 дней
+kargo:filtre.buAy,Bu ay,This month,Этот месяц
+kargo:filtre.baslangic,Başlanğıc tarixi,Start date,Дата начала
+kargo:filtre.bitis,Bitmə tarixi,End date,Дата окончания
+kargo:filtre.yalnizBorclu,🔴 Yalnız qalıq borcu olanlar,🔴 Only with balance due,🔴 Только с остатком долга
+kargo:filtre.yalnizBorcluIpucu,Yalnız Bakıda nağd ödəyəcək müştəriləri göstər,Show only customers who will pay cash in Baku,"Показать только клиентов, которые заплатят наличными в Баку"
+kargo:filtre.sehir,Şəhər,City,Город
+kargo:filtre.butunSeherler,Bütün şəhərlər,All cities,Все города
+kargo:filtre.axtaris,"Müştəri, tel, kod, məhsul...","Customer, phone, code, item...","Клиент, телефон, код, товар..."
+kargo:filtre.axtarisiTemizle,Axtarışı təmizlə,Clear search,Очистить поиск
+kargo:filtre.sifirla,Bütün filtrləri sıfırla,Reset all filters,Сбросить все фильтры
+kargo:tablo.siyahi,Paket və bağlama siyahısı,Parcel list,Список посылок
+kargo:tablo.bagla_one,{{count}} bağlama,{{count}} parcel,{{count}} посылка
+kargo:tablo.bagla_other,{{count}} bağlama,{{count}} parcels,{{count}} посылки
+kargo:tablo.marsrut,Marşrut: Toronto / Vancouver (Kanada) ➔ Heydər Əliyev Beynəlxalq Hava Limanı (GYD / Bakı),Route: Toronto / Vancouver (Canada) ➔ Heydar Aliyev International Airport (GYD / Baku),Маршрут: Торонто / Ванкувер (Канада) ➔ Международный аэропорт имени Гейдара Алиева (GYD / Баку)
+kargo:tablo.tarix,Tarix:,Date:,Дата:
+kargo:tablo.filtrAraligi,Filtr aralığı: {{bas}} ➔ {{bit}},Filter range: {{bas}} ➔ {{bit}},Диапазон фильтра: {{bas}} ➔ {{bit}}
+kargo:tablo.evvel,Əvvəl,Start,Начало
+kargo:tablo.indiyedek,İndiyədək,Now,Сейчас
+kargo:tablo.butunDovriyye,Bütün aktiv dövriyyə,All active orders,Все активные заказы
+kargo:tablo.bosBaslik,Seçilmiş filtrə uyğun bağlama tapılmadı.,No parcels match the selected filters.,По выбранным фильтрам посылок не найдено.
+kargo:tablo.bosAciklama,"Tarix aralığını, mərhələni və ya axtarış sözünü dəyişib yenidən yoxlayın.","Change the date range, the stage or the search and try again.","Измените диапазон дат, этап или поиск и повторите попытку."
+kargo:tablo.sutun.sira,Sıra,No.,№
+kargo:tablo.sutun.musteri,Müştəri və əlaqə,Customer and contact,Клиент и контакты
+kargo:tablo.sutun.sehir,Şəhər / ünvan,City / address,Город / адрес
+kargo:tablo.sutun.mehsul,Məhsul və təsvir,Item and description,Товар и описание
+kargo:tablo.sutun.say,Say,Qty,Кол-во
+kargo:tablo.sutun.mebleg,Məbləğ,Amount,Сумма
+kargo:tablo.sutun.qaliq,Qalıq borc,Balance due,Остаток долга
+kargo:tablo.sutun.gomruk,Gömrük və Bakı təhvili,Customs and Baku delivery,Таможня и доставка в Баку
+kargo:tablo.sutun.merhele,Logistika mərhələsi,Logistics stage,Этап логистики
+kargo:tablo.sutun.qeyd,Qeyd və təlimat,Notes and instructions,Заметки и указания
+kargo:tablo.sutun.emeliyyat,Əməliyyat,Action,Действия
+kargo:tablo.adsizMusteri,Adsız müştəri,No name,Без имени
+kargo:tablo.nomreYoxdur,Nömrə yoxdur,No number,Номера нет
+kargo:tablo.qeyd,Qeyd: {{tarih}},Added: {{tarih}},Добавлено: {{tarih}}
+kargo:tablo.varsayilanSehir,Bakı,Baku,Баку
+kargo:tablo.bakiDaxili,Bakı daxili,Within Baku,В пределах Баку
+kargo:tablo.odenilib,Ödənilib: {{mebleg}},Paid: {{mebleg}},Оплачено: {{mebleg}}
+kargo:tablo.bakidaAlinacaq,Bakıda alınacaq,To collect in Baku,К получению в Баку
+kargo:tablo.tamOdenilib,✓ Tam ödənilib,✓ Fully paid,✓ Оплачено полностью
+kargo:tablo.finYoxdur,FİN qeyd edilməyib,No FIN given,FIN не указан
+kargo:tablo.bolgeMerkezi,Bölgə üzrə mərkəz,Regional hub,Региональный центр
+kargo:tablo.kargo,Kargo:,Cargo:,Карго:
+kargo:tablo.kanada,Kanada: {{kod}},Canada: {{kod}},Канада: {{kod}}
+kargo:tablo.ozelNot,📌 Qeyd:,📌 Note:,📌 Заметка:
+kargo:tablo.bakiNotu,💬 Bakı qeydi:,💬 Baku note:,💬 Заметка по Баку:
+kargo:tablo.detayAc,Sifariş təfərrüatını aç,Open order details,Открыть детали заказа
+kargo:tablo.beyanname,Rəsmi bəyannamə:,Official declaration:,Официальная декларация:
+kargo:tablo.beyannameMetni,Bu manifestdəki bütün bağlamalar təhlükəsizlik və gömrük qaydalarına uyğun Toronto anbarında təhvil verilmiş və qeydiyyata alınmışdır.,All parcels in this manifest were handed over and registered at the Toronto warehouse in line with security and customs rules.,Все посылки в этом манифесте были переданы и зарегистрированы на складе в Торонто в соответствии с правилами безопасности и таможни.
+kargo:tablo.toplamBagla,Cəmi bağlama:,Total parcels:,Всего посылок:
+kargo:tablo.toplamEded,Cəmi ədəd:,Total items:,Всего товаров:
+kargo:tablo.cemiMebleg,Cəmi məbləğ:,Total amount:,Общая сумма:
+kargo:tablo.bakidaAlinacaqMebleg,Bakıda alınacaq: {{mebleg}},To collect in Baku: {{mebleg}},К получению в Баку: {{mebleg}}
+kargo:durum.KANADA_SATINALIM_BEKLIYOR,Kanada alışı,Canada purchase,Покупка в Канаде
+kargo:durum.KANADA_DEPO,Kanada anbarı,Canada warehouse,Склад в Канаде
+kargo:durum.ULUSLARARASI_KARGO,Uçuşda / kargo,In flight / cargo,В полёте / карго
+kargo:durum.BAKU_DAGITIM_ARKADAS,Bakıda paylanma,Baku delivery,Доставка по Баку
+kargo:durum.TESLIM_EDILDI,Təhvil verildi,Delivered,Доставлен
+kargo:bildirim.senkronOk,Kargo statusları yeniləndi.,Cargo statuses were updated.,Статусы карго обновлены.
+kargo:bildirim.senkronHata,Sinxronlaşdırma alınmadı.,The sync failed.,Синхронизация не удалась.
+kargo:bildirim.serverHatasi,Server xətası: {{mesaj}},Server error: {{mesaj}},Ошибка сервера: {{mesaj}}
+kargo:bildirim.excelOk,Excel faylı oxundu və sifarişlərə bağlandı.,The Excel file was read and matched to orders.,Файл Excel прочитан и сопоставлен с заказами.
+kargo:bildirim.faylHata,Fayl oxunarkən xəta baş verdi.,The file could not be read.,Не удалось прочитать файл.
+kargo:bildirim.yuklemeHatasi,Yükləmə xətası: {{mesaj}},Upload error: {{mesaj}},Ошибка загрузки: {{mesaj}}
+kargo:bildirim.yazdirmaHata,Çap pəncərəsi açılmadı. PDF yükləməni istifadə edin.,The print dialog could not open. Use the PDF download.,Не удалось открыть окно печати. Используйте скачивание PDF.
+kargo:bildirim.etiketHata,Etiket çap pəncərəsi açılmadı.,The label print dialog could not open.,Не удалось открыть окно печати этикеток.
+kargo:istatistik.paketBirimi_few,,,посылки
+kargo:istatistik.paketBirimi_many,,,посылок
+kargo:istatistik.ededBirimi_few,,,товара
+kargo:istatistik.ededBirimi_many,,,товаров
+kargo:filtre.yoldaVeDepoda_few,,,✈️ В пути и на складе ({{count}})
+kargo:filtre.yoldaVeDepoda_many,,,✈️ В пути и на складе ({{count}})
+kargo:filtre.yalnizUcusda_few,,,Только в полёте ({{count}})
+kargo:filtre.yalnizUcusda_many,,,Только в полёте ({{count}})
+kargo:filtre.kanadaDepo_few,,,Склад в Канаде ({{count}})
+kargo:filtre.kanadaDepo_many,,,Склад в Канаде ({{count}})
+kargo:filtre.bakiPaylanma_few,,,Доставка по Баку ({{count}})
+kargo:filtre.bakiPaylanma_many,,,Доставка по Баку ({{count}})
+kargo:filtre.butunSifarisler_few,,,Все заказы ({{count}})
+kargo:filtre.butunSifarisler_many,,,Все заказы ({{count}})
+kargo:tablo.bagla_few,,,{{count}} посылки
+kargo:tablo.bagla_many,,,{{count}} посылок
+ortak:dil.sec,Dili dəyiş,Change language,Сменить язык
+ortak:dil.baslik,Dil,Language,Язык
+ortak:bagla,Bağla,Close,Закрыть
+ortak:baglantiHatasi,Serverlə əlaqə qurularkən xəta baş verdi.,Could not connect to the server.,Не удалось подключиться к серверу.
+ortak:xetaBasVerdi,Xəta baş verdi.,Something went wrong.,Что-то пошло не так.
+ortak:anaSehifeyeQayit,Ana səhifəyə qayıt,Back to the home page,Вернуться на главную страницу
+ortak:marka.ad,TOMNAP,TOMNAP,TOMNAP
+ortak:marka.harf,T,T,T
+ortak:kopyala,Kopyala,Copy,Копировать
+ortak:kopyalandi,Kopyalandı,Copied,Скопировано
+ortak:yukleniyor,Yüklənir…,Loading…,Загрузка…
+ortak:lojistik.KANADA_SATINALIM_BEKLIYOR,Kanada alışı gözlənilir,Awaiting purchase in Canada,Ожидает покупки в Канаде
+ortak:lojistik.KANADA_DEPO,Kanada anbarında,In the Canada warehouse,На складе в Канаде
+ortak:lojistik.ULUSLARARASI_KARGO,Beynəlxalq kargoda,In international cargo,В международной доставке
+ortak:lojistik.BAKU_DAGITIM_ARKADAS,Bakıda paylanmada,Out for delivery in Baku,Доставляется по Баку
+ortak:lojistik.TESLIM_EDILDI,Təhvil verilib,Delivered,Доставлен
+siparis:detay.kimlikRozeti,ID,ID,ID
+siparis:detay.baslik,Sifariş təfərrüatı: {{musteri}},Order details: {{musteri}},Детали заказа: {{musteri}}
+siparis:detay.olusturulma,Yaradılıb: {{tarih}} • Kanal: {{kanal}},Created: {{tarih}} • Channel: {{kanal}},Создан: {{tarih}} • Канал: {{kanal}}
+siparis:detay.hamMesaj,Müştərinin göndərdiyi ilkin mesaj,The customer's original message,Исходное сообщение клиента
+siparis:detay.aiGirisi,AI girişi,AI intake,Ввод через ИИ
+siparis:detay.finans,Ödəniş vəziyyəti,Payment status,Статус оплаты
+siparis:detay.toplam,Ümumi məbləğ:,Total:,Итого:
+siparis:detay.tahsilEdilen,Alınıb (Bakı):,Collected (Baku):,Получено (Баку):
+siparis:detay.kalanBorc,Qalıq borc:,Balance due:,Остаток долга:
+siparis:detay.lojistik,Logistika vəziyyəti,Logistics status,Статус логистики
+siparis:detay.sehir,Çatdırılma şəhəri:,Delivery city:,Город доставки:
+siparis:detay.sehirVarsayilan,Bakı,Baku,Баку
+siparis:detay.adres,Ünvan:,Address:,Адрес:
+siparis:detay.belirtilmeyib,Göstərilməyib,Not given,Не указан
+siparis:detay.elaqe,Əlaqə:,Contact:,Контакт:
+siparis:detay.telefonYoxdur,Telefon yoxdur,No phone,Телефон не указан
+siparis:detay.kanada.baslik,🇨🇦 Kanada alış qəbzi / fakturası və mağaza,🇨🇦 Canada purchase receipt / invoice and store,🇨🇦 Чек / счёт о покупке в Канаде и магазин
+siparis:detay.kanada.etiket,Kanada əməliyyatı,Canada operations,Операции в Канаде
+siparis:detay.kanada.magaza,Alındığı mağaza / ticarət mərkəzi,Store / mall,Магазин / торговый центр
+siparis:detay.kanada.magazaOrnek,Məs: Toronto Eaton Centre (Zara / Sephora),e.g. Toronto Eaton Centre (Zara / Sephora),напр. Toronto Eaton Centre (Zara / Sephora)
+siparis:detay.kanada.alisTutari,Kanada alış məbləği (CAD $),Purchase price in Canada (CAD $),Цена покупки в Канаде (CAD $)
+siparis:detay.kanada.fatura,Qəbz / faktura şəkli və ya sənədi,Receipt / invoice photo or document,Фото или документ чека / счёта
+siparis:detay.kanada.faturaYukle,Qəbz / faktura şəkli yüklə,Upload receipt / invoice photo,Загрузить фото чека / счёта
+siparis:detay.kanada.faturaGorseli,Faktura,Invoice,Счёт
+siparis:detay.kanada.faturaYuklendi,Qəbz yükləndi,Receipt uploaded,Чек загружен
+siparis:detay.kanada.kaldir,Sil,Remove,Удалить
+siparis:detay.kanada.faturaYoxdur,Qəbz yüklənməyib,No receipt uploaded,Чек не загружен
+siparis:detay.baki.baslik,Bakı kuryeri və gömrük (FİN) məlumatları,Baku courier and customs (FIN) details,Курьер в Баку и данные для таможни (FIN)
+siparis:detay.baki.etiket,Bakıda paylanma,Delivery in Baku,Доставка в Баку
+siparis:detay.baki.fin,Müştəri FİN kodu / Smart Customs (gömrük alıcısı),Customer FIN code / Smart Customs (customs recipient),FIN-код клиента / Smart Customs (получатель для таможни)
+siparis:detay.baki.finOrnek,Məs: 7ABC123 (7 simvollu FİN),e.g. 7ABC123 (7-character FIN),напр. 7ABC123 (FIN из 7 символов)
+siparis:detay.baki.finNotu,* Kargo qaiməsində rəsmi alıcı kimi bəyan edilir.,* Declared as the official recipient on the air waybill.,* Указывается в авианакладной как официальный получатель.
+siparis:detay.notlar.baslik,İzləmə kodları və ödəniş qeydləri,Tracking codes and payment notes,Трек-коды и заметки об оплате
+siparis:detay.notlar.kanadaKodu,🇨🇦 Kanada mağaza / kargo kodu,🇨🇦 Canada store / cargo code,🇨🇦 Код магазина / груза в Канаде
+siparis:detay.notlar.kanadaKoduYarat,Yeni Kanada izləmə kodu yarat,Generate a new Canada tracking code,Создать новый трек-код Канады
+siparis:detay.notlar.avtoYarat,Avto yarat,Generate,Создать
+siparis:detay.notlar.kargoKodu,✈️ Beynəlxalq hava kargo kodu,✈️ International air cargo code,✈️ Код международной авиадоставки
+siparis:detay.notlar.kargoKoduYarat,Yeni beynəlxalq hava kargo kodu yarat,Generate a new international air cargo code,Создать новый код международной авиадоставки
+siparis:detay.notlar.talimat,Müştərinin xüsusi çatdırılma və sürücü / əməliyyat təlimatı,Customer's delivery and driver / operations instructions,Указания клиента по доставке и инструкции водителю / операторам
+siparis:detay.notlar.talimatEtiket,Kargo / əldən təlimat,Cargo / hand delivery,Карго / доставка из рук в руки
+siparis:detay.notlar.talimatOrnek,"Məs: Bakıya çatanda xəbər edilsin, sürücümüz özü gedib götürəcək (kargo yox, əldən təhvil)","e.g. Let us know when it arrives in Baku; our driver will collect it (no cargo, hand delivery)","напр. Сообщите, когда придёт в Баку; наш водитель заберёт (без карго, из рук в руки)"
+siparis:detay.notlar.talimatNotu,"* Bu qeyd kargo manifestində və Bakı çatdırılma hesabatında görünür; sürücü, kuryer və Bakıdakı dostumuz onu nəzərə alır.","* This note appears on the cargo manifest and the Baku delivery report; the driver, the courier and our Baku contact follow it.","* Эта заметка попадает в карго-манифест и отчёт о доставке по Баку; ей следуют водитель, курьер и наш контакт в Баку."
+siparis:detay.notlar.tahsilat,Bakı ödəniş qeydi,Baku payment note,Заметка об оплате в Баку
+siparis:detay.notlar.tahsilatOrnek,"Məs: 20 manat Bakıda əldən verildi, qalanı sonra ödəniləcək...","e.g. 20 AZN paid by hand in Baku, the rest later...","напр. 20 AZN оплачено на руки в Баку, остальное позже..."
+siparis:detay.kaydedildi,Sifariş qeydləri və izləmə kodları yeniləndi.,Order notes and tracking codes were updated.,Заметки к заказу и трек-коды обновлены.
+siparis:detay.whatsapp.baslik,Müştəri üçün hazır WhatsApp mesajı,Ready WhatsApp message for the customer,Готовое сообщение клиенту в WhatsApp
+siparis:detay.whatsapp.eksikBilgi,AI bu sifarişdə bu məlumatların çatışmadığını aşkar etdi: {{eksikler}},The AI found that this order is missing: {{eksikler}},"ИИ обнаружил, что в этом заказе не хватает: {{eksikler}}"
+siparis:detay.whatsapp.teslimat,Çatdırılma mərhələsində Bakıdakı paylayıcı üçün müştəriyə bildiriş:,Message to the customer for the Baku delivery step:,Сообщение клиенту об этапе доставки в Баку:
+siparis:detay.whatsapp.ac,WhatsApp bildirişini aç,Open WhatsApp message,Открыть сообщение в WhatsApp
+siparis:detay.saxlanildi,Saxlanıldı,Saved,Сохранено
+siparis:detay.yaddaSaxla,Yadda saxla,Save,Сохранить
+siparis:detay.degisiklikYok,Dəyişiklik yoxdur.,No changes.,Изменений нет.
+siparis:detay.kaydedilmedi,Saxlanılmadı. Bildirişdəki səbəbə baxın.,Not saved. See the notification for the reason.,Не сохранено. Причина указана в уведомлении.
+siparis:detay.faturaCokBuyuk,Faktura şəkli ən çox 3 MB ola bilər.,The invoice image can be at most 3 MB.,Изображение счёта не должно превышать 3 МБ.
+siparis:detay.alisFiyatiGecersiz,Alış qiyməti (CAD) düzgün rəqəm olmalıdır.,The purchase price (CAD) must be a valid number.,Цена покупки (CAD) должна быть корректным числом.
+siparis:finans.BEKLIYOR,Ödənməyib,Unpaid,Не оплачен
+siparis:finans.KISMI_ODEME,Qismən ödənilib,Partly paid,Оплачен частично
+siparis:finans.ODENDI,Ödənilib,Paid,Оплачено
+siparis:lojistik.KANADA_SATINALIM_BEKLIYOR,Kanada alışı gözlənilir,Awaiting purchase in Canada,Ожидает покупки в Канаде
+siparis:lojistik.KANADA_DEPO,Kanada anbarında,In the Canada warehouse,На складе в Канаде
+siparis:lojistik.ULUSLARARASI_KARGO,Beynəlxalq kargoda,In international cargo,В международной доставке
+siparis:lojistik.BAKU_DAGITIM_ARKADAS,Bakıda paylanmada,Out for delivery in Baku,Доставляется по Баку
+siparis:lojistik.TESLIM_EDILDI,Təhvil verilib,Delivered,Доставлен
+v2:ayarlar.baslik,Butik ayarları (v2),Boutique settings (v2),Настройки бутика (v2)
+v2:ayarlar.kaydedilmeyib,Hələ yadda saxlanılmayıb: standart dəyərlər göstərilir.,Not saved yet: showing the defaults.,Ещё не сохранено: показаны значения по умолчанию.
+v2:ayarlar.beyan,Aylıq bəyan limiti (USD),Monthly declaration limit (USD),Месячный лимит декларации (USD)
+v2:ayarlar.beyanIpucu,Alıcı başına aylıq cəm; standart 300.,Monthly total per recipient; default 300.,Месячная сумма на одного получателя; по умолчанию 300.
+v2:ayarlar.kg,Standart kq qiyməti (AZN),Default price per kg (AZN),Цена за кг по умолчанию (AZN)
+v2:ayarlar.kgIpucu,Boş: təyin edilməyib.,Empty: not set.,Пусто: не задано.
+v2:ayarlar.prim,Standart prim faizi (%),Default bonus rate (%),Ставка премии по умолчанию (%)
+v2:ayarlar.primIpucu,Prim öncəsi mənfəətdən; standart 5%.,Of the profit before bonus; default 5%.,От прибыли до вычета премии; по умолчанию 5%.
+v2:ayarlar.yaddaSaxla,Yadda saxla,Save,Сохранить
+v2:ayarlar.degisiklikYoxdur,Dəyişiklik yoxdur.,No changes.,Изменений нет.
+v2:ayarlar.saxlanildi,Ayarlar yadda saxlanıldı.,Settings saved.,Настройки сохранены.
+v2:ayarlar.xeta,Əməliyyat tamamlanmadı.,The action was not completed.,Действие не выполнено.
+v2:ayarlar.beyanHata,"Aylıq bəyan limiti 0-dan böyük, ən çox 100.000 USD olmalıdır.","The monthly declaration limit must be above 0 and at most 100,000 USD.",Месячный лимит декларации должен быть больше 0 и не более 100 000 USD.
+v2:ayarlar.kqHata,Kq qiyməti 0–10.000 AZN arası rəqəm olmalıdır (boş: təyin edilməyib).,"The price per kg must be a number from 0 to 10,000 AZN (empty: not set).",Цена за кг должна быть числом от 0 до 10 000 AZN (пусто: не задано).
+v2:ayarlar.primHata,Prim faizi 0–100 arası rəqəm olmalıdır.,The bonus rate must be a number from 0 to 100.,Ставка премии должна быть числом от 0 до 100.
+v2:ayarlar.dil.baslik,Butikin dili,Boutique language,Язык бутика
+v2:ayarlar.dil.aciklama,"Sənədlər (manifest, etiket, tahsilat siyahısı) həmişə bu dildədir. Giriş edən hər kəs üçün standart arayüz dili də budur; cihazda əllə seçilmiş dil öndədir.","Documents (manifest, labels, collection list) are always in this language. It is also everyone's default interface language after sign-in; a language chosen on the device comes first.","Документы (манифест, этикетки, список к получению) всегда выпускаются на этом языке. Это также язык интерфейса по умолчанию для всех после входа; язык, выбранный на устройстве, имеет приоритет."
+v2:ayarlar.dil.yalnizPatron,Yalnız butik sahibi dəyişə bilər.,Only the boutique owner can change it.,Изменить может только владелец бутика.
+v2:ayarlar.dil.saxlanildi,Butikin dili yadda saxlanıldı.,The boutique language was saved.,Язык бутика сохранён.
+v2:kabuk.baslik,TOMNAP v2,TOMNAP v2,TOMNAP v2
+v2:kabuk.altBaslik,Önizləmə — yeni axın hələ hazırlanır,Preview — the new flow is still being built,Предпросмотр — новый процесс ещё создаётся
+v2:kabuk.butik,Butik,Boutique,Бутик
+v2:kabuk.butikSecin,Butik seçin,Choose a boutique,Выберите бутик
+v2:kabuk.panelQayit,Mövcud panelə qayıt,Back to the current panel,Вернуться к текущей панели
+v2:kabuk.serverYoxlanilir,Server yoxlanılır…,Checking the server…,Проверяем сервер…
+v2:kabuk.aktivDeyil,Serverdə v2 axını aktiv deyil (FF_V2_FLOW).,The v2 flow is not active on the server (FF_V2_FLOW).,Процесс v2 не активен на сервере (FF_V2_FLOW).
+v2:kabuk.yoxlanilaBilmedi,Server v2 vəziyyəti yoxlanıla bilmədi.,The server's v2 state could not be checked.,Не удалось проверить состояние v2 на сервере.
+v2:kabuk.butikGerekli,v2 məlumatı bir butikə aiddir. Davam etmək üçün yuxarıdan butik seçin.,v2 data belongs to one boutique. Choose a boutique above to continue.,"Данные v2 принадлежат одному бутику. Чтобы продолжить, выберите бутик выше."
+v2:kabuk.bolmeler,v2 bölmələri,v2 sections,Разделы v2
+v2:kabuk.bolmeYoxdur,Rolunuz üçün hələ v2 bölməsi yoxdur.,There is no v2 section for your role yet.,Для вашей роли пока нет разделов v2.
+v2:kabuk.sekme.siparisler,Sifarişlər,Orders,Заказы
+v2:kabuk.sekme.kasa,Kassa,Cash desk,Касса
+v2:kabuk.sekme.kacaklar,Qaçaqlar,Leaks,Утечки
+v2:kabuk.sekme.kurlar,Kurlar,Rates,Курсы
+v2:kabuk.sekme.ayarlar,Ayarlar,Settings,Настройки
+v2:asama.onay,{{musteri}}: {{eski}} → {{yeni}}. Mərhələ geri qaytarıla bilməz. Davam edilsin?,{{musteri}}: {{eski}} → {{yeni}}. The stage cannot be moved back. Continue?,{{musteri}}: {{eski}} → {{yeni}}. Вернуть этап назад нельзя. Продолжить?
+v2:kasa.tutarGecersiz,"Məbləğ 0-dan böyük, ən çox 2 onluq olmalıdır.",The amount must be above 0 with at most 2 decimals.,"Сумма должна быть больше 0, не более чем с 2 знаками после запятой."
+v2:kasa.enCox,Ən çox {{mebleg}} AZN yazıla bilər.,At most {{mebleg}} AZN can be recorded.,Можно записать не более {{mebleg}} AZN.
+v2:kasa.ekran.yuklenmedi,Sifarişlər yüklənmədi.,Orders could not be loaded.,Не удалось загрузить заказы.
+v2:kasa.ekran.baslik,Kassa (v2),Cash desk (v2),Касса (v2)
+v2:kasa.ekran.bos,Hələ v2 sifarişi yoxdur.,No v2 orders yet.,Заказов v2 пока нет.
+v2:kasa.ekran.tarix,Tarix,Date,Дата
+v2:kasa.ekran.musteri,Müştəri,Customer,Клиент
+v2:kasa.ekran.cem,Cəm,Total,Итого
+v2:kasa.ekran.odenib,Ödənib,Paid,Оплачено
+v2:kasa.ekran.qaliq,Qalıq,Balance,Остаток
+v2:kasa.ekran.veziyyet,Vəziyyət,Status,Статус
+v2:kasa.finans.BEKLIYOR,Ödənməyib,Unpaid,Не оплачен
+v2:kasa.finans.KISMI_ODEME,Qismən,Partial,Частично
+v2:kasa.finans.ODENDI,Ödənib,Paid,Оплачено
+v2:kasa.kurye.yuklenmedi,Kuryer qalıqları yüklənmədi.,Courier balances could not be loaded.,Не удалось загрузить балансы курьеров.
+v2:kasa.kurye.alindi,{{mebleg}} kassaya təhvil alındı.,{{mebleg}} received into the cash desk.,В кассу принято: {{mebleg}}.
+v2:kasa.kurye.alinmadi,Təhvil alınmadı.,The hand-over failed.,Передача не удалась.
+v2:kasa.kurye.baslik,Kuryerlərdə olan nağd pul,Cash held by couriers,Наличные на руках у курьеров
+v2:kasa.kurye.bos,Kuryerlərdə nağd pul yoxdur.,No cash is held by couriers.,У курьеров нет наличных.
+v2:kasa.kurye.kuryer,Kuryer,Courier,Курьер
+v2:kasa.kurye.yigilib,Yığılıb,Collected,Собрано
+v2:kasa.kurye.tehvilVerilib,Təhvil verilib,Handed over,Передано
+v2:kasa.kurye.qaliq,Qalıq,Balance,Остаток
+v2:kasa.kurye.tehvilAl,Təhvil al,Receive,Принять
+v2:kasa.kurye.aciqOdenisler,{{kuryer}}: açıq ödənişlər,{{kuryer}}: open payments,{{kuryer}}: открытые платежи
+v2:kasa.kurye.kassayaTehvilAl,{{mebleg}} kassaya təhvil al,Receive {{mebleg}} into the cash desk,Принять в кассу {{mebleg}}
+v2:kasa.nakit.yuklenmedi,Nağd pul məlumatı yüklənmədi.,Cash details could not be loaded.,Не удалось загрузить данные о наличных.
+v2:kasa.nakit.yazildi,{{mebleg}} nağd yazıldı.,{{mebleg}} cash recorded.,Наличные записаны: {{mebleg}}.
+v2:kasa.nakit.yazilmadi,Ödəniş yazılmadı.,The payment was not recorded.,Платёж не записан.
+v2:kasa.nakit.baslik,Üzərimdə olan nağd pul: {{mebleg}},Cash I hold: {{mebleg}},Наличные у меня: {{mebleg}}
+v2:kasa.nakit.siparis,{{musteri}} · qalıq {{mebleg}},{{musteri}} · balance {{mebleg}},{{musteri}} · остаток {{mebleg}}
+v2:kasa.nakit.alinanEtiket,{{musteri}} üçün alınan nağd,Cash received from {{musteri}},"Наличные, полученные от клиента {{musteri}}"
+v2:kasa.nakit.aldim,Nağd aldım,Cash received,Наличные получены
+v2:odeme.yontem.NAKIT,Nağd,Cash,Наличные
+v2:odeme.yontem.KART,Kart,Card,Карта
+v2:odeme.yontem.HAVALE,Köçürmə,Transfer,Перевод
+v2:odeme.yontem.DIGER,Digər,Other,Другое
+v2:odeme.kaynak.TESLIMAT,Çatdırılma,Delivery,Доставка
+v2:odeme.kaynak.BUTIK,Butik,Boutique,Бутик
+v2:odeme.kaynak.ONLINE,Onlayn,Online,Онлайн
+v2:odeme.durum.ODENMEDI,Ödənməyib,Unpaid,Не оплачен
+v2:odeme.durum.KISMI,Qismən,Partly paid,Оплачен частично
+v2:odeme.durum.TAM,Tam,Paid,Оплачено
+v2:odeme.durum.FAZLA,Artıq ödənib,Overpaid,Переплата
+v2:odeme.tutarGecersiz,"Məbləğ 0-1.000.000 AZN, ən çox 2 onluq olmalıdır.","The amount must be 0–1,000,000 AZN with at most 2 decimals.","Сумма должна быть от 0 до 1 000 000 AZN, не более чем с 2 знаками после запятой."
+v2:odeme.qeydUzun,Qeyd ən çox 500 simvol ola bilər.,The note can be at most 500 characters.,Заметка не может быть длиннее 500 символов.
+v2:odeme.sebebYaz,Geri qaytarmanın səbəbini yazın.,Write the reason for the reversal.,Укажите причину отмены.
+v2:odeme.sebebUzun,Səbəb ən çox 500 simvol ola bilər.,The reason can be at most 500 characters.,Причина не может быть длиннее 500 символов.
+v2:odeme.defter.yazildi,Ödəniş yazıldı.,Payment recorded.,Платёж записан.
+v2:odeme.defter.geriQaytarildi,Ödəniş geri qaytarıldı.,Payment reversed.,Платёж отменён.
+v2:odeme.defter.yuklenir,Ödəniş dəftəri yüklənir…,Loading the payment ledger…,Загружаем журнал платежей…
+v2:odeme.defter.etiket,Ödəniş dəftəri,Payment ledger,Журнал платежей
+v2:odeme.defter.cem,Cəm,Total,Итого
+v2:odeme.defter.odenib,Ödənib,Paid,Оплачено
+v2:odeme.defter.qaliq,Qalıq,Balance,Остаток
+v2:odeme.defter.veziyyet,Vəziyyət,Status,Статус
+v2:odeme.defter.tarix,Tarix,Date,Дата
+v2:odeme.defter.mebleg,Məbləğ,Amount,Сумма
+v2:odeme.defter.usul,Üsul,Method,Способ
+v2:odeme.defter.menbe,Mənbə,Source,Источник
+v2:odeme.defter.qeyd,Qeyd,Note,Заметка
+v2:odeme.defter.bos,Hələ ödəniş yoxdur.,No payments yet.,Платежей пока нет.
+v2:odeme.defter.geriQaytarma,Geri qaytarma:,Reversal:,Отмена:
+v2:odeme.defter.geriQaytarilib,(geri qaytarılıb),(reversed),(отменён)
+v2:odeme.defter.sebeb,Geri qaytarmanın səbəbi,Reason for the reversal,Причина отмены
+v2:odeme.defter.tesdiqle,Təsdiqlə,Confirm,Подтвердить
+v2:odeme.defter.geriQaytar,Geri qaytar,Reverse,Отменить
+v2:odeme.defter.meblegAzn,Məbləğ (AZN),Amount (AZN),Сумма (AZN)
+v2:odeme.defter.odenisYaz,Ödəniş yaz,Record payment,Записать платёж
+v2:siparis.hata.musteriAdi,Müştəri adı lazımdır.,The customer name is required.,Укажите имя клиента.
+v2:siparis.hata.sahip,Sifarişin sahibini seçin.,Choose the order owner.,Выберите владельца заказа.
+v2:siparis.hata.satirYok,Ən azı bir sətir lazımdır.,At least one line is required.,Нужна хотя бы одна строка.
+v2:siparis.hata.cokSatir,Ən çox 100 sətir ola bilər.,At most 100 lines are allowed.,Допускается не более 100 строк.
+v2:siparis.hata.urunAdi,{{sira}}. sətir: məhsul adı lazımdır.,Line {{sira}}: the item name is required.,Строка {{sira}}: укажите название товара.
+v2:siparis.hata.adet,{{sira}}. sətir: say 1-1000 arası tam ədəd olmalıdır.,Line {{sira}}: the quantity must be a whole number from 1 to 1000.,Строка {{sira}}: количество должно быть целым числом от 1 до 1000.
+v2:siparis.hata.fiyat,"{{sira}}. sətir: qiymət 0-1.000.000 AZN, ən çox 2 onluq olmalıdır.","Line {{sira}}: the price must be 0–1,000,000 AZN with at most 2 decimals.","Строка {{sira}}: цена должна быть от 0 до 1 000 000 AZN, не более чем с 2 знаками после запятой."
+v2:siparis.baslik,Sifarişlər (v2),Orders (v2),Заказы (v2)
+v2:siparis.saxlanildi,Sifariş yadda saxlanıldı.,The order was saved.,Заказ сохранён.
+v2:siparis.mesaj,Müştəri mesajı,Customer message,Сообщение клиента
+v2:siparis.gorselEkle,Ekran görüntüsü əlavə et ({{sayi}}/{{en}}),Add a screenshot ({{sayi}}/{{en}}),Добавить скриншот ({{sayi}}/{{en}})
+v2:siparis.gorselSil,{{ad}} şəklini sil,Remove image {{ad}},Удалить изображение {{ad}}
+v2:siparis.ayrisdirilir,Ayrışdırılır…,Splitting…,Разбираем…
+v2:siparis.aiAyir,AI ilə sətirlərə ayır,Split into lines with AI,Разбить на строки с помощью ИИ
+v2:siparis.alan.musteriAdi,Müştəri adı,Customer name,Имя клиента
+v2:siparis.alan.telefon,Telefon,Phone,Телефон
+v2:siparis.alan.instagram,Instagram,Instagram,Instagram
+v2:siparis.alan.sehir,Şəhər,City,Город
+v2:siparis.alan.adres,Ünvan,Address,Адрес
+v2:siparis.alan.ozelNot,Qeyd,Note,Заметка
+v2:siparis.kartaBagli,Müştəri kartına bağlıdır ({{id}}).,Linked to customer card ({{id}}).,Привязано к карточке клиента ({{id}}).
+v2:siparis.baglantiSil,Bağı sil,Remove the link,Убрать привязку
+v2:siparis.kartYoxdur,Müştəri kartı seçilməyib; yeni müştəri kimi yazılacaq.,No customer card chosen; saved as a new customer.,Карточка клиента не выбрана; сохраняется как новый клиент.
+v2:siparis.sahib,Sifarişin sahibi,Order owner,Владелец заказа
+v2:siparis.sahibSecin,Sahibi seçin,Choose the owner,Выберите владельца
+v2:siparis.men,Mən (sifarişi yaradan),Me (creating the order),Я (создаю заказ)
+v2:siparis.cem,Cəm:,Total:,Итого:
+v2:siparis.saxlanilir,Yadda saxlanılır…,Saving…,Сохраняем…
+v2:siparis.tesdiqle,Sifarişi təsdiqlə və yadda saxla,Confirm and save the order,Подтвердить и сохранить заказ
+v2:gorsel.tur,"Yalnız JPEG, PNG və ya WebP şəkil seçin.","Choose a JPEG, PNG or WebP image only.","Выберите только изображение JPEG, PNG или WebP."
+v2:gorsel.hazirlanmadi,Şəkil hazırlana bilmədi.,The image could not be prepared.,Не удалось подготовить изображение.
+v2:gorsel.cokBoyuk,Şəkil çox böyükdür; daha kiçik ekran görüntüsü seçin.,The image is too large; choose a smaller screenshot.,Изображение слишком большое; выберите скриншот поменьше.
+v2:ortak.xeta,Əməliyyat tamamlanmadı.,The action was not completed.,Действие не выполнено.
+v2:satir.mehsul,Məhsul,Item,Товар
+v2:satir.olcu,Ölçü,Size,Размер
+v2:satir.reng,Rəng,Colour,Цвет
+v2:satir.say,Say,Qty,Кол-во
+v2:satir.qiymet,Qiymət (AZN),Price (AZN),Цена (AZN)
+v2:satir.olke,Ölkə,Country,Страна
+v2:satir.cem,Cəm,Total,Итого
+v2:satir.ekle,Sətir əlavə et,Add a line,Добавить строку
+v2:satir.etiket.mehsul,{{sira}}. sətir məhsul,Line {{sira}} item,Товар в строке {{sira}}
+v2:satir.etiket.olcu,{{sira}}. sətir ölçü,Line {{sira}} size,Размер в строке {{sira}}
+v2:satir.etiket.reng,{{sira}}. sətir rəng,Line {{sira}} colour,Цвет в строке {{sira}}
+v2:satir.etiket.say,{{sira}}. sətir say,Line {{sira}} quantity,Количество в строке {{sira}}
+v2:satir.etiket.qiymet,{{sira}}. sətir qiymət,Line {{sira}} price,Цена в строке {{sira}}
+v2:satir.etiket.olke,{{sira}}. sətir ölkə,Line {{sira}} country,Страна в строке {{sira}}
+v2:satir.etiket.sil,{{sira}}. sətri sil,Remove line {{sira}},Удалить строку {{sira}}
+v2:liste.asamaDegisti,Mərhələ dəyişdirildi.,The stage was changed.,Этап изменён.
+v2:liste.tarix,Tarix,Date,Дата
+v2:liste.musteri,Müştəri,Customer,Клиент
+v2:liste.satir,Sətir,Lines,Строки
+v2:liste.sahib,Sahib,Owner,Владелец
+v2:liste.veziyyet,Vəziyyət,Status,Статус
+v2:liste.cem,Cəm (AZN),Total (AZN),Итого (AZN)
+v2:liste.gozleyin,Gözləyin…,Please wait…,Подождите…
+v2:liste.novbetiMerhele,Növbəti mərhələ →,Next stage →,Следующий этап →
+v2:kacak.yuklenmedi,Qaçaqlar yüklənmədi.,Leaks could not be loaded.,Не удалось загрузить утечки.
+v2:kacak.baslik,Qaçaqlar (v0),Leaks (v0),Утечки (v0)
+v2:kacak.yoxdur,Yoxdur.,None.,Нет.
+v2:kacak.q4.baslik,"Q4 · Təhvil verilib, ödənməyib ({{sayi}})","Q4 · Delivered, not paid ({{sayi}})","Q4 · Доставлено, не оплачено ({{sayi}})"
+v2:kacak.q4.musteri,Müştəri,Customer,Клиент
+v2:kacak.q4.kuryer,Kuryer,Courier,Курьер
+v2:kacak.q4.qaliq,Qalıq,Balance,Остаток
+v2:kacak.q4.gun,Gün,Days,Дней
+v2:kacak.q5.baslik,Q5 · Kuryerdə gözləyən nağd ({{sayi}}),Q5 · Cash waiting with couriers ({{sayi}}),Q5 · Наличные ожидают у курьеров ({{sayi}})
+v2:kacak.q5.hedd,Həddi (saat),Threshold (hours),Порог (часов)
+v2:kacak.q5.kuryer,Kuryer,Courier,Курьер
+v2:kacak.q5.nagd,Nağd,Cash,Наличные
+v2:kacak.q5.odenis,Ödəniş,Payments,Платежи
+v2:kacak.q5.gozleyir,Gözləyir (saat),Waiting (hours),Ожидание (часов)
+v2:kurlar.musbet,Kur müsbət rəqəm olmalıdır.,The rate must be a positive number.,Курс должен быть положительным числом.
+v2:kurlar.saxlanildi,Kur yadda saxlanıldı.,Rate saved.,Курс сохранён.
+v2:kurlar.baslik,Valyuta kurları (1 vahid = … AZN),Exchange rates (1 unit = … AZN),Курсы валют (1 единица = … AZN)
+v2:kurlar.cevirme,{{kod}} → AZN,{{kod}} → AZN,{{kod}} → AZN
+v2:kurlar.yoxdur,Hələ kur yoxdur,No rate yet,Курса пока нет
+v2:kurlar.valyuta,Valyuta,Currency,Валюта
+v2:kurlar.tarix,Tarix,Date,Дата
+v2:kurlar.aznQarsiligi,AZN qarşılığı,AZN equivalent,Эквивалент в AZN
+v2:kurlar.menbeIsteye,Mənbə (istəyə bağlı),Source (optional),Источник (необязательно)
+v2:kurlar.elaveEt,Yeni kur əlavə et,Add new rate,Добавить новый курс
+v2:kurlar.menbe,Mənbə,Source,Источник
+v2:kurlar.daxilEdilib,Daxil edilib,Entered,Внесено
