@@ -170,4 +170,33 @@ describe('i18n rules', () => {
       fs.rmSync(kok, { recursive: true, force: true });
     }
   });
+
+  it('plural forms follow each language categories (ru needs few and many, az and en do not)', () => {
+    const kok = fs.mkdtempSync(path.join(os.tmpdir(), 'i18n-artil-'));
+    const yaz = (dil: string, icerik: object) => {
+      fs.mkdirSync(path.join(kok, dil), { recursive: true });
+      fs.writeFileSync(path.join(kok, dil, 'x.json'), JSON.stringify(icerik));
+    };
+    try {
+      const ikili = { a: { baslik: 'x', paket_one: '1', paket_other: 'n' } };
+      yaz('az', ikili);
+      yaz('en', ikili);
+      yaz('ru', { a: { baslik: 'x', paket_one: '1', paket_other: 'n' } });
+      expect(anahtarFarklari(kok)).toEqual([
+        'ru/x.json: a.paket_few yok',
+        'ru/x.json: a.paket_many yok',
+      ]);
+      yaz('ru', {
+        a: { baslik: 'x', paket_one: '1', paket_few: '2', paket_many: '5', paket_other: 'n' },
+      });
+      expect(anahtarFarklari(kok)).toEqual([]);
+      yaz('en', { a: { baslik: 'x', paket_one: '1', paket_few: '2', paket_other: 'n' } });
+      expect(anahtarFarklari(kok)).toEqual(['en/x.json: a.paket_few bu dilde kullanılmaz']);
+      // A plural group missing from one language is still a missing key.
+      yaz('en', { a: { baslik: 'x' } });
+      expect(anahtarFarklari(kok)).toContain('en/x.json: a.paket_* yok');
+    } finally {
+      fs.rmSync(kok, { recursive: true, force: true });
+    }
+  });
 });

@@ -224,6 +224,27 @@ function anahtarlar(agac: Agac, onek = ''): string[] {
   );
 }
 
+const ARTIL_ONEK = /^(.*)_(zero|one|two|few|many|other)$/;
+
+/**
+ * Plural forms follow each language's own categories (az, en: one + other; ru: one, few,
+ * many + other): `x_one` and `x_other` are one key `x` for the comparison, and every
+ * language must carry exactly its own categories for it.
+ */
+function artilGruplari(anahtarKumesi: Set<string>) {
+  const gruplar = new Map<string, Set<string>>();
+  const duz = new Set<string>();
+  for (const anahtar of anahtarKumesi) {
+    const eslesme = ARTIL_ONEK.exec(anahtar);
+    if (eslesme) {
+      const kume = gruplar.get(eslesme[1]) ?? new Set<string>();
+      kume.add(eslesme[2]);
+      gruplar.set(eslesme[1], kume);
+    } else duz.add(anahtar);
+  }
+  return { gruplar, duz };
+}
+
 /** Missing keys per language and namespace, relative to the union over all languages. */
 export function anahtarFarklari(kok = 'src/i18n/locales'): string[] {
   const diller = fs
@@ -237,18 +258,34 @@ export function anahtarFarklari(kok = 'src/i18n/locales'): string[] {
   const farklar: string[] = [];
   for (const adAlani of adAlanlari) {
     const kumeler = new Map<string, Set<string>>();
+    const artillar = new Map<string, Map<string, Set<string>>>();
     for (const dil of diller) {
       const dosya = path.join(kok, dil, adAlani);
       if (!fs.existsSync(dosya)) {
         farklar.push(`${dil}/${adAlani}: dosya yok`);
         continue;
       }
-      kumeler.set(dil, new Set(anahtarlar(JSON.parse(fs.readFileSync(dosya, 'utf8')) as Agac)));
+      const { gruplar, duz } = artilGruplari(
+        new Set(anahtarlar(JSON.parse(fs.readFileSync(dosya, 'utf8')) as Agac))
+      );
+      // The comparison key of a plural group is its base: `x` for x_one/x_other/x_few...
+      kumeler.set(dil, new Set([...duz, ...[...gruplar.keys()].map((taban) => `${taban}_*`)]));
+      artillar.set(dil, gruplar);
     }
     const birlesim = new Set([...kumeler.values()].flatMap((k) => [...k]));
     for (const [dil, kume] of kumeler)
       for (const anahtar of birlesim)
         if (!kume.has(anahtar)) farklar.push(`${dil}/${adAlani}: ${anahtar} yok`);
+    for (const [dil, gruplar] of artillar) {
+      const gerekli = new Set(new Intl.PluralRules(dil).resolvedOptions().pluralCategories);
+      for (const [taban, bulunan] of gruplar) {
+        for (const kategori of gerekli)
+          if (!bulunan.has(kategori)) farklar.push(`${dil}/${adAlani}: ${taban}_${kategori} yok`);
+        for (const kategori of bulunan)
+          if (!gerekli.has(kategori as Intl.LDMLPluralRule))
+            farklar.push(`${dil}/${adAlani}: ${taban}_${kategori} bu dilde kullanılmaz`);
+      }
+    }
   }
   return farklar;
 }
