@@ -7,7 +7,7 @@ import { useBelgeCevirisi, useBelgeDili } from '../../src/i18n/belge';
 import { DilYoneticisi } from '../../src/i18n/DilYoneticisi';
 import { useAppStore } from '../../src/store/appStore';
 import type { FirmaTenant } from '../../src/types';
-import { render, settle } from '../helpers/dom';
+import { render, waitFor } from '../helpers/dom';
 import { dilHazirla } from '../helpers/i18n';
 
 // Codex R5 A01: the administrator's `all` session has no boutique of its own, so the
@@ -76,13 +76,14 @@ describe('administrator documents follow the selected boutique', () => {
     await act(async () => useAppStore.getState().setFirmalar(firmalar));
     await act(async () => useAppStore.getState().setSeciliFirmaId('butik-a'));
     await act(async () => useAppStore.getState().setFirmalar(firmalar));
-    await settle();
+    // The English document strings load lazily: wait for them instead of a fixed delay.
+    await waitFor(() => dil() === 'en' && container.textContent === 'Baku');
     expect([dil(), belgeDili(), container.textContent]).toEqual(['en', 'en', 'Baku']);
     expect(belgeT()('ortak.varsayilanSehir')).toBe('Baku');
 
     await act(async () => useAppStore.getState().setSeciliFirmaId('butik-b'));
     await act(async () => useAppStore.getState().setFirmalar(firmalar));
-    await settle();
+    await waitFor(() => dil() === 'az' && container.textContent === 'Bakı');
     expect([dil(), belgeDili(), container.textContent]).toEqual(['az', 'az', 'Bakı']);
     expect(belgeT()('ortak.varsayilanSehir')).toBe('Bakı');
   });
