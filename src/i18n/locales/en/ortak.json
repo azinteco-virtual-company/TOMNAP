@@ -13,5 +13,12 @@
   },
   "kopyala": "Copy",
   "kopyalandi": "Copied",
-  "yukleniyor": "Loading…"
+  "yukleniyor": "Loading…",
+  "lojistik": {
+    "KANADA_SATINALIM_BEKLIYOR": "Awaiting purchase in Canada",
+    "KANADA_DEPO": "In the Canada warehouse",
+    "ULUSLARARASI_KARGO": "In international cargo",
+    "BAKU_DAGITIM_ARKADAS": "Out for delivery in Baku",
+    "TESLIM_EDILDI": "Delivered"
+  }
 }

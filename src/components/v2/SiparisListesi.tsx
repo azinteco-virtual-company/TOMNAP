@@ -6,6 +6,7 @@ import { sayi, tarih } from '../../i18n/bicim';
 import { useAppStore } from '../../store/appStore';
 import { asamaIlerletebilir } from '../../shared/v2Asama';
 import { asamaIstegi, asamaOnayMetni } from './asamaFormu';
+import { asamaAdi } from './v2Ceviri';
 
 export interface V2SiparisOzeti {
   id: string;
@@ -84,7 +85,7 @@ export default function SiparisListesi({
                 {siparis.sahipAdSoyad ?? sahipAdi(siparis.sahipKullaniciId)}
               </td>
               <td className="text-slate-400">
-                <span>{siparis.lojistikDurumu}</span>
+                <span>{asamaAdi(siparis.lojistikDurumu)}</span>
                 {asamaIlerletebilir(aktifRol, siparis.lojistikDurumu) && (
                   <button
                     type="button"

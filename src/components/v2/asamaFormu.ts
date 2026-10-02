@@ -1,5 +1,5 @@
 import { sonrakiAsama } from '../../shared/v2Asama';
-import { v2t } from './v2Ceviri';
+import { asamaAdi, v2t } from './v2Ceviri';
 
 /** GEÇİCİ aşama köprüsü (OPEN_QUESTIONS 38): the "next stage" button's request and question. */
 export interface AsamaSiparisi {
@@ -15,7 +15,7 @@ export function asamaIstegi(siparis: AsamaSiparisi): { beklenen_asama: string } 
 export function asamaOnayMetni(siparis: AsamaSiparisi): string {
   return v2t('asama.onay', {
     musteri: siparis.musteriAdi,
-    eski: siparis.lojistikDurumu,
-    yeni: sonrakiAsama(siparis.lojistikDurumu),
+    eski: asamaAdi(siparis.lojistikDurumu),
+    yeni: asamaAdi(sonrakiAsama(siparis.lojistikDurumu) ?? ''),
   });
 }
