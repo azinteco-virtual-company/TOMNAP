@@ -284,7 +284,10 @@ export default function SiparisGirisi() {
             onChange={(satirlar) => setForm({ ...form, satirlar })}
           />
           <p className="text-end text-sm text-slate-200">
-            {t('siparis.cem')} <strong>{sayi(formToplami(form))} AZN</strong>
+            {t('siparis.cem')}{' '}
+            <strong>
+              {sayi(formToplami(form))} {'AZN'}
+            </strong>
           </p>
 
           {hatalar.length > 0 && (

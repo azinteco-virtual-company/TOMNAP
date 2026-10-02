@@ -7,6 +7,8 @@ import ts from 'typescript';
  *  - Taşınmış dosyalarda kullanıcıya görünen düz metin kalmaz; metin yalnız çeviri
  *    anahtarıyla yazılır.
  *  - Her dilin ad alanı dosyaları aynı anahtar kümesine sahiptir.
+ *  - Statik `t('anahtar')` çağrılarının ad alanı ve anahtarı her dilin kaynağında vardır
+ *    (iki dilden de silinen anahtar yalnız dilleri birbiriyle karşılaştırarak yakalanmaz).
  * Bir satırın sonundaki `// i18n-teknik` yorumu o satırdaki metni bilerek muaf tutar
  * (ör. belge biçim kalıbı, marka adı).
  */
@@ -55,6 +57,18 @@ const TEKNIK_OZNITELIKLER = new Set([
   'decoding',
   'sandbox',
   'referrerPolicy',
+]);
+/** JSX attributes that carry text the user reads: no "technical string" exemption. */
+const GORUNUR_OZNITELIKLER = new Set([
+  'title',
+  'placeholder',
+  'alt',
+  'label',
+  'aria-label',
+  'aria-description',
+  'aria-placeholder',
+  'aria-roledescription',
+  'aria-valuetext',
 ]);
 /** Calls whose first argument is a translation key, not text. */
 const ANAHTAR_CAGRILARI = new Set(['t', 'belgeT', 'useTranslation', 'getFixedT', 'loadNamespaces']);
@@ -175,7 +189,8 @@ export function duzMetinler(dosya: string): DuzMetin[] {
     }
     if (islenmis.has(node)) return;
     if (ts.isJsxText(node)) {
-      if (HARF.test(node.text) && !teknik(node.text)) ekle(node, node.text);
+      // Visible text: a lowercase word like `save` is not "technical" between tags.
+      if (HARF.test(node.text)) ekle(node, node.text);
     } else if (
       ts.isStringLiteral(node) ||
       ts.isNoSubstitutionTemplateLiteral(node) ||
@@ -185,8 +200,9 @@ export function duzMetinler(dosya: string): DuzMetin[] {
     ) {
       const metin = node.text;
       const oznitelik = oznitelikAdi(node);
+      const gorunur = oznitelik !== null && GORUNUR_OZNITELIKLER.has(oznitelik);
       const muaf =
-        teknik(metin) ||
+        (gorunur ? !HARF.test(metin) : teknik(metin)) ||
         (oznitelik !== null &&
           (TEKNIK_OZNITELIKLER.has(oznitelik) || oznitelik.startsWith('data-'))) ||
         anahtarArgumani(node) ||
@@ -237,9 +253,173 @@ export function anahtarFarklari(kok = 'src/i18n/locales'): string[] {
   return farklar;
 }
 
+export interface AnahtarKullanimi {
+  dosya: string;
+  satir: number;
+  /** null: the namespace could not be resolved from the source (a `t` passed as argument). */
+  adAlani: string | null;
+  anahtar: string;
+}
+
+function dizgi(node: ts.Node | undefined): string | null {
+  return node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+    ? node.text
+    : null;
+}
+/** The namespace a translator is bound to: `useTranslation('v2')` → v2, none → ortak. */
+function baglananAdAlani(cagri: ts.CallExpression): string | null | undefined {
+  const ad = ts.isIdentifier(cagri.expression)
+    ? cagri.expression.text
+    : ts.isPropertyAccessExpression(cagri.expression)
+      ? cagri.expression.name.text
+      : '';
+  if (ad === 'useBelgeCevirisi' || ad === 'belgeT') return 'belge';
+  if (ad === 'useTranslation') {
+    const ilk = cagri.arguments[0];
+    if (!ilk) return 'ortak';
+    if (ts.isArrayLiteralExpression(ilk)) return dizgi(ilk.elements[0]) ?? null;
+    return dizgi(ilk) ?? null;
+  }
+  if (ad === 'getFixedT') return dizgi(cagri.arguments[1]) ?? null;
+  return undefined;
+}
+
+/** Static translation-key uses (`t('ns.key')`) with the namespace resolved when the source says. */
+export function anahtarKullanimlari(dosya: string): AnahtarKullanimi[] {
+  const kaynak = fs.readFileSync(dosya, 'utf8');
+  const sf = ts.createSourceFile(
+    dosya,
+    kaynak,
+    ts.ScriptTarget.Latest,
+    true,
+    dosya.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  );
+  // name → namespace (null: a translator received as a parameter, namespace unknown)
+  const cevirmenler = new Map<string, string | null>();
+  const tara = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && node.initializer) {
+      let ilk: ts.Expression = node.initializer;
+      while (ts.isPropertyAccessExpression(ilk) || ts.isParenthesizedExpression(ilk))
+        ilk = ts.isPropertyAccessExpression(ilk) ? ilk.expression : ilk.expression;
+      if (ts.isCallExpression(ilk)) {
+        const adAlani = baglananAdAlani(ilk);
+        if (adAlani !== undefined) {
+          if (ts.isIdentifier(node.name)) cevirmenler.set(node.name.text, adAlani);
+          else if (ts.isObjectBindingPattern(node.name))
+            for (const oge of node.name.elements) {
+              const yerel = oge.name;
+              const kaynakAd = oge.propertyName?.getText() ?? yerel.getText();
+              if (kaynakAd === 't' && ts.isIdentifier(yerel)) cevirmenler.set(yerel.text, adAlani);
+            }
+        }
+      }
+    }
+    if (ts.isParameter(node) && ts.isIdentifier(node.name) && node.type?.getText() === 'TFunction')
+      cevirmenler.set(node.name.text, null);
+    ts.forEachChild(node, tara);
+  };
+  tara(sf);
+  const sonuc: AnahtarKullanimi[] = [];
+  const gez = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      let adAlani: string | null | undefined;
+      if (ts.isIdentifier(callee)) adAlani = cevirmenler.get(callee.text);
+      else if (ts.isPropertyAccessExpression(callee) && callee.name.text === 't') {
+        const nesne = callee.expression.getText();
+        if (nesne === 'i18n' || nesne === 'i18next') adAlani = null;
+      }
+      const anahtar = dizgi(node.arguments[0]);
+      if (adAlani !== undefined && anahtar !== null) {
+        let ad = adAlani;
+        let temiz = anahtar;
+        const onek = /^([a-zA-Z0-9_-]+):(.+)$/.exec(anahtar);
+        if (onek) {
+          ad = onek[1];
+          temiz = onek[2];
+        }
+        const secenekler = node.arguments[1];
+        if (secenekler && ts.isObjectLiteralExpression(secenekler))
+          for (const ozellik of secenekler.properties)
+            if (ts.isPropertyAssignment(ozellik) && ozellik.name.getText() === 'ns')
+              ad = dizgi(ozellik.initializer) ?? ad;
+        sonuc.push({
+          dosya,
+          satir: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
+          adAlani: ad,
+          anahtar: temiz,
+        });
+      }
+    }
+    ts.forEachChild(node, gez);
+  };
+  gez(sf);
+  return sonuc;
+}
+
+const ARTIL_SONEKLERI = ['', '_zero', '_one', '_two', '_few', '_many', '_other'];
+
+/** Key uses with no matching entry in some language's source, per language. */
+export function eksikAnahtarlar(dosyalar: readonly string[], kok = 'src/i18n/locales'): string[] {
+  const diller = fs
+    .readdirSync(kok, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort();
+  const onbellek = new Map<string, { yapraklar: Set<string>; dallar: Set<string> } | null>();
+  const oku = (dil: string, adAlani: string) => {
+    const anahtar = `${dil}/${adAlani}`;
+    if (!onbellek.has(anahtar)) {
+      const dosya = path.join(kok, dil, `${adAlani}.json`);
+      if (!fs.existsSync(dosya)) onbellek.set(anahtar, null);
+      else {
+        const yapraklar = new Set(anahtarlar(JSON.parse(fs.readFileSync(dosya, 'utf8')) as Agac));
+        const dallar = new Set<string>();
+        for (const y of yapraklar) {
+          const parcalar = y.split('.');
+          for (let i = 1; i < parcalar.length; i++) dallar.add(parcalar.slice(0, i).join('.'));
+        }
+        onbellek.set(anahtar, { yapraklar, dallar });
+      }
+    }
+    return onbellek.get(anahtar) ?? null;
+  };
+  const varMi = (dil: string, adAlani: string, anahtar: string) => {
+    const kayit = oku(dil, adAlani);
+    if (!kayit) return false;
+    return (
+      kayit.dallar.has(anahtar) ||
+      ARTIL_SONEKLERI.some((sonek) => kayit.yapraklar.has(anahtar + sonek))
+    );
+  };
+  const adAlanlari = [
+    ...new Set(
+      diller.flatMap((dil) =>
+        fs.readdirSync(path.join(kok, dil)).map((dosya) => dosya.replace(/\.json$/, ''))
+      )
+    ),
+  ];
+  const eksikler: string[] = [];
+  for (const dosya of dosyalar)
+    for (const kullanim of anahtarKullanimlari(dosya))
+      for (const dil of diller) {
+        const bulundu = kullanim.adAlani
+          ? varMi(dil, kullanim.adAlani, kullanim.anahtar)
+          : adAlanlari.some((ad) => varMi(dil, ad, kullanim.anahtar));
+        if (!bulundu)
+          eksikler.push(
+            `${kullanim.dosya}:${kullanim.satir}  ${dil}/${kullanim.adAlani ?? '?'}: ${kullanim.anahtar} yok`
+          );
+      }
+  return eksikler;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
   const dosyalar = process.argv.slice(2);
   const bulunan = dosyalar.flatMap(duzMetinler);
   for (const b of bulunan) console.log(`${b.dosya}:${b.satir}  ${b.metin}`);
   console.log(`${bulunan.length} düz metin`);
+  const eksikler = eksikAnahtarlar(dosyalar);
+  for (const e of eksikler) console.log(e);
+  console.log(`${eksikler.length} eksik anahtar`);
 }

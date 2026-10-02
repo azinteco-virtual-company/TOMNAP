@@ -64,7 +64,7 @@ export function ManifestoIstatistikleri({ ozet }: { ozet: ManifestoOzeti }) {
         <div className="min-w-0">
           <div className="text-xs font-semibold text-slate-500">{t('istatistik.deger')}</div>
           <div className="text-xl font-extrabold text-slate-900">
-            {sayi(ozet.deger)} <span className="text-xs font-normal text-slate-500">AZN</span>
+            {sayi(ozet.deger)} <span className="text-xs font-normal text-slate-500">{'AZN'}</span>
           </div>
         </div>
       </div>
@@ -75,7 +75,7 @@ export function ManifestoIstatistikleri({ ozet }: { ozet: ManifestoOzeti }) {
         <div className="min-w-0">
           <div className="text-xs font-bold text-amber-900">{t('istatistik.borc')}</div>
           <div className="text-xl font-extrabold text-amber-700">
-            {sayi(ozet.kalan)} <span className="text-xs font-normal text-amber-900">AZN</span>
+            {sayi(ozet.kalan)} <span className="text-xs font-normal text-amber-900">{'AZN'}</span>
           </div>
         </div>
       </div>

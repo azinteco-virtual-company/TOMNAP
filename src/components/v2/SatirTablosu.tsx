@@ -91,8 +91,8 @@ export default function SatirTablosu({ satirlar, onChange }: SatirTablosuProps) 
                     }
                     className={girdi}
                   >
-                    <option value="CA">CA</option>
-                    <option value="US">US</option>
+                    <option value="CA">{'CA'}</option>
+                    <option value="US">{'US'}</option>
                   </select>
                 </td>
                 <td className="py-2 text-end text-slate-300">
